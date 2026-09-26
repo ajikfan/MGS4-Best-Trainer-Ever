@@ -1,10 +1,13 @@
-"""Trainer de recherche : lit/ecrit en direct la memoire du processus
-mgs4.exe pour identifier les IDs encore inconnus des tableaux
-objets/armes, sans avoir a save/reload a chaque test.
+"""Trainer de recherche/edition memoire live : lit/ecrit en direct la
+memoire du processus mgs4.exe (armes, objets, stats, vitesse du
+jeu...), a l'origine pour identifier les ID encore inconnus des
+tableaux objets/armes sans avoir a save/reload a chaque test, devenu au
+fil du temps l'appli complete de ce depot (voir README.md).
 
-PAS un outil pour l'appli finale (MGS4SaveStats.spec ne l'embarque pas,
-gui_app.py ne l'importe pas) - script de dev separe, a lancer a la main
-pendant une session de jeu :
+Outil separe de MGS4SaveStats (autre depot, lecture seule des fichiers
+de sauvegarde) - aucun lien entre les deux, volontairement publies a
+part pour ne pas les confondre (voir README.md). Reutilise seulement
+mgs4save.py (table des noms d'armes/objets) de ce depot frere.
 
     python live_trainer.py
 
@@ -42,6 +45,7 @@ import ctypes
 import os
 import struct
 import sys
+import time
 from ctypes import wintypes
 
 from PySide6.QtCore import QTimer, Qt
@@ -891,14 +895,219 @@ ALERT_STATE_RVA = 0x1D77AB8
 ALERT_STATE_NAMES = {0: "Normal (non repere)", 1: "Alerte", 2: "Evasion", 3: "Prudence"}
 
 
+# ---------------------------------------------------------------------------
+# Controle de la vitesse du jeu (ralenti/accelere) + pause (2026-09-26).
+#
+# Pause : pas besoin d'injection, NtSuspendProcess/NtResumeProcess (ntdll)
+# suffisent - gel complet du process (pas le menu pause du jeu), deja
+# teste et confirme fonctionnel en amont (voir notes.md). Handle dedie
+# temporaire (PROCESS_SUSPEND_RESUME, absent de ProcessHandle par
+# defaut), ferme immediatement apres usage.
+#
+# Vitesse (ralenti fluide ET accelere, pas juste des pauses en rafale) :
+# necessite d'injecter une DLL (native/speedhack.c, compilee en
+# speedhack_x64.dll) dans mgs4.exe qui patche son IAT pour rediriger
+# QueryPerformanceCounter vers un compteur "virtuel" avancant plus vite/
+# lentement - technique standard de "speedhack" (proche de ce que fait
+# Cheat Engine), mais jamais utilisee ailleurs dans ce projet (partout
+# ailleurs : lecture/ecriture memoire externe pure, aucune injection de
+# code). Communique avec le trainer via une memoire partagee nommee
+# (double = multiplicateur, 1.0 = normal) plutot que reinjecter a chaque
+# changement. Hypothese non confirmee : que mgs4.exe utilise bien QPC
+# pour son delta-temps interne - a valider empiriquement en jeu, voir
+# native/speedhack.c pour le detail et le plan de secours (autre API de
+# temps) si sans effet.
+# ---------------------------------------------------------------------------
+
+ntdll = ctypes.WinDLL("ntdll")
+ntdll.NtSuspendProcess.argtypes = [wintypes.HANDLE]
+ntdll.NtSuspendProcess.restype = ctypes.c_long
+ntdll.NtResumeProcess.argtypes = [wintypes.HANDLE]
+ntdll.NtResumeProcess.restype = ctypes.c_long
+
+PROCESS_CREATE_THREAD = 0x0002
+PROCESS_SUSPEND_RESUME = 0x0800
+
+kernel32.VirtualAllocEx.argtypes = [wintypes.HANDLE, wintypes.LPVOID, ctypes.c_size_t, wintypes.DWORD, wintypes.DWORD]
+kernel32.VirtualAllocEx.restype = wintypes.LPVOID
+kernel32.VirtualFreeEx.argtypes = [wintypes.HANDLE, wintypes.LPVOID, ctypes.c_size_t, wintypes.DWORD]
+kernel32.VirtualFreeEx.restype = wintypes.BOOL
+kernel32.CreateRemoteThread.argtypes = [
+    wintypes.HANDLE, wintypes.LPVOID, ctypes.c_size_t, wintypes.LPVOID, wintypes.LPVOID, wintypes.DWORD,
+    ctypes.POINTER(wintypes.DWORD),
+]
+kernel32.CreateRemoteThread.restype = wintypes.HANDLE
+kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+kernel32.WaitForSingleObject.restype = wintypes.DWORD
+kernel32.GetExitCodeThread.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+kernel32.GetExitCodeThread.restype = wintypes.BOOL
+kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
+kernel32.GetModuleHandleW.restype = wintypes.HMODULE
+kernel32.GetProcAddress.argtypes = [wintypes.HMODULE, ctypes.c_char_p]
+kernel32.GetProcAddress.restype = wintypes.LPVOID
+kernel32.CreateFileMappingW.argtypes = [
+    wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.LPCWSTR,
+]
+kernel32.CreateFileMappingW.restype = wintypes.HANDLE
+kernel32.OpenFileMappingW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+kernel32.OpenFileMappingW.restype = wintypes.HANDLE
+kernel32.MapViewOfFile.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, ctypes.c_size_t]
+kernel32.MapViewOfFile.restype = wintypes.LPVOID
+kernel32.UnmapViewOfFile.argtypes = [wintypes.LPCVOID]
+kernel32.UnmapViewOfFile.restype = wintypes.BOOL
+
+FILE_MAP_ALL_ACCESS = 0x000F001F
+INFINITE = 0xFFFFFFFF
+
+SPEEDHACK_DLL_PATH = _bundled_path("native", "speedhack_x64.dll")
+SPEEDHACK_DLL_NAME = "speedhack_x64.dll"
+SPEEDHACK_SHM_NAME = "Local\\MGS4TrainerSpeedHack"
+
+
+def _module_loaded(pid: int, module_name: str) -> bool:
+    return find_module_base(pid, module_name) is not None
+
+
+def _inject_dll(pid: int, dll_path: str) -> bool:
+    """Injection classique LoadLibraryA + CreateRemoteThread. Handle
+    temporaire dedie (droits d'injection non presents dans ProcessHandle
+    par defaut), ferme a la fin quel que soit le resultat."""
+    access = (PROCESS_CREATE_THREAD | PROCESS_VM_OPERATION | PROCESS_VM_WRITE
+              | PROCESS_VM_READ | PROCESS_QUERY_INFORMATION)
+    handle = kernel32.OpenProcess(access, False, pid)
+    if not handle:
+        return False
+    try:
+        path_bytes = dll_path.encode("mbcs") + b"\x00"
+        remote_buf = kernel32.VirtualAllocEx(handle, None, len(path_bytes), MEM_COMMIT, PAGE_READWRITE)
+        if not remote_buf:
+            return False
+        written = ctypes.c_size_t(0)
+        ok = kernel32.WriteProcessMemory(handle, remote_buf, path_bytes, len(path_bytes), ctypes.byref(written))
+        if not ok:
+            kernel32.VirtualFreeEx(handle, remote_buf, 0, 0x8000)  # MEM_RELEASE
+            return False
+        load_library = kernel32.GetProcAddress(kernel32.GetModuleHandleW("kernel32.dll"), b"LoadLibraryA")
+        thread = kernel32.CreateRemoteThread(handle, None, 0, load_library, remote_buf, 0, None)
+        if not thread:
+            kernel32.VirtualFreeEx(handle, remote_buf, 0, 0x8000)
+            return False
+        try:
+            kernel32.WaitForSingleObject(thread, INFINITE)
+            exit_code = wintypes.DWORD(0)
+            kernel32.GetExitCodeThread(thread, ctypes.byref(exit_code))
+            return exit_code.value != 0  # HMODULE renvoye par LoadLibraryA, 0 = echec
+        finally:
+            kernel32.CloseHandle(thread)
+            kernel32.VirtualFreeEx(handle, remote_buf, 0, 0x8000)
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+class SpeedController:
+    """Pause (NtSuspendProcess, pas d'injection) + vitesse (injection DLL,
+    voir commentaire ci-dessus). Un seul multiplicateur ecrit en continu
+    dans la memoire partagee - la DLL, une fois injectee, reste chargee
+    et hookee pour toute la duree de vie du process jeu (pas de
+    dechargement propre : remettre 1.0 suffit a redonner une vitesse
+    normale)."""
+
+    def __init__(self):
+        self.injected_pid: int | None = None
+        self.shm_view: ctypes.c_void_p | None = None
+
+    def ensure_injected(self, pid: int) -> bool:
+        if self.injected_pid == pid and self.shm_view:
+            return True
+        self.shm_view = None
+        self.injected_pid = None
+        if not os.path.isfile(SPEEDHACK_DLL_PATH):
+            return False
+        if not _module_loaded(pid, SPEEDHACK_DLL_NAME):
+            if not _inject_dll(pid, SPEEDHACK_DLL_PATH):
+                return False
+        # Le thread d'initialisation de la DLL (native/speedhack.c) cree
+        # la memoire partagee juste apres le retour de LoadLibraryA - pas
+        # necessairement instantane, quelques tentatives rapprochees
+        # plutot qu'un seul essai.
+        for _attempt in range(20):
+            handle = kernel32.OpenFileMappingW(FILE_MAP_ALL_ACCESS, False, SPEEDHACK_SHM_NAME)
+            if handle:
+                # 16 (pas 12) : marge de securite sur l'alignement/padding
+                # eventuel du struct SharedState cote C, sans impact ici
+                # puisqu'on adresse chaque champ par son propre offset.
+                view = kernel32.MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, 16)
+                kernel32.CloseHandle(handle)  # la vue mappee reste valide, plus besoin du handle
+                if view:
+                    self.shm_view = view
+                    self.injected_pid = pid
+                    # La memoire partagee existe des la creation du
+                    # mapping, mais le patch IAT proprement dit (qui
+                    # prend un peu de temps, surtout la variante qui
+                    # scanne tous les modules) se termine juste apres -
+                    # laisse une petite marge pour que patched_mask()/
+                    # hit_counts() ne lisent pas "0" par pure course de
+                    # vitesse juste apres l'injection (deja observe en
+                    # debug, voir notes.md - le hook lui-meme fonctionne
+                    # quoi qu'il arrive, seul ce diagnostic pouvait
+                    # mentir brievement).
+                    for _settle in range(10):
+                        if self.patched_mask():
+                            break
+                        time.sleep(0.05)
+                    return True
+            time.sleep(0.05)
+        return False
+
+    def set_speed(self, multiplier: float) -> bool:
+        if not self.shm_view:
+            return False
+        ctypes.cast(self.shm_view, ctypes.POINTER(ctypes.c_double))[0] = multiplier
+        return True
+
+    def _read_u32_at(self, offset: int) -> int | None:
+        if not self.shm_view:
+            return None
+        addr = ctypes.cast(self.shm_view, ctypes.c_void_p).value + offset
+        return ctypes.cast(addr, ctypes.POINTER(ctypes.c_uint32))[0]
+
+    def patched_mask(self) -> int | None:
+        """Diagnostic : quels hooks (voir native/speedhack.c, HOOK_*) ont
+        reellement ete poses par la DLL injectee - None si pas injecte."""
+        return self._read_u32_at(8)
+
+    def hit_counts(self) -> tuple[int, int] | None:
+        """Diagnostic : nombre de sites IAT patches (QPC, timeGetTime) -
+        peut depasser 1 si plusieurs DLL du jeu importent chacune la
+        fonction separement, voir patch_import_everywhere."""
+        qpc = self._read_u32_at(12)
+        tgt = self._read_u32_at(16)
+        if qpc is None or tgt is None:
+            return None
+        return qpc, tgt
+
+    @staticmethod
+    def set_paused(pid: int, paused: bool) -> bool:
+        handle = kernel32.OpenProcess(PROCESS_SUSPEND_RESUME, False, pid)
+        if not handle:
+            return False
+        try:
+            status = ntdll.NtResumeProcess(handle) if not paused else ntdll.NtSuspendProcess(handle)
+            return status == 0
+        finally:
+            kernel32.CloseHandle(handle)
+
+
 class MGS4Live:
     def __init__(self):
         self.proc: ProcessHandle | None = None
+        self.pid: int | None = None
         self.base: int | None = None
         self.linkvarbuf: int | None = None
         self.varbuf: int | None = None
         self.sane = False
         self.status = "Non connecte"
+        self.speed = SpeedController()
 
     def attach(self) -> bool:
         self.detach()
@@ -906,6 +1115,7 @@ class MGS4Live:
         if pid is None:
             self.status = f"{PROCESS_NAME} introuvable - lance le jeu"
             return False
+        self.pid = pid
         base = find_module_base(pid, PROCESS_NAME)
         if base is None:
             self.status = "Module mgs4.exe introuvable dans le process"
@@ -948,6 +1158,7 @@ class MGS4Live:
         if self.proc:
             self.proc.close()
             self.proc = None
+        self.pid = None
         self.base = None
         self.linkvarbuf = None
         self.varbuf = None
@@ -973,6 +1184,22 @@ class MGS4Live:
     @property
     def connected(self) -> bool:
         return self.proc is not None and self.varbuf is not None
+
+    def set_game_speed(self, multiplier: float) -> bool:
+        """multiplier=1.0 vitesse normale, <1.0 ralenti, >1.0 accelere -
+        voir SpeedController. Injecte la DLL au premier appel (paresseux,
+        pas au moment de la connexion : inutile de prendre ce risque tant
+        que l'utilisateur ne touche pas au curseur)."""
+        if not (self.connected and self.sane and self.pid):
+            return False
+        if not self.speed.ensure_injected(self.pid):
+            return False
+        return self.speed.set_speed(multiplier)
+
+    def set_paused(self, paused: bool) -> bool:
+        if not (self.connected and self.sane and self.pid):
+            return False
+        return SpeedController.set_paused(self.pid, paused)
 
     def read_item(self, item_id: int) -> int:
         return struct.unpack("<H", self.proc.read_bytes(self.base + item_state_rva(item_id), 2))[0]
@@ -2068,6 +2295,21 @@ class VitalsTab(QWidget):
     rafraichissement - "vie infinie" etc.), plus l'etat d'alerte en
     lecture seule (l'ecriture ne tient pas, voir ALERT_STATE_RVA)."""
 
+    # Mapping asymetrique centre sur 0 = vitesse normale (1.0x) : moitie
+    # gauche du curseur (-100..0) va de 10% a 100%, moitie droite (0..100)
+    # de 100% a 300% - le curseur reste visuellement symetrique (demande
+    # explicite de l'utilisateur : "au milieu pour la vitesse normale")
+    # meme si la plage de vitesses couverte ne l'est pas.
+    SPEED_SLIDER_RANGE = (-100, 100)
+    SPEED_SLOWDOWN_FLOOR = 0.1  # multiplicateur au bout gauche (-100)
+    SPEED_BOOST_CEILING = 3.0  # multiplicateur au bout droit (+100)
+
+    @classmethod
+    def _speed_from_slider(cls, value: int) -> float:
+        if value <= 0:
+            return 1.0 + (value / 100) * (1.0 - cls.SPEED_SLOWDOWN_FLOOR)
+        return 1.0 + (value / 100) * (cls.SPEED_BOOST_CEILING - 1.0)
+
     def __init__(self, live: MGS4Live):
         super().__init__()
         self.live = live
@@ -2077,6 +2319,30 @@ class VitalsTab(QWidget):
         self.locked_percents: dict[str, float] = {}
 
         layout = QVBoxLayout(self)
+
+        speed_row = QHBoxLayout()
+        speed_row.addWidget(QLabel("Vitesse du jeu :"))
+        self.speed_slider = QSlider(Qt.Horizontal)
+        self.speed_slider.setRange(*self.SPEED_SLIDER_RANGE)
+        self.speed_slider.setValue(0)
+        self.speed_slider.valueChanged.connect(self._on_speed_changed)
+        speed_row.addWidget(self.speed_slider, 1)
+        self.speed_value_label = QLabel("100 %")
+        self.speed_value_label.setMinimumWidth(60)
+        speed_row.addWidget(self.speed_value_label)
+        self.pause_check = QCheckBox("Pause")
+        self.pause_check.toggled.connect(self._on_pause_toggled)
+        speed_row.addWidget(self.pause_check)
+        layout.addLayout(speed_row)
+
+        speed_note = QLabel(
+            "Ralenti (gauche) et pause : fiables. Accelere (droite) : experimental - "
+            "injecte une DLL dans le jeu pour tromper son horloge interne, peut "
+            "n'avoir aucun effet selon l'API de temps utilisee par le moteur (voir "
+            "notes.md)."
+        )
+        speed_note.setWordWrap(True)
+        layout.addWidget(speed_note)
 
         alert_row = QHBoxLayout()
         alert_row.addWidget(QLabel("Etat d'alerte (lecture seule) :"))
@@ -2149,6 +2415,18 @@ class VitalsTab(QWidget):
         if name in self.locked_percents:
             self.locked_percents[name] = value
 
+    def _on_speed_changed(self, value: int):
+        speed = self._speed_from_slider(value)
+        self.speed_value_label.setText(f"{round(speed * 100)} %")
+        if not (self.live.connected and self.live.sane):
+            return
+        self.live.set_game_speed(speed)
+
+    def _on_pause_toggled(self, checked: bool):
+        if not (self.live.connected and self.live.sane):
+            return
+        self.live.set_paused(checked)
+
     def set_advanced(self, advanced: bool):
         pass  # pas de mode simple/avance distinct ici
 
@@ -2157,7 +2435,11 @@ class VitalsTab(QWidget):
             for label in self.value_labels.values():
                 label.setText("?")
             self.alert_label.setText("?")
+            self.speed_slider.setEnabled(False)
+            self.pause_check.setEnabled(False)
             return
+        self.speed_slider.setEnabled(True)
+        self.pause_check.setEnabled(True)
 
         for name in VITALS:
             if name in self.locked_percents:
@@ -2187,7 +2469,7 @@ class VitalsTab(QWidget):
             self.alert_label.setText("?")
 
 
-TRAINER_VERSION = "V1.0"
+TRAINER_VERSION = "V1.1"
 
 TRAINER_HELP_TEXT = (
     "Ce trainer lit et ÉCRIT en direct la mémoire du process mgs4.exe "
@@ -2220,6 +2502,15 @@ TRAINER_HELP_TEXT = (
 # version/date/description), mais pour le trainer - premiere publication,
 # une seule entree pour l'instant.
 TRAINER_CHANGELOG = [
+    ("V1.1", "26 septembre 2026",
+     "Onglet \"État de jeu\" : nouveau curseur de vitesse du jeu (ralenti "
+     "10% à accéléré 300%, centré sur la vitesse normale) et case "
+     "\"Pause\" (gel complet du process). Le ralenti/accéléré injecte "
+     "une petite DLL dans mgs4.exe pour tromper son horloge interne "
+     "(première technique d'injection de code du projet, jusque-là "
+     "uniquement lecture/écriture mémoire externe) - confirmé "
+     "fonctionnel en jeu dans les deux sens, voir le README pour le "
+     "détail technique et les avertissements associés."),
     ("V1.0", "25 septembre 2026",
      "Première publication : lecture/écriture mémoire live (formule "
      "linéaire pour l'état des armes, tables munitions/objets/"

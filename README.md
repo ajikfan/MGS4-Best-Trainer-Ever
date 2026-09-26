@@ -1,11 +1,12 @@
-# MGS4 Trainer
+# MGS4 Trainer — V1.1
 
 Trainer de recherche/édition mémoire live pour Metal Gear Solid 4
 (portage PC Steam) : lit et **écrit** en direct la mémoire du process
 `mgs4.exe` pendant une partie en cours, pour forcer n'importe quel champ
 déjà identifié (armes, objets, stats, vie/stamina/stress/batterie Solid
 Eye...) sans passer par le fichier de sauvegarde, et sert aussi d'outil
-de recherche pour identifier les ID encore inconnus.
+de recherche pour identifier les ID encore inconnus. Contrôle aussi la
+vitesse du jeu (ralenti/accéléré) et la pause, voir plus bas.
 
 Projet frère de [MGS4-SaveStats](https://github.com/ajikfan/MGS4-SaveStats)
 (lecture seule des fichiers de sauvegarde) — deux outils distincts et
@@ -38,6 +39,34 @@ toujours à 0 sur toute sauvegarde connue) s'exécute avant d'autoriser la
 moindre écriture — si le jeu ne répond pas comme attendu, le trainer
 refuse d'écrire plutôt que de risquer de corrompre la mémoire du jeu.
 
+## Contrôle de la vitesse du jeu
+
+Onglet "État de jeu" : curseur centré sur la vitesse normale (100%),
+glissable vers la gauche pour ralentir (jusqu'à 10%) ou vers la droite
+pour accélérer (jusqu'à 300%), plus une case "Pause" indépendante.
+
+- **Pause** : gel complet du process (`NtSuspendProcess`), pas juste le
+  menu pause du jeu — fiable, ne nécessite aucune injection.
+- **Ralenti/accéléré** : nécessite d'injecter une petite DLL
+  (`native/speedhack_x64.dll`, déjà compilée et fournie dans ce dépôt —
+  aucun compilateur requis pour l'utiliser telle quelle) dans `mgs4.exe`,
+  qui patche sa table d'imports pour tromper son horloge interne
+  (`QueryPerformanceCounter`/`timeGetTime`) et lui faire croire que le
+  temps s'écoule plus ou moins vite. Confirmé fonctionnel en jeu dans
+  les deux sens (2026-09-26). L'injection ne se déclenche qu'au premier
+  mouvement réel du curseur (pas à la connexion).
+
+Modifier `native/speedhack.c` nécessite un compilateur C ciblant Windows
+(testé avec `x86_64-w64-mingw32-gcc` via [MSYS2](https://www.msys2.org/),
+mingw64) :
+
+```
+x86_64-w64-mingw32-gcc -shared -O2 -municode -o native/speedhack_x64.dll native/speedhack.c -lkernel32 -lwinmm
+```
+
+`mingw64/bin` doit être dans le PATH (sinon `cc1.exe` échoue silencieusement,
+sans aucun message).
+
 ## Compatibilité / mises à jour du jeu
 
 **À ne pas confondre : deux numérotations indépendantes.** La version du
@@ -64,6 +93,11 @@ recalibrer ce décalage.
 - **Usage solo uniquement, à tes risques.** Ce n'est pas un outil
   officiel : il lit/écrit dans la mémoire d'un autre processus, ce qu'un
   antivirus peut signaler à tort.
+- Le contrôle de vitesse va plus loin : il **injecte du code** dans
+  `mgs4.exe` (technique de type "speedhack", proche de Cheat Engine) —
+  plus susceptible d'être signalé par un antivirus/EDR qu'une simple
+  lecture/écriture mémoire, et jamais testé au-delà d'un ralenti/
+  accéléré ponctuel (pas de session longue durée).
 - Certains champs restent en confiance basse ou pas encore testés
   individuellement (documentés au cas par cas dans le `notes.md` de
   MGS4-SaveStats) : une valeur peut se comporter différemment de ce qui

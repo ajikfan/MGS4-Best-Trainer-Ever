@@ -5,7 +5,7 @@ a = Analysis(
     ['live_trainer.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets', 'assets')],
+    datas=[('assets', 'assets'), ('native/speedhack_x64.dll', 'native')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
