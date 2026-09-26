@@ -3,3 +3,4 @@ __pycache__/
 build/
 dist/
 *.zip
+teleport_points.json

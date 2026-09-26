@@ -1,4 +1,4 @@
-# MGS4 Trainer — V1.1
+# MGS4 Trainer — V1.3
 
 Trainer de recherche/édition mémoire live pour Metal Gear Solid 4
 (portage PC Steam) : lit et **écrit** en direct la mémoire du process
@@ -56,6 +56,51 @@ pour accélérer (jusqu'à 300%), plus une case "Pause" indépendante.
   les deux sens (2026-09-26). L'injection ne se déclenche qu'au premier
   mouvement réel du curseur (pas à la connexion).
 
+## Munitions infinies / Pas de rechargement
+
+Onglet "État de jeu" : deux cases indépendantes.
+
+- **Munitions infinies** : fige la vraie réserve actuelle de chaque
+  arme au moment où tu coches (pas un nombre fixe artificiel) et la
+  réécrit en continu.
+- **Pas de rechargement** : garde le chargeur de chaque arme à sa vraie
+  capacité max en continu (distinct de la réserve) — suit
+  automatiquement l'arme équipée, pas besoin de recocher en changeant
+  d'arme.
+
+Les deux utilisent un cycle de réassertion dédié à 50ms (plus rapide
+que le rafraîchissement général de l'appli) pour suivre les armes qui
+tirent vite sans dépletion visible.
+
+## Un coup, un mort / Non létal
+
+Onglet "État de jeu" : case "Un coup, un mort" + sélecteur Létal/Non
+létal. **Technique différente de tout le reste du trainer** : un vrai
+patch de code (pas juste une redirection de fonction comme le contrôle
+de vitesse) — localise et redirige l'instruction du jeu qui applique
+les dégâts, porté du script Cheat Engine communautaire (`MGS4.CT`,
+section "aob Damage", auteur RMLSNK) plutôt que découvert de zéro.
+Jamais appliqué au joueur lui-même (vérifie l'équipe de la cible avant
+d'agir).
+
+- **Létal** : tue en un coup n'importe quel ennemi touché.
+- **Non létal** : les dégâts normaux ne sont plus appliqués du tout.
+
+Confirmé fonctionnel en jeu sur les ennemis standards (2026-09-26). Peut
+ne pas fonctionner si le motif attendu n'est pas trouvé dans cette
+version du jeu (aucun crash dans ce cas, juste sans effet).
+
+**Boss : mécanisme différent, peu fiable.** Les boss ne passent pas par
+l'instruction de dégâts patchée ci-dessus (confirmé par diagnostic en
+jeu) - le trainer bascule automatiquement sur un second mécanisme
+(paliers de 10% forcés sur la vie/stamina du boss suivi, pas une vraie
+mise à mort en un coup) quand une entité "boss" est détectée. Ce
+mécanisme s'est déjà révélé instable en test (2026-09-27) : le jeu peut
+recalculer sa propre valeur en ignorant ce qu'on a forcé, et dans un cas
+a complètement bloqué la fin d'un combat (nécessitant de recharger un
+checkpoint). À utiliser en connaissance de cause sur un combat de boss,
+idéalement avec une sauvegarde récente.
+
 Modifier `native/speedhack.c` nécessite un compilateur C ciblant Windows
 (testé avec `x86_64-w64-mingw32-gcc` via [MSYS2](https://www.msys2.org/),
 mingw64) :
@@ -66,6 +111,28 @@ x86_64-w64-mingw32-gcc -shared -O2 -municode -o native/speedhack_x64.dll native/
 
 `mingw64/bin` doit être dans le PATH (sinon `cc1.exe` échoue silencieusement,
 sans aucun message).
+
+## Téléportation
+
+Onglet "Téléportation" : enregistre la position actuelle de Snake
+(X/Y/Z) sous un nom, puis téléporte instantanément vers un point
+enregistré (double-clic ou bouton dédié). Les 3 axes sont aussi
+éditables manuellement (saisie directe + bouton "Téléporter ici"), et
+la liste de points peut être exportée/importée en fichier JSON.
+
+Repose sur un hook de lecture seule capturant le pointeur de Snake via
+une routine générique de calcul de distance entre deux acteurs (motif
+"aob Coordinates" du CE table communautaire) - **confirmé fonctionnel
+par téléportation réelle en jeu** (2026-09-27). Coordonnées absolues du
+niveau (pas relatives à l'orientation du joueur) : l'axe Y semble être
+la hauteur (le jeu peut annuler une position invalide, ex. sous le
+sol), X/Z le plan horizontal.
+
+⚠️ Expérimental : rien ne garantit qu'un point enregistré dans un acte
+reste une position valide dans un autre acte/niveau (jamais testé) -
+risque de tomber hors du niveau chargé. Les points sont sauvegardés
+dans `teleport_points.json` (à côté de l'exe/du script, pas versionné
+dans ce dépôt - propre à chaque partie).
 
 ## Compatibilité / mises à jour du jeu
 
@@ -98,6 +165,11 @@ recalibrer ce décalage.
   plus susceptible d'être signalé par un antivirus/EDR qu'une simple
   lecture/écriture mémoire, et jamais testé au-delà d'un ralenti/
   accéléré ponctuel (pas de session longue durée).
+- "Un coup, un mort"/"Non létal" va encore plus loin : ce n'est plus
+  une redirection de fonction mais un **vrai patch d'instructions** du
+  jeu. Protégé contre une application au joueur lui-même, mais reste la
+  technique la plus invasive du trainer — expérimental, effet réel pas
+  encore confirmé visuellement en jeu.
 - Certains champs restent en confiance basse ou pas encore testés
   individuellement (documentés au cas par cas dans le `notes.md` de
   MGS4-SaveStats) : une valeur peut se comporter différemment de ce qui

@@ -42,6 +42,7 @@ pointeurs est consideree non fiable et l'ecriture reste desactivee.
 """
 
 import ctypes
+import json
 import os
 import struct
 import sys
@@ -52,15 +53,20 @@ from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QDialog,
+    QDoubleSpinBox,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSlider,
@@ -84,6 +90,19 @@ def _bundled_path(*parts):
 
 
 TRAINER_ICON = _bundled_path("assets", "MGS4_Best_Trainer.ico")
+
+
+def _writable_data_path(*parts):
+    """A cote de l'exe en mode empaquete (PAS sys._MEIPASS, qui est un
+    dossier temporaire en lecture jetable a chaque lancement) ou du script
+    en mode developpement - pour les donnees que le trainer doit ecrire
+    lui-meme et retrouver au lancement suivant (ex. points de teleport)."""
+    base = os.path.dirname(os.path.abspath(sys.executable)) if getattr(sys, "frozen", False) \
+        else os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, *parts)
+
+
+TELEPORT_POINTS_FILE = _writable_data_path("teleport_points.json")
 
 # ---------------------------------------------------------------------------
 # Acces memoire Windows bas niveau (ctypes pur, pas de pywin32/psutil/pymem -
@@ -385,6 +404,38 @@ WEAPON_ETAT_STRIDE = 0x50
 
 def weapon_state_rva(weapon_id: int) -> int:
     return WEAPON_ETAT_BASE_RVA + weapon_id * WEAPON_ETAT_STRIDE + MODULE_PATCH_SHIFT
+
+
+# Munitions dans le chargeur (pas la reserve) : +6 octets par rapport a
+# l'etat, dans le meme struct par arme - voir MGS4Live.read_weapon_magazine.
+WEAPON_MAGAZINE_OFFSET = 6
+# Capacite max du chargeur (+8, juste apres le courant) - confirme
+# 2026-09-26 : reste a 7 pendant qu'un tir fait descendre +6 de 7 a 6,
+# meme technique que les paires courant/max de VITALS.
+WEAPON_MAGAZINE_MAX_OFFSET = 8
+
+# Objet special actuellement equipe (Bandana=0x0f, Camouflage optique=
+# 0x10, 0=aucun) - PAS un flag booleen, un vrai ID d'objet lu par le
+# moteur du jeu en temps reel (confirme 2026-09-26 : l'ecrire equipe
+# reellement l'objet en jeu, pas seulement en memoire - le HUD et le
+# comportement suivent). Trouve par scan exact (15 puis 16 en alternant
+# Bandana/Camouflage optique, cf. la methode habituelle) apres l'echec
+# d'une premiere piste booleen (corrélée mais pas causale, voir notes.md).
+# PAS utilise par "Munitions infinies" (VitalsTab) au final : forcer le
+# Bandana ne marche que si le joueur le possede reellement (sinon le jeu
+# rejette silencieusement), et entre en conflit avec un autre objet
+# special reellement equipe (ex. Camouflage optique) - trop fragile pour
+# un usage general, voir notes.md. Constante gardee en audit trail (RE
+# confirmee) au cas ou une future fonctionnalite dediee au Bandana en
+# aurait besoin.
+SPECIAL_ITEM_EQUIPPED_RVA = 0x23FED44A
+BANDANA_ITEM_ID = 0x0f
+
+
+def special_item_equipped_rva() -> int:
+    return SPECIAL_ITEM_EQUIPPED_RVA + MODULE_PATCH_SHIFT
+
+
 CONFIRMED_WEAPON_RVAS: dict[int, int] = {
     # MK.17 (0x1e) : confirme le 2026-09-23, scan sur transition reelle
     # verrouille(1)->utilisable(2) apres deverrouillage chez Drebin. Seul
@@ -1033,10 +1084,10 @@ class SpeedController:
         for _attempt in range(20):
             handle = kernel32.OpenFileMappingW(FILE_MAP_ALL_ACCESS, False, SPEEDHACK_SHM_NAME)
             if handle:
-                # 16 (pas 12) : marge de securite sur l'alignement/padding
+                # 48 (pas 22) : marge de securite sur l'alignement/padding
                 # eventuel du struct SharedState cote C, sans impact ici
                 # puisqu'on adresse chaque champ par son propre offset.
-                view = kernel32.MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, 16)
+                view = kernel32.MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, 80)
                 kernel32.CloseHandle(handle)  # la vue mappee reste valide, plus besoin du handle
                 if view:
                     self.shm_view = view
@@ -1070,6 +1121,105 @@ class SpeedController:
             return None
         addr = ctypes.cast(self.shm_view, ctypes.c_void_p).value + offset
         return ctypes.cast(addr, ctypes.POINTER(ctypes.c_uint32))[0]
+
+    def _read_u8_at(self, offset: int) -> int | None:
+        if not self.shm_view:
+            return None
+        addr = ctypes.cast(self.shm_view, ctypes.c_void_p).value + offset
+        return ctypes.cast(addr, ctypes.POINTER(ctypes.c_uint8))[0]
+
+    def _write_u8_at(self, offset: int, value: int) -> bool:
+        if not self.shm_view:
+            return False
+        addr = ctypes.cast(self.shm_view, ctypes.c_void_p).value + offset
+        ctypes.cast(addr, ctypes.POINTER(ctypes.c_uint8))[0] = value
+        return True
+
+    def _read_u64_at(self, offset: int) -> int | None:
+        if not self.shm_view:
+            return None
+        addr = ctypes.cast(self.shm_view, ctypes.c_void_p).value + offset
+        return ctypes.cast(addr, ctypes.POINTER(ctypes.c_uint64))[0]
+
+    def set_one_shot_kill(self, enabled: bool) -> bool:
+        """Active/desactive le patch de code "one shot kill" (voir
+        native/speedhack.c) - injecte comme le reste, donc soumis aux
+        memes limites (silencieusement sans effet si le motif d'octets
+        n'a pas ete trouve dans cette version du jeu, voir
+        damage_hook_installed() pour le diagnostic)."""
+        return self._write_u8_at(20, 1 if enabled else 0)
+
+    def set_non_lethal(self, enabled: bool) -> bool:
+        """Meme patch de code que one_shot_kill (partage le meme
+        trampoline) mais effet oppose : n'applique plus du tout les
+        degats normaux, efface aussi un champ voisin ([rdi+0x324]) -
+        meme logique que "bRemoveLethal" du script CE original, sens
+        exact non confirme individuellement."""
+        return self._write_u8_at(23, 1 if enabled else 0)
+
+    def damage_hook_installed(self) -> bool | None:
+        """Diagnostic : le patch de code one-shot-kill a-t-il reussi a se
+        poser (motif d'octets trouve + redirections dans la portee d'un
+        jmp relatif 32 bits) - None si pas injecte, independant de
+        one_shot_kill lui-meme (le hook peut etre pose sans etre actif)."""
+        val = self._read_u8_at(21)
+        return None if val is None else bool(val)
+
+    def damage_hook_error(self) -> int | None:
+        """0=succes ou pas encore tente, 1=motif introuvable,
+        2=echec allocation trampoline, 3=hors de portee d'un jmp relatif -
+        voir install_one_shot_kill_hook dans native/speedhack.c."""
+        return self._read_u8_at(22)
+
+    def last_damaged_actor(self) -> int | None:
+        """Diagnostic : pointeur brut (rdi) vers le dernier personnage
+        touche par le patch de degats, quelle que soit son equipe -
+        permet d'inspecter sa structure (ex. [ptr+0x7C]) cote Python pour
+        comprendre pourquoi one_shot_kill n'affecte pas certains
+        personnages (boss). 0 si aucun coup enregistre depuis l'injection."""
+        return self._read_u64_at(24)
+
+    def boss_actor(self) -> int | None:
+        """Diagnostic : pointeur brut vers l'acteur boss actif, capture
+        par un second hook de lecture seule (voir install_boss_tracker_hook
+        dans native/speedhack.c) - les boss ne passent pas par l'instruction
+        patchee pour one_shot_kill, d'ou ce point d'injection distinct."""
+        return self._read_u64_at(32)
+
+    def boss_hook_installed(self) -> bool | None:
+        val = self._read_u8_at(40)
+        return None if val is None else bool(val)
+
+    def boss_hook_error(self) -> int | None:
+        """Memes codes que damage_hook_error()."""
+        return self._read_u8_at(41)
+
+    def boss_actor2(self) -> int | None:
+        """Diagnostic : meme idee que boss_actor mais capture au niveau
+        de la routine generique de recopie HP vers l'affichage (rcx),
+        voir install_boss_tracker_hook2 dans native/speedhack.c."""
+        return self._read_u64_at(42)
+
+    def boss_hook2_installed(self) -> bool | None:
+        val = self._read_u8_at(50)
+        return None if val is None else bool(val)
+
+    def boss_hook2_error(self) -> int | None:
+        return self._read_u8_at(51)
+
+    def coord_actor(self) -> int | None:
+        """Diagnostic : pointeur brut capture par une routine generique de
+        calcul de distance entre deux acteurs (voir install_coord_tracker_hook
+        dans native/speedhack.c) - pas forcement toujours le joueur, test
+        en cours (2026-09-27)."""
+        return self._read_u64_at(52)
+
+    def coord_hook_installed(self) -> bool | None:
+        val = self._read_u8_at(60)
+        return None if val is None else bool(val)
+
+    def coord_hook_error(self) -> int | None:
+        return self._read_u8_at(61)
 
     def patched_mask(self) -> int | None:
         """Diagnostic : quels hooks (voir native/speedhack.c, HOOK_*) ont
@@ -1201,6 +1351,131 @@ class MGS4Live:
             return False
         return SpeedController.set_paused(self.pid, paused)
 
+    def set_one_shot_kill(self, enabled: bool) -> bool:
+        """Injecte la DLL au premier appel (paresseux, comme set_game_speed) -
+        voir SpeedController.set_one_shot_kill et native/speedhack.c."""
+        if not (self.connected and self.sane and self.pid):
+            return False
+        if not self.speed.ensure_injected(self.pid):
+            return False
+        return self.speed.set_one_shot_kill(enabled)
+
+    def one_shot_kill_hook_installed(self) -> bool | None:
+        return self.speed.damage_hook_installed()
+
+    def set_non_lethal(self, enabled: bool) -> bool:
+        if not (self.connected and self.sane and self.pid):
+            return False
+        if not self.speed.ensure_injected(self.pid):
+            return False
+        return self.speed.set_non_lethal(enabled)
+
+    def one_shot_kill_hook_error(self) -> int | None:
+        return self.speed.damage_hook_error()
+
+    def last_damaged_actor(self) -> int | None:
+        """Diagnostic uniquement, voir SpeedController.last_damaged_actor."""
+        return self.speed.last_damaged_actor()
+
+    def boss_actor(self) -> int | None:
+        """Diagnostic uniquement, voir SpeedController.boss_actor."""
+        return self.speed.boss_actor()
+
+    def boss_hook_installed(self) -> bool | None:
+        return self.speed.boss_hook_installed()
+
+    def boss_hook_error(self) -> int | None:
+        return self.speed.boss_hook_error()
+
+    def boss_actor2(self) -> int | None:
+        return self.speed.boss_actor2()
+
+    def boss_hook2_installed(self) -> bool | None:
+        return self.speed.boss_hook2_installed()
+
+    def boss_hook2_error(self) -> int | None:
+        return self.speed.boss_hook2_error()
+
+    def boss_hp(self) -> int | None:
+        """Vie du boss actuellement suivi (boss_actor2, capture par
+        install_boss_tracker_hook2) - None si aucun boss actif. Meme
+        offset +0x314 que la vie des ennemis standards, mais alimente par
+        un chemin de code totalement different (les boss ne passent pas
+        par l'instruction patchee pour one_shot_kill, voir notes.md)."""
+        addr = self.boss_actor2()
+        if not addr:
+            return None
+        return struct.unpack("<i", self.proc.read_bytes(addr + 0x314, 4))[0]
+
+    def set_boss_hp(self, value: int) -> bool:
+        """Ecrit directement la vie du boss actuellement suivi. Utilise
+        en continu (pas via un hook de code) car on n'a pas trouve
+        l'instruction de degats propre aux boss - confirme fonctionnel en
+        jeu : forcer 0 en boucle fait progresser/tomber le boss (2026-09-26)."""
+        addr = self.boss_actor2()
+        if not addr:
+            return False
+        self.proc.write_bytes(addr + 0x314, struct.pack("<i", value))
+        return True
+
+    def coord_actor(self) -> int | None:
+        """Diagnostic uniquement, voir SpeedController.coord_actor."""
+        return self.speed.coord_actor()
+
+    def player_position(self) -> tuple[float, float, float] | None:
+        """Position (X, Y, Z, floats) de l'acteur suivi par coord_actor -
+        confirme etre Snake par teleportation reelle en jeu (2026-09-27,
+        voir notes.md) : pointeur stable pendant le deplacement, ecriture
+        de +0x10/+0x14/+0x18 deplace bien le joueur. Y semble etre la
+        hauteur (le jeu annule une position invalide sous le sol), X/Z le
+        plan horizontal en coordonnees absolues (pas relatives a
+        l'orientation du joueur). Injecte la DLL au premier appel
+        (paresseux, comme set_game_speed) - sans ca coord_actor() renvoie
+        toujours None si aucune autre fonctionnalite n'a deja declenche
+        l'injection."""
+        if not (self.connected and self.sane and self.pid):
+            return None
+        if not self.speed.ensure_injected(self.pid):
+            return None
+        addr = self.coord_actor()
+        if not addr:
+            return None
+        return struct.unpack("<fff", self.proc.read_bytes(addr + 0x10, 12))
+
+    def set_player_position(self, x: float, y: float, z: float) -> bool:
+        if not (self.connected and self.sane and self.pid):
+            return False
+        if not self.speed.ensure_injected(self.pid):
+            return False
+        addr = self.coord_actor()
+        if not addr:
+            return False
+        self.proc.write_bytes(addr + 0x10, struct.pack("<fff", x, y, z))
+        return True
+
+    def boss_stamina(self) -> int | None:
+        """Stamina/alerte du boss suivi (+0x31C) - mecanisme distinct de
+        la vie (+0x314), constate actif sur au moins une phase (2026-09-26,
+        ou tirer a balles reelles ne faisait pas baisser la vie mais les
+        munitions non letales faisaient bien baisser la stamina - meme
+        logique "assommer" que les soldats standards de MGS4). Offset
+        corrige le meme jour : +0x320 (documente par le CE table communautaire
+        comme "+31C+4") ne bougeait jamais en temps reel malgre des degats
+        reels visibles - un scan par valeur exacte a montre que c'est
+        +0x31C qui suit vraiment les degats, +0x320 restant fige (probable
+        copie/reference statique voisine)."""
+        addr = self.boss_actor2()
+        if not addr:
+            return None
+        return struct.unpack("<i", self.proc.read_bytes(addr + 0x31C, 4))[0]
+
+    def set_boss_stamina(self, value: int) -> bool:
+        addr = self.boss_actor2()
+        if not addr:
+            return False
+        self.proc.write_bytes(addr + 0x31C, struct.pack("<i", value))
+        return True
+
     def read_item(self, item_id: int) -> int:
         return struct.unpack("<H", self.proc.read_bytes(self.base + item_state_rva(item_id), 2))[0]
 
@@ -1230,6 +1505,33 @@ class MGS4Live:
             return False
         self.proc.write_bytes(self.base + rva + MODULE_PATCH_SHIFT, struct.pack("<H", value & 0xFFFF))
         return True
+
+    def read_weapon_magazine(self, weapon_id: int) -> int:
+        """Munitions dans le chargeur (distinct de la reserve ci-dessus -
+        se vide en tirant, declenche le rechargement a 0). Trouve le
+        2026-09-26 par scan exact (7->5->3 confirme par l'utilisateur en
+        tirant sur l'Operator, 4 candidats restants dont un seul dans la
+        table d'etat des armes deja connue) : meme table que weapon_state_
+        rva (WEAPON_MAGAZINE_OFFSET octets plus loin dans le meme struct
+        par arme, stride 0x50) - formule non re-testee individuellement
+        sur chaque arme, extrapolee de la formule d'etat deja confirmee
+        fiable pour toutes."""
+        return struct.unpack("<H", self.proc.read_bytes(self.base + weapon_state_rva(weapon_id)
+                                                          + WEAPON_MAGAZINE_OFFSET, 2))[0]
+
+    def write_weapon_magazine(self, weapon_id: int, value: int) -> None:
+        self.proc.write_bytes(self.base + weapon_state_rva(weapon_id) + WEAPON_MAGAZINE_OFFSET,
+                               struct.pack("<H", value & 0xFFFF))
+
+    def read_weapon_magazine_max(self, weapon_id: int) -> int:
+        return struct.unpack("<H", self.proc.read_bytes(self.base + weapon_state_rva(weapon_id)
+                                                          + WEAPON_MAGAZINE_MAX_OFFSET, 2))[0]
+
+    def read_special_item_equipped(self) -> int:
+        return struct.unpack("<H", self.proc.read_bytes(self.base + special_item_equipped_rva(), 2))[0]
+
+    def write_special_item_equipped(self, item_id: int) -> None:
+        self.proc.write_bytes(self.base + special_item_equipped_rva(), struct.pack("<H", item_id & 0xFFFF))
 
     def read_stat(self, name: str) -> int:
         """Lit un champ de mgs4save.STATS via linkvarbuf (meme offset que
@@ -1371,6 +1673,14 @@ ITEM_CATEGORIES: list[tuple[str, dict[int, str]]] = [
 # ---------------------------------------------------------------------------
 
 REFRESH_MS = 750
+# Cycle dedie, plus rapide que REFRESH_MS, pour la reassertion des
+# verrous munitions (VitalsTab) : certaines armes tirent assez vite pour
+# vider plusieurs coups entre deux cycles a 750ms avant correction,
+# visible/genant (demande utilisateur 2026-09-26). Independant du
+# rafraichissement general de l'UI (que ralentir ferait inutilement
+# tout ralentir) - juste de la lecture/ecriture memoire brute, pas de
+# repaint Qt, donc un cycle rapide reste tres peu couteux.
+AMMO_LOCK_REFRESH_MS = 50
 
 
 class TableTab(QWidget):
@@ -2317,6 +2627,34 @@ class VitalsTab(QWidget):
         self.sliders: dict[str, QSlider] = {}
         self.lock_checks: dict[str, QCheckBox] = {}
         self.locked_percents: dict[str, float] = {}
+        # weapon_id -> vraie reserve au moment ou "Munitions infinies" a
+        # ete cochee, reecrite en continu tant qu'elle reste cochee (pas
+        # de valeur fixe artificielle - demande explicite de l'utilisateur
+        # 2026-09-26, apres l'echec de deux pistes plus "authentiques"
+        # mais trop fragiles, voir notes.md : mecanisme du Bandana limite
+        # a l'objet reellement possede et en conflit avec un autre objet
+        # special equipe ; sentinel 65535 du Patriot specifique a cette
+        # arme, casse l'affichage sur les autres). "Pas de rechargement"
+        # n'a pas besoin de cet instantane : la capacite max du chargeur
+        # (WEAPON_MAGAZINE_MAX_OFFSET) est une constante par arme, relue
+        # et reecrite en direct a chaque cycle dans refresh() pour TOUTES
+        # les armes plutot que figee au moment du clic - fonctionne donc
+        # automatiquement quelle que soit l'arme equipee/changee ensuite.
+        self.ammo_snapshot: dict[int, int] = {}
+
+        # Degats en paliers pour "Un coup, un mort" sur les boss (voir
+        # _reassert_boss_staged_damage) : contrairement aux ennemis
+        # standards (code-patch, vraie mise a mort en un coup), les boss
+        # n'ont pas d'instruction de degats exploitable - on quantifie
+        # chaque coup REEL en paliers de 25% plutot que de forcer 0
+        # directement (deja teste : forcer 0 soi-meme peut desynchroniser
+        # l'etat du combat et le bloquer, 2026-09-26). Reinitialise a
+        # chaque nouveau pointeur boss_actor2 (nouvelle phase/pool).
+        self._boss_damage_addr: int | None = None
+        self._boss_damage_max_hp: int | None = None
+        self._boss_damage_max_stamina: int | None = None
+        self._boss_damage_step_hp: int = -1
+        self._boss_damage_step_stamina: int = -1
 
         layout = QVBoxLayout(self)
 
@@ -2336,10 +2674,8 @@ class VitalsTab(QWidget):
         layout.addLayout(speed_row)
 
         speed_note = QLabel(
-            "Ralenti (gauche) et pause : fiables. Accelere (droite) : experimental - "
-            "injecte une DLL dans le jeu pour tromper son horloge interne, peut "
-            "n'avoir aucun effet selon l'API de temps utilisee par le moteur (voir "
-            "notes.md)."
+            "Ralenti et accelere confirmes fonctionnels en jeu (2026-09-26) - injecte "
+            "une DLL dans le jeu pour tromper son horloge interne (voir notes.md)."
         )
         speed_note.setWordWrap(True)
         layout.addWidget(speed_note)
@@ -2351,6 +2687,54 @@ class VitalsTab(QWidget):
         alert_row.addWidget(self.alert_label)
         alert_row.addStretch(1)
         layout.addLayout(alert_row)
+
+        weapons_row = QHBoxLayout()
+        self.infinite_ammo_check = QCheckBox("Munitions infinies")
+        self.infinite_ammo_check.setToolTip(
+            "Fige la vraie reserve actuelle de chaque arme au moment ou tu coches (pas "
+            "une valeur fixe artificielle) et la reecrit en continu tant que c'est coche."
+        )
+        self.infinite_ammo_check.toggled.connect(self._on_infinite_ammo_toggled)
+        weapons_row.addWidget(self.infinite_ammo_check)
+        self.no_reload_check = QCheckBox("Pas de rechargement")
+        self.no_reload_check.setToolTip(
+            "Garde le chargeur de chaque arme a sa vraie capacite max en continu "
+            "(distinct de la reserve ci-dessus) - suit automatiquement l'arme "
+            "equipee, pas besoin de recocher en changeant d'arme."
+        )
+        weapons_row.addWidget(self.no_reload_check)
+        self.instant_kill_check = QCheckBox("Un coup, un mort")
+        self.instant_kill_check.setToolTip(
+            "Experimental - patch de code (pas juste lecture/ecriture memoire comme "
+            "le reste du trainer, voir native/speedhack.c). Jamais applique au "
+            "joueur. Le bouton Letal/Non letal a droite choisit l'effet.\n"
+            "Boss : pas d'instruction de degats exploitable trouvee - chaque coup "
+            "reel fait chuter la vie/stamina par paliers de 25% au lieu d'un coup "
+            "instantane, le dernier coup restant un vrai coup du jeu (evite de "
+            "bloquer la fin du combat, voir notes.md)."
+        )
+        self.instant_kill_check.toggled.connect(self._apply_instant_kill_mode)
+        weapons_row.addWidget(self.instant_kill_check)
+        pill, self.lethal_btn, self.non_lethal_btn, self._lethal_group = self._build_pill_toggle(
+            "Létal", "Non létal"
+        )
+        self.lethal_btn.setToolTip("Un coup tue n'importe quel ennemi touche.")
+        self.non_lethal_btn.setToolTip("Les degats normaux ne sont plus appliques du tout.")
+        self.lethal_btn.toggled.connect(self._apply_instant_kill_mode)
+        self.non_lethal_btn.toggled.connect(self._apply_instant_kill_mode)
+        weapons_row.addWidget(pill)
+        weapons_row.addStretch(1)
+        layout.addLayout(weapons_row)
+
+        one_shot_note = QLabel(
+            "Un coup, un mort : technique differente du reste du trainer (patch de "
+            "code au lieu de lecture/ecriture de donnees) - un peu plus risquee, "
+            "mais protegee (jamais applique au joueur). Peut ne pas fonctionner si "
+            "le motif attendu n'est pas trouve dans cette version du jeu (aucun "
+            "crash dans ce cas, juste sans effet)."
+        )
+        one_shot_note.setWordWrap(True)
+        layout.addWidget(one_shot_note)
 
         names = list(VITALS)
         self.table = QTableWidget(len(names), 3)
@@ -2366,6 +2750,54 @@ class VitalsTab(QWidget):
 
         self.table.resizeColumnToContents(0)
         self.table.resizeColumnToContents(2)
+
+        # Minuteur dedie (AMMO_LOCK_REFRESH_MS, plus rapide que le cycle
+        # general REFRESH_MS) pour "Munitions infinies"/"Pas de
+        # rechargement" - voir _reassert_ammo_locks.
+        self.ammo_lock_timer = QTimer(self)
+        self.ammo_lock_timer.timeout.connect(self._reassert_ammo_locks)
+        self.ammo_lock_timer.start(AMMO_LOCK_REFRESH_MS)
+
+    @staticmethod
+    def _build_pill_toggle(left_text: str, right_text: str):
+        """2 QPushButton cochables regroupes (exclusif) stylises en une
+        seule "pilule" scindee en deux (coins arrondis uniquement sur les
+        bords exterieurs, pas de bordure au milieu) - demande utilisateur
+        2026-09-26, plus lisible qu'une paire de cases a cocher separees
+        pour un choix mutuellement exclusif. Retourne (widget conteneur,
+        bouton gauche, bouton droit, le QButtonGroup - a garder en vie
+        c'est deja fait via le parent Qt, mais utile si l'appelant veut
+        y toucher)."""
+        container = QWidget()
+        row = QHBoxLayout(container)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(0)
+        left_btn = QPushButton(left_text)
+        right_btn = QPushButton(right_text)
+        base = (
+            "QPushButton {{ {radius} border: 1px solid #808080;"
+            " background: #808080; color: white; padding: 4px 10px; }}"
+            " QPushButton:checked {{ background: #2ea3ff; border-color: #2ea3ff; }}"
+        )
+        left_btn.setStyleSheet(base.format(
+            radius="border-top-left-radius: 13px; border-bottom-left-radius: 13px;"
+                   " border-top-right-radius: 0px; border-bottom-right-radius: 0px;"
+        ))
+        right_btn.setStyleSheet(base.format(
+            radius="border-top-right-radius: 13px; border-bottom-right-radius: 13px;"
+                   " border-top-left-radius: 0px; border-bottom-left-radius: 0px;"
+        ))
+        for btn in (left_btn, right_btn):
+            btn.setCheckable(True)
+            btn.setMinimumHeight(26)
+        group = QButtonGroup(container)
+        group.setExclusive(True)
+        group.addButton(left_btn)
+        group.addButton(right_btn)
+        left_btn.setChecked(True)
+        row.addWidget(left_btn)
+        row.addWidget(right_btn)
+        return container, left_btn, right_btn, group
 
     def _build_row(self, row: int, name: str):
         name_item = QTableWidgetItem(name)
@@ -2427,6 +2859,154 @@ class VitalsTab(QWidget):
             return
         self.live.set_paused(checked)
 
+    def _apply_instant_kill_mode(self):
+        """Appele par la case a cocher maitresse ET par le bouton pilule
+        Letal/Non letal (les deux doivent se recalculer ensemble) - un
+        seul des deux effets actif a la fois cote DLL, jamais les deux."""
+        if not (self.live.connected and self.live.sane):
+            return
+        active = self.instant_kill_check.isChecked()
+        lethal = self.lethal_btn.isChecked()
+        self.live.set_one_shot_kill(active and lethal)
+        self.live.set_non_lethal(active and not lethal)
+        # Repart d'une reference 100% fraiche a chaque (re)activation du
+        # mode, voir _reassert_boss_staged_damage.
+        self._boss_damage_addr = None
+        self._boss_damage_step_hp = -1
+        self._boss_damage_step_stamina = -1
+
+    def _on_infinite_ammo_toggled(self, checked: bool):
+        self.ammo_snapshot.clear()
+        if not checked or not (self.live.connected and self.live.sane):
+            return
+        for weapon_id in CONFIRMED_WEAPON_AMMO_RVAS:
+            try:
+                self.ammo_snapshot[weapon_id] = self.live.read_weapon_ammo(weapon_id)
+            except OSError:
+                pass
+
+    def _reassert_ammo_locks(self):
+        """Cycle dedie (AMMO_LOCK_REFRESH_MS, independant du
+        rafraichissement general de l'UI) : certaines armes tirent assez
+        vite pour vider plusieurs coups entre deux cycles a REFRESH_MS
+        (750ms) avant correction, visible/genant (demande utilisateur
+        2026-09-26)."""
+        if not (self.live.connected and self.live.sane):
+            return
+        if self.infinite_ammo_check.isChecked():
+            for weapon_id, value in self.ammo_snapshot.items():
+                try:
+                    self.live.write_weapon_ammo(weapon_id, value)
+                except OSError:
+                    pass
+        if self.no_reload_check.isChecked():
+            for weapon_id in CONFIRMED_WEAPON_AMMO_RVAS:
+                try:
+                    self.live.write_weapon_magazine(weapon_id, self.live.read_weapon_magazine_max(weapon_id))
+                except OSError:
+                    pass
+        if self.instant_kill_check.isChecked():
+            try:
+                self._reassert_boss_staged_damage()
+            except OSError:
+                pass
+
+    # Paliers successifs (fraction de la reference 100% capturee a
+    # l'activation/au changement de phase) - le dernier palier est un
+    # reste volontairement non nul : le coup final reste un vrai coup du
+    # jeu plutot qu'une ecriture memoire, pour ne pas court-circuiter
+    # l'evenement de victoire/KO du jeu (voir commentaire plus bas). Par
+    # paliers de 10% (90% a 10%) plutot que 25% - premier essai a 75%
+    # juge trop brutal (demande utilisateur 2026-09-26).
+    BOSS_DAMAGE_STEPS = tuple(i / 10 for i in range(9, 0, -1))
+
+    def _reassert_boss_staged_damage(self):
+        """Les boss ne passent pas par l'instruction de degats patchee
+        (one_shot_kill normal pour les ennemis standards) - pas
+        d'equivalent trouve malgre plusieurs pistes (voir notes.md). A la
+        place : chaque coup REEL encaisse par le boss (vie en mode Letal,
+        stamina en mode Non letal, deux mecanismes distincts selon la
+        phase, constate sur le boss 1) fait chuter la jauge au palier
+        suivant plutot que de la forcer directement a 0. Deja teste et
+        confirme dangereux (2026-09-26) : forcer 0 nous-memes plutot que
+        via un vrai coup du jeu peut desynchroniser l'etat du combat et le
+        bloquer completement (necessite alors de recharger un
+        checkpoint) - le dernier palier laisse donc volontairement un
+        reste (5%), le coup qui l'acheve reste un vrai coup traite
+        normalement par le jeu."""
+        addr = self.live.boss_actor2()
+        if not addr:
+            self._boss_damage_addr = None
+            return
+
+        if addr != self._boss_damage_addr:
+            # Nouveau boss ou nouvelle phase (pool de vie/stamina
+            # different, ex. 7200 en phase 1 vs une autre valeur ensuite) -
+            # nouvelle reference 100%. Ne verrouille PAS addr tant que les
+            # deux valeurs lues ne sont pas franchement positives : si une
+            # session precedente (test manuel, ancien palier) avait laisse
+            # la vie ou la stamina a 0 pile a cette adresse, une reference
+            # a 0 casse tout le calcul de paliers pour le reste du combat
+            # (constate 2026-09-26, stamina restee a 0 apres un test
+            # manuel puis changement de scene).
+            fresh_hp = self.live.boss_hp()
+            fresh_stamina = self.live.boss_stamina()
+            if not fresh_hp or not fresh_stamina:
+                return
+            self._boss_damage_addr = addr
+            self._boss_damage_max_hp = fresh_hp
+            self._boss_damage_max_stamina = fresh_stamina
+            self._boss_damage_step_hp = -1
+            self._boss_damage_step_stamina = -1
+
+        lethal = self.lethal_btn.isChecked()
+        max_hp = self._boss_damage_max_hp
+        current_hp = self.live.boss_hp()
+        if current_hp is None or not max_hp:
+            return
+
+        if lethal:
+            step_idx = self._boss_damage_step_hp
+            next_idx = step_idx + 1
+            if next_idx >= len(self.BOSS_DAMAGE_STEPS):
+                return  # dernier palier deja atteint, on laisse le jeu finir normalement
+            current_floor = int(max_hp * self.BOSS_DAMAGE_STEPS[step_idx]) if step_idx >= 0 else max_hp
+            if current_hp >= current_floor:
+                return  # pas de nouveau coup reel depuis le dernier palier force
+            new_floor = int(max_hp * self.BOSS_DAMAGE_STEPS[next_idx])
+            self.live.set_boss_hp(new_floor)
+            self._boss_damage_step_hp = next_idx
+            return
+
+        # Non letal : n'importe quelle arme fait avancer la stamina par
+        # paliers (comme le code-patch le fait pour les ennemis standards,
+        # qui ignore la lethalite reelle de l'arme) - la vie reelle ne
+        # doit jamais baisser dans ce mode, sinon le boss pourrait mourir
+        # "pour de vrai" malgre le mode choisi. On restaure donc la vie si
+        # un tir letal vient de l'entamer, et on detecte le coup via CE
+        # signal (vie entamee) OU via une vraie baisse de stamina (arme
+        # non letale utilisee directement) - le premier des deux qui se
+        # produit fait avancer le palier de stamina.
+        hp_hit_detected = current_hp < max_hp
+        if hp_hit_detected:
+            self.live.set_boss_hp(max_hp)
+
+        max_stamina = self._boss_damage_max_stamina
+        current_stamina = self.live.boss_stamina()
+        step_idx = self._boss_damage_step_stamina
+        next_idx = step_idx + 1
+        if next_idx >= len(self.BOSS_DAMAGE_STEPS):
+            return
+        if current_stamina is None or not max_stamina:
+            return
+        current_floor = int(max_stamina * self.BOSS_DAMAGE_STEPS[step_idx]) if step_idx >= 0 else max_stamina
+        stamina_hit_detected = current_stamina < current_floor
+        if not (hp_hit_detected or stamina_hit_detected):
+            return
+        new_floor = int(max_stamina * self.BOSS_DAMAGE_STEPS[next_idx])
+        self.live.set_boss_stamina(new_floor)
+        self._boss_damage_step_stamina = next_idx
+
     def set_advanced(self, advanced: bool):
         pass  # pas de mode simple/avance distinct ici
 
@@ -2437,9 +3017,19 @@ class VitalsTab(QWidget):
             self.alert_label.setText("?")
             self.speed_slider.setEnabled(False)
             self.pause_check.setEnabled(False)
+            self.infinite_ammo_check.setEnabled(False)
+            self.no_reload_check.setEnabled(False)
+            self.instant_kill_check.setEnabled(False)
+            self.lethal_btn.setEnabled(False)
+            self.non_lethal_btn.setEnabled(False)
             return
         self.speed_slider.setEnabled(True)
         self.pause_check.setEnabled(True)
+        self.infinite_ammo_check.setEnabled(True)
+        self.no_reload_check.setEnabled(True)
+        self.instant_kill_check.setEnabled(True)
+        self.lethal_btn.setEnabled(True)
+        self.non_lethal_btn.setEnabled(True)
 
         for name in VITALS:
             if name in self.locked_percents:
@@ -2469,7 +3059,7 @@ class VitalsTab(QWidget):
             self.alert_label.setText("?")
 
 
-TRAINER_VERSION = "V1.1"
+TRAINER_VERSION = "V1.3"
 
 TRAINER_HELP_TEXT = (
     "Ce trainer lit et ÉCRIT en direct la mémoire du process mgs4.exe "
@@ -2502,6 +3092,29 @@ TRAINER_HELP_TEXT = (
 # version/date/description), mais pour le trainer - premiere publication,
 # une seule entree pour l'instant.
 TRAINER_CHANGELOG = [
+    ("V1.3", "27 septembre 2026",
+     "Nouvel onglet \"Téléportation\" : enregistre/charge des points "
+     "(position X/Y/Z de Snake), téléportation immédiate, édition "
+     "manuelle des 3 axes, export/import de fichiers de points. Repose "
+     "sur un nouveau hook de lecture seule (coordonnées confirmées par "
+     "téléportation réelle en jeu) - expérimental, le jeu peut annuler "
+     "une position invalide (ex. sous le sol), et rien ne garantit qu'un "
+     "point enregistré dans un acte reste valide dans un autre (risque "
+     "de tomber hors du niveau). \"Un coup, un mort\" confirmé "
+     "fonctionnel en jeu sur les ennemis standards ; étendu aux boss via "
+     "un mécanisme différent (dégâts par paliers de 10%, pas une vraie "
+     "mise à mort instantanée) mais peu fiable - a déjà bloqué un combat "
+     "de boss nécessitant un rechargement de checkpoint, à utiliser en "
+     "connaissance de cause."),
+    ("V1.2", "26 septembre 2026",
+     "Onglet \"État de jeu\" : Munitions infinies et Pas de rechargement "
+     "figent les vraies valeurs de chaque arme (pas un nombre fixe "
+     "artificiel), suivent l'arme équipée automatiquement, réassertion "
+     "rapide dédiée (50ms) pour les armes qui tirent vite. Nouveau : "
+     "\"Un coup, un mort\" (+ mode Létal/Non létal) - première technique "
+     "de patch de code du projet (pas juste hook mémoire), portée du "
+     "script Cheat Engine communautaire (MGS4.CT, aob Damage) - jamais "
+     "appliqué au joueur."),
     ("V1.1", "26 septembre 2026",
      "Onglet \"État de jeu\" : nouveau curseur de vitesse du jeu (ralenti "
      "10% à accéléré 300%, centré sur la vitesse normale) et case "
@@ -2580,6 +3193,233 @@ class HelpDialog(QDialog):
         close_btn = QPushButton("Fermer")
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn)
+
+
+class TeleportTab(QWidget):
+    """Points de teleportation pour Snake - experimental (2026-09-27),
+    voir notes.md. Repose sur coord_actor (native/speedhack.c,
+    install_coord_tracker_hook) : un hook de lecture seule sur une routine
+    generique de calcul de distance entre deux acteurs, qui capture le
+    pointeur de Snake (confirme stable pendant le deplacement + veritable
+    teleportation validee en jeu). Coordonnees absolues (pas relatives a
+    l'orientation du joueur) - +0x10 X, +0x14 Y (hauteur, le jeu peut
+    rejeter une position invalide sous le sol), +0x18 Z."""
+
+    def __init__(self, live: MGS4Live):
+        super().__init__()
+        self.live = live
+        self.points: list[dict] = self._load_points()
+
+        layout = QVBoxLayout(self)
+
+        warning = QLabel(
+            "Experimental : le jeu peut annuler une teleportation vers une position "
+            "invalide (ex. sous le sol) - voir le bouton Aide pour le detail."
+        )
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+
+        pos_row = QHBoxLayout()
+        pos_row.addWidget(QLabel("Position actuelle :"))
+        self.current_pos_label = QLabel("?")
+        pos_row.addWidget(self.current_pos_label)
+        pos_row.addStretch(1)
+        save_btn = QPushButton("Enregistrer ici...")
+        save_btn.clicked.connect(self._save_current_position)
+        pos_row.addWidget(save_btn)
+        layout.addLayout(pos_row)
+
+        # Edition manuelle des 3 axes - ne se resynchronise PAS toute
+        # seule pendant que l'utilisateur tape (uniquement via le bouton
+        # "Actualiser"), sinon le cycle de rafraichissement general
+        # (REFRESH_MS) ecraserait la saisie en cours.
+        edit_row = QHBoxLayout()
+        self.axis_spins: dict[str, QDoubleSpinBox] = {}
+        for axis in ("X", "Y", "Z"):
+            edit_row.addWidget(QLabel(f"{axis} :"))
+            spin = QDoubleSpinBox()
+            spin.setRange(-1_000_000.0, 1_000_000.0)
+            spin.setDecimals(2)
+            spin.setSingleStep(10.0)
+            edit_row.addWidget(spin)
+            self.axis_spins[axis] = spin
+        refresh_pos_btn = QPushButton("Actualiser depuis le jeu")
+        refresh_pos_btn.clicked.connect(self._pull_current_position)
+        edit_row.addWidget(refresh_pos_btn)
+        apply_pos_btn = QPushButton("Téléporter ici")
+        apply_pos_btn.clicked.connect(self._apply_manual_position)
+        edit_row.addWidget(apply_pos_btn)
+        edit_row.addStretch(1)
+        layout.addLayout(edit_row)
+
+        file_row = QHBoxLayout()
+        export_btn = QPushButton("Exporter les points vers un fichier...")
+        export_btn.clicked.connect(self._export_points)
+        file_row.addWidget(export_btn)
+        import_btn = QPushButton("Importer des points depuis un fichier...")
+        import_btn.clicked.connect(self._import_points)
+        file_row.addWidget(import_btn)
+        file_row.addStretch(1)
+        layout.addLayout(file_row)
+
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["Nom", "X", "Y", "Z"])
+        self.table.horizontalHeader().setStretchLastSection(False)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.doubleClicked.connect(self._teleport_selected)
+        layout.addWidget(self.table, 1)
+
+        action_row = QHBoxLayout()
+        teleport_btn = QPushButton("Téléporter vers le point sélectionné")
+        teleport_btn.clicked.connect(self._teleport_selected)
+        action_row.addWidget(teleport_btn)
+        delete_btn = QPushButton("Supprimer le point sélectionné")
+        delete_btn.clicked.connect(self._delete_selected)
+        action_row.addWidget(delete_btn)
+        action_row.addStretch(1)
+        layout.addLayout(action_row)
+
+        self._rebuild_table()
+
+    @staticmethod
+    def _load_points() -> list[dict]:
+        try:
+            with open(TELEPORT_POINTS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return []
+
+    def _save_points(self):
+        try:
+            with open(TELEPORT_POINTS_FILE, "w", encoding="utf-8") as f:
+                json.dump(self.points, f, indent=2, ensure_ascii=False)
+        except OSError:
+            pass
+
+    def _rebuild_table(self):
+        self.table.setRowCount(len(self.points))
+        for row, point in enumerate(self.points):
+            self.table.setItem(row, 0, QTableWidgetItem(point["name"]))
+            self.table.setItem(row, 1, QTableWidgetItem(f"{point['x']:.1f}"))
+            self.table.setItem(row, 2, QTableWidgetItem(f"{point['y']:.1f}"))
+            self.table.setItem(row, 3, QTableWidgetItem(f"{point['z']:.1f}"))
+
+    def _save_current_position(self):
+        pos = self.live.player_position()
+        if pos is None:
+            QMessageBox.warning(self, "Position introuvable",
+                                 "Impossible de lire la position actuelle (pas encore de "
+                                 "coordonnees capturees - deplace-toi un peu en jeu et reessaie).")
+            return
+        name, ok = QInputDialog.getText(self, "Nom du point", "Nom de ce point de teleportation :")
+        if not ok or not name.strip():
+            return
+        x, y, z = pos
+        self.points.append({"name": name.strip(), "x": x, "y": y, "z": z})
+        self._save_points()
+        self._rebuild_table()
+
+    def _pull_current_position(self):
+        pos = self.live.player_position()
+        if pos is None:
+            QMessageBox.warning(self, "Position introuvable",
+                                 "Impossible de lire la position actuelle (pas encore de "
+                                 "coordonnees capturees - deplace-toi un peu en jeu et reessaie).")
+            return
+        x, y, z = pos
+        self.axis_spins["X"].setValue(x)
+        self.axis_spins["Y"].setValue(y)
+        self.axis_spins["Z"].setValue(z)
+
+    def _apply_manual_position(self):
+        x = self.axis_spins["X"].value()
+        y = self.axis_spins["Y"].value()
+        z = self.axis_spins["Z"].value()
+        if not self.live.set_player_position(x, y, z):
+            QMessageBox.warning(self, "Teleportation impossible",
+                                 "Pointeur de Snake introuvable actuellement.")
+
+    def _export_points(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Exporter les points de teleportation", "", "JSON (*.json)")
+        if not path:
+            return
+        if not path.lower().endswith(".json"):
+            path += ".json"
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(self.points, f, indent=2, ensure_ascii=False)
+        except OSError as exc:
+            QMessageBox.warning(self, "Export impossible", str(exc))
+
+    def _import_points(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Importer des points de teleportation", "", "JSON (*.json)")
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                imported = json.load(f)
+            if not isinstance(imported, list) or not all(
+                isinstance(p, dict) and {"name", "x", "y", "z"} <= p.keys() for p in imported
+            ):
+                raise ValueError("format inattendu (attendu : liste de {name, x, y, z})")
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            QMessageBox.warning(self, "Import impossible", str(exc))
+            return
+        replace = QMessageBox.question(
+            self, "Importer",
+            f"{len(imported)} point(s) trouve(s). Remplacer la liste actuelle ?\n"
+            "(Non = ajouter a la suite de la liste actuelle)",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if replace == QMessageBox.Yes:
+            self.points = imported
+        else:
+            self.points.extend(imported)
+        self._save_points()
+        self._rebuild_table()
+
+    def _selected_row(self) -> int | None:
+        rows = self.table.selectionModel().selectedRows()
+        if not rows:
+            return None
+        return rows[0].row()
+
+    def _teleport_selected(self):
+        row = self._selected_row()
+        if row is None:
+            return
+        point = self.points[row]
+        if not self.live.set_player_position(point["x"], point["y"], point["z"]):
+            QMessageBox.warning(self, "Teleportation impossible",
+                                 "Pointeur de Snake introuvable actuellement.")
+
+    def _delete_selected(self):
+        row = self._selected_row()
+        if row is None:
+            return
+        del self.points[row]
+        self._save_points()
+        self._rebuild_table()
+
+    def set_advanced(self, advanced: bool):
+        pass  # pas de mode simple/avance distinct ici
+
+    def refresh(self):
+        if not (self.live.connected and self.live.sane):
+            self.current_pos_label.setText("?")
+            self.setEnabled(False)
+            return
+        self.setEnabled(True)
+        pos = self.live.player_position()
+        if pos is None:
+            self.current_pos_label.setText("? (pas encore capture, deplace-toi un peu)")
+        else:
+            x, y, z = pos
+            self.current_pos_label.setText(f"X={x:.1f}  Y={y:.1f}  Z={z:.1f}")
 
 
 class TrainerWindow(QMainWindow):
@@ -2731,6 +3571,10 @@ class TrainerWindow(QMainWindow):
                 total_octocamo = sum(len(ids) for _l, ids, _n in octocamo_sections)
                 self.tabs.addTab(octocamo_tab, f"OctoCamo ({total_octocamo})")
                 self.item_tabs.append(octocamo_tab)
+
+        teleport_tab = TeleportTab(self.live)
+        self.tabs.addTab(teleport_tab, "Téléportation")
+        self.item_tabs.append(teleport_tab)
 
         layout.addWidget(self.tabs)
 
