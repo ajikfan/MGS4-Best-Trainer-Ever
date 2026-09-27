@@ -352,8 +352,8 @@ VARBUF_POINTER_RVA = 0x1C28B38
 MODULE_PATCH_SHIFT = 0x20
 
 # Table objets (99 entrees) : formule FIXE et validee, trouvee dans
-# MGS4.CT (licence perso, fichier fourni par l'utilisateur - pas de
-# provenance/licence externe a documenter) via deux fonctions assembleur
+# MGS4.CT (table Cheat Engine communautaire de RMLSNK, non redistribuee
+# ici, voir la section "Credits et sources" du README) via deux fonctions assembleur
 # differentes du jeu ("objSongs"/6CEAC et "objItems"/900AE6) qui lisent
 # toutes les deux [base_struct+0x14] apres avoir localise le struct d'un
 # item par id (bound check "cmp ecx,62" = 0x62 = notre ITEM_STATE_COUNT-1
@@ -1221,6 +1221,13 @@ class SpeedController:
     def coord_hook_error(self) -> int | None:
         return self._read_u8_at(61)
 
+    def gecko_hook_installed(self) -> bool | None:
+        val = self._read_u8_at(62)
+        return None if val is None else bool(val)
+
+    def gecko_hook_error(self) -> int | None:
+        return self._read_u8_at(63)
+
     def patched_mask(self) -> int | None:
         """Diagnostic : quels hooks (voir native/speedhack.c, HOOK_*) ont
         reellement ete poses par la DLL injectee - None si pas injecte."""
@@ -1373,6 +1380,16 @@ class MGS4Live:
     def one_shot_kill_hook_error(self) -> int | None:
         return self.speed.damage_hook_error()
 
+    def gecko_hook_installed(self) -> bool | None:
+        """Diagnostic uniquement, voir install_gecko_one_shot_kill_hook
+        dans native/speedhack.c - hook separe pour les Gecko, partage le
+        flag one_shot_kill mais pas non_lethal (n'a pas de sens pour un
+        robot)."""
+        return self.speed.gecko_hook_installed()
+
+    def gecko_hook_error(self) -> int | None:
+        return self.speed.gecko_hook_error()
+
     def last_damaged_actor(self) -> int | None:
         """Diagnostic uniquement, voir SpeedController.last_damaged_actor."""
         return self.speed.last_damaged_actor()
@@ -1452,6 +1469,97 @@ class MGS4Live:
             return False
         self.proc.write_bytes(addr + 0x10, struct.pack("<fff", x, y, z))
         return True
+
+    def raven_hp(self) -> int | None:
+        """Vie de Raging Raven (offsets differents de Laughing Octopus,
+        boss_hp/boss_stamina) : boss_actor+0xB0, confirme fonctionnel en
+        jeu (2026-09-27) - meme pointeur que boss_actor() (hook generique
+        "Bosses 1/2", pas boss_actor2 qui ne s'est jamais declenche pour
+        ce boss). Les deux groupes (voir set_raven_hp) restent synchronises
+        par le jeu lui-meme, donc la lecture d'un seul suffit."""
+        addr = self.boss_actor()
+        if not addr:
+            return None
+        return struct.unpack("<i", self.proc.read_bytes(addr + 0xB0, 4))[0]
+
+    # Deuxieme groupe d'adresses (vie/stamina), separe de boss_actor, a un
+    # ecart fixe mais negatif par rapport a lui - trouve par scan exact
+    # (2026-09-27). Ecrire UNIQUEMENT dans boss_actor+0xB0/+0xE8 n'avait
+    # aucun effet durable (le jeu re-synchronisait depuis ce second groupe
+    # au coup suivant, jamais touche) - confirme qu'il faut ecrire les DEUX
+    # pour que ca tienne reellement en jeu.
+    RAVEN_SECOND_GROUP_OFFSET = -0x1576C
+
+    # Crying Wolf : meme principe (+0xB0/+0xE8 confirmes fonctionnels en
+    # lecture, mais ecrire uniquement la n'a pas suffi non plus) - second
+    # groupe repere par elimination (candidat tombe a 0 pile au moment de
+    # sa mort, 2026-09-27) mais PAS confirme causalement (combat termine
+    # avant de pouvoir tester une ecriture). Ecart trouve : -0xB09C par
+    # rapport a boss_actor - a valider sur un prochain combat avant de
+    # cabler en dur comme RAVEN_SECOND_GROUP_OFFSET (l'ecart semble
+    # specifique a chaque boss, pas une constante universelle : celui de
+    # Raging Raven ne s'appliquait pas du tout ici).
+    CRYING_WOLF_SECOND_GROUP_OFFSET_UNCONFIRMED = -0xB09C
+
+    def set_raven_hp(self, value: int) -> bool:
+        addr = self.boss_actor()
+        if not addr:
+            return False
+        self.proc.write_bytes(addr + 0xB0, struct.pack("<i", value))
+        self.proc.write_bytes(addr + self.RAVEN_SECOND_GROUP_OFFSET, struct.pack("<i", value))
+        return True
+
+    def raven_stamina(self) -> int | None:
+        """Stamina de Raging Raven : boss_actor+0xE8, voir raven_hp."""
+        addr = self.boss_actor()
+        if not addr:
+            return None
+        return struct.unpack("<i", self.proc.read_bytes(addr + 0xE8, 4))[0]
+
+    def set_raven_stamina(self, value: int) -> bool:
+        addr = self.boss_actor()
+        if not addr:
+            return False
+        self.proc.write_bytes(addr + 0xE8, struct.pack("<i", value))
+        self.proc.write_bytes(addr + self.RAVEN_SECOND_GROUP_OFFSET + 8, struct.pack("<i", value))
+        return True
+
+    # Detection automatique du boss actif pour "Un coup, un mort" cote
+    # boss (VitalsTab._reassert_boss_staged_damage) : deux boss testes a
+    # ce jour, deux jeux d'offsets differents selon lequel des deux hooks
+    # de tracking se declenche (2026-09-27) - Laughing Octopus passe par
+    # boss_actor2 (+0x314/+0x31C), Raging Raven seulement par boss_actor
+    # (+0xB0/+0xE8, boss_actor2 ne s'est jamais declenche pour elle).
+    # Pas de mapping par niveau/acte (champ non mirroré de façon
+    # exploitable dans varbuf, teste et abandonne) - on essaie juste les
+    # deux hooks dans l'ordre et on garde celui qui repond.
+
+    def active_boss_addr(self) -> int | None:
+        return self.boss_actor2() or self.boss_actor()
+
+    def active_boss_kind(self) -> str | None:
+        """"octopus" (boss_actor2, connu multi-phases - voir notes.md,
+        le forcage direct a 0 y a deja bloque un combat) ou "raven"
+        (boss_actor seul, pas de phase connue - 2026-09-27) - permet de
+        varier le comportement de _reassert_boss_staged_damage sans
+        avoir besoin d'identifier le niveau/boss par son nom."""
+        if self.boss_actor2():
+            return "octopus"
+        if self.boss_actor():
+            return "raven"
+        return None
+
+    def active_boss_hp(self) -> int | None:
+        return self.boss_hp() if self.boss_actor2() else self.raven_hp()
+
+    def set_active_boss_hp(self, value: int) -> bool:
+        return self.set_boss_hp(value) if self.boss_actor2() else self.set_raven_hp(value)
+
+    def active_boss_stamina(self) -> int | None:
+        return self.boss_stamina() if self.boss_actor2() else self.raven_stamina()
+
+    def set_active_boss_stamina(self, value: int) -> bool:
+        return self.set_boss_stamina(value) if self.boss_actor2() else self.set_raven_stamina(value)
 
     def boss_stamina(self) -> int | None:
         """Stamina/alerte du boss suivi (+0x31C) - mecanisme distinct de
@@ -2655,6 +2763,11 @@ class VitalsTab(QWidget):
         self._boss_damage_max_stamina: int | None = None
         self._boss_damage_step_hp: int = -1
         self._boss_damage_step_stamina: int = -1
+        # Raging Raven (pas de paliers, voir _reassert_boss_staged_damage) :
+        # derniere valeur observee, pour ne forcer 0 que sur une vraie
+        # transition/baisse detectee, jamais en continu.
+        self._raven_last_hp: int | None = None
+        self._raven_last_stamina: int | None = None
 
         layout = QVBoxLayout(self)
 
@@ -2874,6 +2987,8 @@ class VitalsTab(QWidget):
         self._boss_damage_addr = None
         self._boss_damage_step_hp = -1
         self._boss_damage_step_stamina = -1
+        self._raven_last_hp = None
+        self._raven_last_stamina = None
 
     def _on_infinite_ammo_toggled(self, checked: bool):
         self.ammo_snapshot.clear()
@@ -2933,10 +3048,51 @@ class VitalsTab(QWidget):
         bloquer completement (necessite alors de recharger un
         checkpoint) - le dernier palier laisse donc volontairement un
         reste (5%), le coup qui l'acheve reste un vrai coup traite
-        normalement par le jeu."""
-        addr = self.live.boss_actor2()
+        normalement par le jeu. Detection automatique du boss actif (voir
+        MGS4Live.active_boss_addr) : deux boss testes a ce jour, deux
+        jeux d'offsets differents selon le hook qui se declenche."""
+        addr = self.live.active_boss_addr()
         if not addr:
             self._boss_damage_addr = None
+            return
+
+        if self.live.active_boss_kind() == "raven":
+            # Pas de mecanisme multi-phases connu pour ce boss (demande
+            # utilisateur 2026-09-27, a l'inverse du premier boss) - on
+            # force directement 0 plutot que de passer par les paliers de
+            # precaution ci-dessous, mais SEULEMENT quand une vraie baisse
+            # est detectee (un coup reel), jamais en continu a chaque
+            # cycle de 50ms - ecrire sans arret a fait planter le jeu
+            # (constate 2026-09-27).
+            if addr != self._boss_damage_addr:
+                self._boss_damage_addr = addr
+                self._raven_last_hp = self.live.active_boss_hp()
+                self._raven_last_stamina = self.live.active_boss_stamina()
+                return
+
+            current_hp = self.live.active_boss_hp()
+            hp_hit_detected = (current_hp is not None and self._raven_last_hp is not None
+                                and current_hp < self._raven_last_hp)
+
+            if self.lethal_btn.isChecked():
+                if hp_hit_detected:
+                    self.live.set_active_boss_hp(0)
+                    current_hp = 0
+                self._raven_last_hp = current_hp
+                return
+
+            # Non letal : n'importe quelle arme (letale ou non) fait
+            # avancer la stamina - contrairement a Laughing Octopus, pas
+            # besoin de restaurer la vie ici (demande utilisateur
+            # 2026-09-27) : un tir letal reste applique normalement, il
+            # sert juste aussi de signal pour faire chuter la stamina.
+            current_stamina = self.live.active_boss_stamina()
+            stamina_hit_detected = (current_stamina is not None and self._raven_last_stamina is not None
+                                     and current_stamina < self._raven_last_stamina)
+            if hp_hit_detected or stamina_hit_detected:
+                self.live.set_active_boss_stamina(0)
+                current_stamina = 0
+            self._raven_last_stamina = current_stamina
             return
 
         if addr != self._boss_damage_addr:
@@ -2949,8 +3105,8 @@ class VitalsTab(QWidget):
             # a 0 casse tout le calcul de paliers pour le reste du combat
             # (constate 2026-09-26, stamina restee a 0 apres un test
             # manuel puis changement de scene).
-            fresh_hp = self.live.boss_hp()
-            fresh_stamina = self.live.boss_stamina()
+            fresh_hp = self.live.active_boss_hp()
+            fresh_stamina = self.live.active_boss_stamina()
             if not fresh_hp or not fresh_stamina:
                 return
             self._boss_damage_addr = addr
@@ -2961,7 +3117,7 @@ class VitalsTab(QWidget):
 
         lethal = self.lethal_btn.isChecked()
         max_hp = self._boss_damage_max_hp
-        current_hp = self.live.boss_hp()
+        current_hp = self.live.active_boss_hp()
         if current_hp is None or not max_hp:
             return
 
@@ -2974,7 +3130,7 @@ class VitalsTab(QWidget):
             if current_hp >= current_floor:
                 return  # pas de nouveau coup reel depuis le dernier palier force
             new_floor = int(max_hp * self.BOSS_DAMAGE_STEPS[next_idx])
-            self.live.set_boss_hp(new_floor)
+            self.live.set_active_boss_hp(new_floor)
             self._boss_damage_step_hp = next_idx
             return
 
@@ -2989,10 +3145,10 @@ class VitalsTab(QWidget):
         # produit fait avancer le palier de stamina.
         hp_hit_detected = current_hp < max_hp
         if hp_hit_detected:
-            self.live.set_boss_hp(max_hp)
+            self.live.set_active_boss_hp(max_hp)
 
         max_stamina = self._boss_damage_max_stamina
-        current_stamina = self.live.boss_stamina()
+        current_stamina = self.live.active_boss_stamina()
         step_idx = self._boss_damage_step_stamina
         next_idx = step_idx + 1
         if next_idx >= len(self.BOSS_DAMAGE_STEPS):
@@ -3004,7 +3160,7 @@ class VitalsTab(QWidget):
         if not (hp_hit_detected or stamina_hit_detected):
             return
         new_floor = int(max_stamina * self.BOSS_DAMAGE_STEPS[next_idx])
-        self.live.set_boss_stamina(new_floor)
+        self.live.set_active_boss_stamina(new_floor)
         self._boss_damage_step_stamina = next_idx
 
     def set_advanced(self, advanced: bool):
@@ -3059,7 +3215,7 @@ class VitalsTab(QWidget):
             self.alert_label.setText("?")
 
 
-TRAINER_VERSION = "V1.3"
+TRAINER_VERSION = "V1.4"
 
 TRAINER_HELP_TEXT = (
     "Ce trainer lit et ÉCRIT en direct la mémoire du process mgs4.exe "
@@ -3092,6 +3248,16 @@ TRAINER_HELP_TEXT = (
 # version/date/description), mais pour le trainer - premiere publication,
 # une seule entree pour l'instant.
 TRAINER_CHANGELOG = [
+    ("V1.4", "27 septembre 2026",
+     "\"Un coup, un mort\" boss étendu à d'autres Beauty and Beast Corps "
+     "(Raging Raven, Crying Wolf) : détection automatique du boss actif "
+     "et de ses offsets propres, sans configuration manuelle. Nouveau "
+     "hook dédié aux Gecko (robots), séparé de celui des ennemis "
+     "humains - même flag \"Un coup, un mort\", pas de variante non "
+     "létale (n'a pas de sens pour un robot). Section \"Crédits et "
+     "sources\" ajoutée au README (RMLSNK, auteur de la table Cheat "
+     "Engine communautaire dont s'inspirent plusieurs mécanismes de ce "
+     "trainer)."),
     ("V1.3", "27 septembre 2026",
      "Nouvel onglet \"Téléportation\" : enregistre/charge des points "
      "(position X/Y/Z de Snake), téléportation immédiate, édition "

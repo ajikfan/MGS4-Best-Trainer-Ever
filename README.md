@@ -1,4 +1,4 @@
-# MGS4 Trainer — V1.3
+# MGS4 Trainer — V1.4
 
 Trainer de recherche/édition mémoire live pour Metal Gear Solid 4
 (portage PC Steam) : lit et **écrit** en direct la mémoire du process
@@ -90,16 +90,24 @@ Confirmé fonctionnel en jeu sur les ennemis standards (2026-09-26). Peut
 ne pas fonctionner si le motif attendu n'est pas trouvé dans cette
 version du jeu (aucun crash dans ce cas, juste sans effet).
 
-**Boss : mécanisme différent, peu fiable.** Les boss ne passent pas par
-l'instruction de dégâts patchée ci-dessus (confirmé par diagnostic en
-jeu) - le trainer bascule automatiquement sur un second mécanisme
-(paliers de 10% forcés sur la vie/stamina du boss suivi, pas une vraie
-mise à mort en un coup) quand une entité "boss" est détectée. Ce
-mécanisme s'est déjà révélé instable en test (2026-09-27) : le jeu peut
-recalculer sa propre valeur en ignorant ce qu'on a forcé, et dans un cas
-a complètement bloqué la fin d'un combat (nécessitant de recharger un
-checkpoint). À utiliser en connaissance de cause sur un combat de boss,
-idéalement avec une sauvegarde récente.
+**Boss : mécanisme différent.** Les boss ne passent pas par l'instruction
+de dégâts patchée ci-dessus (confirmé par diagnostic en jeu) - le
+trainer détecte automatiquement le boss actif (Laughing Octopus/Beauty,
+Raging Raven, Crying Wolf confirmés à ce jour, chacun avec ses propres
+offsets mémoire) et force sa vie/stamina à 0 dès qu'un vrai coup est
+détecté, sans configuration manuelle. Ce forçage est délibérément
+**synchronisé sur un vrai coup** (jamais en continu) : le jeu peut
+ignorer une valeur forcée hors contexte et recalculer la sienne, et un
+forçage en boucle sans coup réel a déjà fait planter le jeu (2026-09-27).
+Metal Gear RAY (mécha, mécanisme non trouvé) et une phase précise de
+Laughing Octopus (nécessite des tirs létaux pour la déloger d'une
+cachette) restent des cas non fonctionnels connus.
+
+**Gecko (robots) : hook séparé.** Les Gecko ne passent ni par
+l'instruction des ennemis humains ni par celle des boss - un troisième
+patch de code dédié (porté du script CE "aob Damage Gecko") gère leur
+cas, branché sur le même bouton/flag "Un coup, un mort" (pas de variante
+non létale, ça n'a pas de sens pour un robot).
 
 Modifier `native/speedhack.c` nécessite un compilateur C ciblant Windows
 (testé avec `x86_64-w64-mingw32-gcc` via [MSYS2](https://www.msys2.org/),
@@ -154,6 +162,34 @@ de MGS4-SaveStats pour la méthode de diagnostic complète).
 reste bloqué sur "Non connecté", ou le contrôle de cohérence échoue en
 boucle après reconnexion), c'est probablement la même cause : il faudra
 recalibrer ce décalage.
+
+## Crédits et sources
+
+Ce trainer s'appuie sur le travail d'autres personnes, en plus de nos
+propres recherches :
+
+- **[zexk/bbtracker](https://github.com/zexk/bbtracker)** (licence MIT) :
+  chaîne de pointeurs vers la structure de jeu, décrite plus haut.
+- **Table Cheat Engine communautaire `MGS4.CT`, par RMLSNK** (version
+  7.7 du fichier utilisé ici). Cette table n'est **pas redistribuée**
+  dans ce dépôt (aucune licence n'y est indiquée) ; le trainer réutilise
+  ses motifs d'octets (AOB), ses offsets de structure et sa logique,
+  réécrits en C et en Python :
+  - "Un coup, un mort" / "Non létal" : script "aob Damage" et sa logique
+    "Remove Lethal" ;
+  - suivi des boss : scripts "Bosses 2" et "Bosses Laughing Octopus".
+    L'offset de stamina qu'elle documente (`+31C+4`) s'est révélé décalé
+    de 4 octets en test : le bon champ est `+0x31C`, corrigé par nos
+    propres scans ;
+  - Téléportation : script "aob Coordinates" (position X/Y/Z à
+    `+0x10`/`+0x14`/`+0x18`) ;
+  - plusieurs formules d'adresses (table des objets, statistiques, état
+    d'alerte) ont été repérées en lisant ses scripts (détail dans les
+    commentaires du code), puis **vérifiées en jeu par nos propres
+    tests** avant d'être utilisées.
+
+Merci à leurs auteurs. Si tu es l'auteur d'une de ces sources et que tu
+souhaites une correction ou un retrait, ouvre une issue.
 
 ## ⚠️ Avertissements
 

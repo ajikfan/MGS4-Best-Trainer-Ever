@@ -59,7 +59,11 @@
  * par une routine generique de calcul de distance entre deux acteurs -
  * position (X/Y/Z, 3 floats) a +0x10/+0x14/+0x18 de ce pointeur, voir
  * install_coord_tracker_hook), [60] uint8 coord_hook_installed, [61]
- * uint8 coord_hook_error. */
+ * uint8 coord_hook_error, [62] uint8 gecko_hook_installed, [63] uint8
+ * gecko_hook_error - meme principe que damage_hook_installed/error mais
+ * pour install_gecko_one_shot_kill_hook (instruction de degats separee,
+ * propre aux Gecko, partage le flag one_shot_kill mais pas non_lethal -
+ * "non letal" n'a pas de sens pour un robot). */
 #pragma pack(push, 1)
 typedef struct {
     double speed;
@@ -80,6 +84,8 @@ typedef struct {
     UINT64 coord_actor;
     UINT8 coord_hook_installed;
     UINT8 coord_hook_error;
+    UINT8 gecko_hook_installed;
+    UINT8 gecko_hook_error;
 } SharedState;
 #pragma pack(pop)
 
@@ -808,6 +814,119 @@ static BOOL install_coord_tracker_hook(void) {
     return TRUE;
 }
 
+/* One-shot-kill pour les Gecko (robots bipedes) - instruction de degats
+ * SEPARATE de celle des ennemis humains (install_one_shot_kill_hook),
+ * motif repris du script CE communautaire "aob Damage Gecko". Meme
+ * mecanisme (ecrase ecx par 0 juste avant l'ecriture de vie), mais :
+ *  - acteur cible dans r9 (pas rdi), instruction 7 octets (pas 6, prefixe
+ *    REX.B necessaire pour adresser r9) ;
+ *  - aucune verification d'equipe : les Gecko ne sont jamais controles
+ *    par le joueur, le script CE original n'en fait pas non plus ;
+ *  - pas de variante non-letale (n'a pas de sens pour un robot) - partage
+ *    juste le flag one_shot_kill avec les ennemis humains, ignore
+ *    non_lethal.
+ *
+ * Trampoline (33 octets) :
+ *   0   push rax / mov rax,&one_shot_kill / movzx eax,[rax] / cmp al,1 / pop rax
+ *   17  jne PASS (offset21)              (one_shot_kill pas actif)
+ *   19  xor ecx,ecx                      (one_shot_kill actif : vie -> 0)
+ *   21  PASS: <7 octets originaux : mov [r9+0x314],ecx>
+ *   28  jmp BACK
+ *   33  (fin) */
+static BOOL install_gecko_one_shot_kill_hook(void) {
+    HMODULE base = GetModuleHandle(NULL);
+    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
+    SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
+
+    /* EB 07 41 ????????? C2 48 ???? 48 ?? 48 ??? 48 ????????????
+     * 48 ?????????????? 41 89 89 - motif long a nombreux jokers (issu
+     * tel quel du CE table), signature suffisante pour eviter les faux
+     * positifs sur un module de cette taille. Point d'injection reel a
+     * +0x34 (les 3 derniers octets exacts du motif, "41 89 89", en sont
+     * le tout debut). */
+    static const BYTE pattern[] = {
+        0xEB, 0x07, 0x41, 0, 0, 0, 0, 0, 0, 0, 0, 0xC2, 0x48, 0, 0, 0, 0,
+        0x48, 0, 0, 0x48, 0, 0, 0, 0x48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0x48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x41, 0x89, 0x89,
+    };
+    static const char mask[] =
+        "xxx????????xx????x??x???x????????????x??????????????xxx";
+
+    BYTE *raw = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
+    if (!raw) {
+        g_shared->gecko_hook_error = 1;
+        return FALSE;
+    }
+    BYTE *objDamageGecko = raw + 0x34;
+
+    BYTE *trampoline = alloc_near(objDamageGecko, 4096);
+    if (!trampoline) {
+        g_shared->gecko_hook_error = 2;
+        return FALSE;
+    }
+
+    UINT64 oneShotAddr = (UINT64)&g_shared->one_shot_kill;
+    BYTE code[33];
+    SIZE_T p = 0;
+
+    /* push rax ; mov rax,&one_shot_kill ; movzx eax,[rax] ; cmp al,1 ; pop rax */
+    code[p++] = 0x50;
+    code[p++] = 0x48;
+    code[p++] = 0xB8;
+    memcpy(&code[p], &oneShotAddr, 8);
+    p += 8;
+    code[p++] = 0x0F;
+    code[p++] = 0xB6;
+    code[p++] = 0x00;
+    code[p++] = 0x3C;
+    code[p++] = 0x01;
+    code[p++] = 0x58;
+    /* jne PASS (offset21) */
+    code[p++] = 0x75;
+    code[p++] = (BYTE)(21 - 19);
+    /* xor ecx,ecx (vie apres degats forcee a 0) */
+    code[p++] = 0x31;
+    code[p++] = 0xC9;
+
+    /* PASS (offset21) : instruction originale (7 octets copies tels quels) */
+    memcpy(&code[p], objDamageGecko, 7);
+    p += 7;
+
+    /* jmp BACK (vers objDamageGecko+7, suite du code original jamais modifiee) */
+    code[p++] = 0xE9;
+    {
+        BYTE *nextInstrAddr = trampoline + p + 4;
+        INT64 rel64 = (INT64)(objDamageGecko + 7) - (INT64)nextInstrAddr;
+        if (rel64 > 0x7FFFFFFFLL || rel64 < -0x80000000LL) {
+            g_shared->gecko_hook_error = 3;
+            return FALSE;
+        }
+        INT32 rel = (INT32)rel64;
+        memcpy(&code[p], &rel, 4);
+        p += 4;
+    }
+
+    memcpy(trampoline, code, p);
+
+    INT64 relToTrampoline = (INT64)trampoline - (INT64)(objDamageGecko + 5);
+    if (relToTrampoline > 0x7FFFFFFFLL || relToTrampoline < -0x80000000LL) {
+        g_shared->gecko_hook_error = 3;
+        return FALSE;
+    }
+
+    DWORD oldProt;
+    VirtualProtect(objDamageGecko, 7, PAGE_EXECUTE_READWRITE, &oldProt);
+    objDamageGecko[0] = 0xE9;
+    INT32 relJmp = (INT32)relToTrampoline;
+    memcpy(objDamageGecko + 1, &relJmp, 4);
+    objDamageGecko[5] = 0x90; /* nop de bourrage : 7 octets remplaces par jmp rel32 (5) */
+    objDamageGecko[6] = 0x90;
+    VirtualProtect(objDamageGecko, 7, oldProt, &oldProt);
+
+    return TRUE;
+}
+
 static DWORD WINAPI InitThread(LPVOID param) {
     (void)param;
     InitializeCriticalSection(&g_lock);
@@ -834,6 +953,8 @@ static DWORD WINAPI InitThread(LPVOID param) {
             g_shared->coord_actor = 0;
             g_shared->coord_hook_installed = 0;
             g_shared->coord_hook_error = 0;
+            g_shared->gecko_hook_installed = 0;
+            g_shared->gecko_hook_error = 0;
         }
     }
 
@@ -858,6 +979,10 @@ static DWORD WINAPI InitThread(LPVOID param) {
 
     if (g_shared && install_coord_tracker_hook()) {
         g_shared->coord_hook_installed = 1;
+    }
+
+    if (g_shared && install_gecko_one_shot_kill_hook()) {
+        g_shared->gecko_hook_installed = 1;
     }
 
     /* patch_import_everywhere (pas juste le module principal) : le 1er
