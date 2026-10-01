@@ -1,0 +1,22 @@
+{
+  "55": {
+    "condition": "Defeat the FROG unit using non-lethal weapons, Act 1 (Advent Palace). Special case: unlike the other 4, the figure is found after the fight.",
+    "name": "FROG Unit"
+  },
+  "56": {
+    "condition": "Defeat Laughing Octopus using non-lethal weapons, Act 2 (research facility, South America).",
+    "name": "Laughing Octopus"
+  },
+  "57": {
+    "condition": "Defeat Raging Raven using non-lethal weapons, Act 3 (stone tower, Prague, Eastern Europe).",
+    "name": "Raging Raven"
+  },
+  "58": {
+    "condition": "Defeat Crying Wolf using non-lethal weapons, Act 4 (snowfield, Shadow Moses).",
+    "name": "Crying Wolf"
+  },
+  "59": {
+    "condition": "Defeat Screaming Mantis, Act 5 (Outer Haven).",
+    "name": "Screaming Mantis"
+  }
+}

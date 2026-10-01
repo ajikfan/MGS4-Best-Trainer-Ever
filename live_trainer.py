@@ -60,6 +60,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFrame,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
@@ -103,6 +104,221 @@ def _writable_data_path(*parts):
 
 
 TELEPORT_POINTS_FILE = _writable_data_path("teleport_points.json")
+SETTINGS_FILE = _writable_data_path("settings.json")
+
+# ---------------------------------------------------------------------------
+# Internationalisation (FR/EN, demande utilisateur 2026-10-01, V2.0) -
+# fichiers JSON embarques (_bundled_path, comme l'icone) plutot que des
+# dictionnaires en dur dans ce fichier deja volumineux. Changement de
+# langue = redemarrage automatique du process (pas de retraduction a
+# chaud des widgets deja construits - bien plus simple, choix explicite
+# de l'utilisateur plutot que de doubler la complexite pour un gain mineur
+# sur un outil solo). Choix persiste dans SETTINGS_FILE (a cote de l'exe,
+# comme teleport_points.json), pas dans le dossier temporaire PyInstaller.
+DEFAULT_LANGUAGE = "fr"
+SUPPORTED_LANGUAGES = {"fr": "Français", "en": "English"}
+
+
+def _load_settings() -> dict:
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_settings(settings: dict) -> None:
+    try:
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(settings, f, ensure_ascii=False, indent=2)
+    except OSError:
+        pass
+
+
+def current_language() -> str:
+    lang = _load_settings().get("language", DEFAULT_LANGUAGE)
+    return lang if lang in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
+
+
+def set_language(lang: str) -> None:
+    settings = _load_settings()
+    settings["language"] = lang
+    _save_settings(settings)
+
+
+def restart_trainer() -> None:
+    """Relance le process a l'identique (meme exe/script, memes
+    arguments) - utilise apres un changement de langue. os.execv
+    remplace le process en place (meme PID), fonctionne aussi bien en
+    mode developpement (sys.executable = python.exe) qu'empaquete
+    (sys.executable = l'exe du trainer, voir _writable_data_path)."""
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
+
+def _load_locale_file(category: str, lang: str) -> dict:
+    """locales/<lang>/<category>.json - structure symetrique : chaque
+    langue a exactement les memes fichiers (pas de "francais en dur dans
+    le code, anglais en overlay" - les deux viennent de JSON, demande
+    utilisateur 2026-10-01)."""
+    path = _bundled_path("locales", lang, f"{category}.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def load_locale_category(category: str) -> dict:
+    """Charge un fichier de locales/<langue active>/<category>.json, avec
+    repli sur le francais si la langue active n'a pas (encore) ce fichier
+    ou certaines de ses cles - jamais de texte brut en dur en remplacement,
+    uniquement un autre fichier JSON."""
+    data = _load_locale_file(category, _LANG)
+    if _LANG == DEFAULT_LANGUAGE:
+        return data
+    fallback = _load_locale_file(category, DEFAULT_LANGUAGE)
+    merged = dict(fallback)
+    merged.update(data)
+    return merged
+
+
+_LANG = current_language()
+_STRINGS = load_locale_category("strings")
+CHANGELOG_STRINGS = load_locale_category("changelog")
+_WEAPON_NAMES_LOCALE = load_locale_category("weapons")
+_ITEM_NAMES_LOCALE = load_locale_category("items")
+_FIGURES_LOCALE = load_locale_category("figures")
+_FACECAMO_LOCALE = load_locale_category("facecamo")
+_VESTS_LOCALE = load_locale_category("vests")
+_OUTFITS_LOCALE = load_locale_category("outfits")
+_OCTOCAMO_LOCALE = load_locale_category("octocamo")
+
+# Cles stables (pas d'ID numerique reel pour les motifs OctoCamo, voir
+# mgs4save.OCTOCAMO_INFO) - doit rester synchronise avec les cles de
+# locales/*/octocamo.json.
+OCTOCAMO_SLUGS = {
+    "Infiltration": "infiltration", "Olive": "olive", "Tigré": "tiger_stripe",
+    "Forêt": "forest", "3 Couleurs Désert": "desert_3color", "Marpat": "marpat",
+    "Cadavre": "corpse", "Pleurs": "crying", "Digit. B": "digital_b",
+    "Digit. R": "digital_r", "Mouche": "fly", "Gear": "gear", "Haven": "haven",
+    "Rire": "laughing", "Metal": "metal", "Snake": "snake", "Rage": "raging",
+    "Hurler": "screaming", "Beauté": "beauty", "Précommande": "preorder", "Doré": "golden",
+}
+
+
+def weapon_name(weapon_id: int) -> str:
+    entry = _WEAPON_NAMES_LOCALE.get(str(weapon_id))
+    return entry if entry else mgs4save.WEAPON_NAMES.get(weapon_id, f"Arme #{weapon_id}")
+
+
+def item_name(item_id: int) -> str:
+    entry = _ITEM_NAMES_LOCALE.get(str(item_id))
+    return entry if entry else mgs4save.GENERAL_ITEM_NAMES.get(item_id, f"Objet #{item_id:02d}")
+
+
+def figure_name(figure_id: int) -> str:
+    entry = _FIGURES_LOCALE.get(str(figure_id))
+    return entry["name"] if entry else mgs4save.FIGURE_NAMES.get(figure_id, f"#{figure_id}")
+
+
+def figure_condition(figure_id: int) -> str:
+    entry = _FIGURES_LOCALE.get(str(figure_id))
+    return entry["condition"] if entry else ""
+
+
+def facecamo_name(facecamo_id: int) -> str:
+    entry = _FACECAMO_LOCALE.get(str(facecamo_id))
+    return entry["name"] if entry else mgs4save.FACECAMO_NAMES.get(facecamo_id, f"#{facecamo_id}")
+
+
+def facecamo_condition(facecamo_id: int) -> str:
+    entry = _FACECAMO_LOCALE.get(str(facecamo_id))
+    return entry["condition"] if entry else ""
+
+
+def vest_name(vest_id: int) -> str:
+    entry = _VESTS_LOCALE.get(str(vest_id))
+    return entry["name"] if entry else mgs4save.VEST_NAMES.get(vest_id, f"#{vest_id}")
+
+
+def vest_condition(vest_id: int) -> str:
+    entry = _VESTS_LOCALE.get(str(vest_id))
+    return entry["condition"] if entry else ""
+
+
+def outfit_name(outfit_id: int) -> str:
+    entry = _OUTFITS_LOCALE.get(str(outfit_id))
+    return entry["name"] if entry else mgs4save.OUTFIT_NAMES.get(outfit_id, f"#{outfit_id}")
+
+
+def outfit_condition(outfit_id: int) -> str:
+    entry = _OUTFITS_LOCALE.get(str(outfit_id))
+    return entry["condition"] if entry else ""
+
+
+def octocamo_name(fr_key: str) -> str:
+    slug = OCTOCAMO_SLUGS.get(fr_key)
+    entry = _OCTOCAMO_LOCALE.get(slug) if slug else None
+    return entry["name"] if entry else fr_key
+
+
+def octocamo_description(fr_key: str) -> str:
+    slug = OCTOCAMO_SLUGS.get(fr_key)
+    entry = _OCTOCAMO_LOCALE.get(slug) if slug else None
+    return entry["description"] if entry else mgs4save.OCTOCAMO_INFO.get(fr_key, "")
+
+
+# Cles stables pour les categories d'armes (mgs4save.WEAPON_GROUP_ORDER) -
+# meme principe que OCTOCAMO_SLUGS.
+WEAPON_GROUP_SLUGS = {
+    "Arme de poing": "handgun", "Fusil d'assaut": "assault_rifle",
+    "Fusil Sniper": "sniper_rifle", "Fusil à pompe": "shotgun",
+    "Pistolet-mitrailleur": "smg", "Lance-grenade": "grenade_launcher",
+    "Mitrailleuse": "machine_gun", "Lance-roquette": "rocket_launcher",
+    "Grenade": "grenade", "Explosif": "explosive", "Magazine": "magazine",
+    "Autre": "other", "Accessoire": "accessory", "Non identifiée": "unidentified",
+}
+_WEAPON_GROUPS_LOCALE = load_locale_category("weapon_groups")
+
+
+def weapon_group_label(fr_name: str) -> str:
+    slug = WEAPON_GROUP_SLUGS.get(fr_name)
+    return _WEAPON_GROUPS_LOCALE.get(slug, fr_name) if slug else fr_name
+
+
+def alert_state_name(value: int) -> str:
+    return tr(f"alert.state_{value}")
+
+
+_VITALS_LOCALE = load_locale_category("vitals")
+
+
+def vital_display_name(internal_name: str) -> str:
+    """internal_name reste la cle stable (VITALS, read_vital/write_vital...)
+    - seul l'affichage est traduit."""
+    return _VITALS_LOCALE.get(internal_name, internal_name)
+
+
+def warn_dialog(parent, title: str, text: str) -> None:
+    """Equivalent de QMessageBox.warning() avec un bouton OK traduit -
+    le bouton standard de Qt s'affiche sinon dans la langue par defaut
+    de Qt, pas la notre (meme souci que Oui/Non sur QMessageBox.question(),
+    voir TrainerWindow._on_language_changed)."""
+    box = QMessageBox(parent)
+    box.setIcon(QMessageBox.Warning)
+    box.setWindowTitle(title)
+    box.setText(text)
+    box.addButton(tr("button.ok"), QMessageBox.AcceptRole)
+    box.exec()
+
+
+def tr(key: str, **kwargs) -> str:
+    """Traduction par cle plate (ex. "window.title") - la cle elle-meme
+    sert de repli ultime si elle manque des deux langues (repere
+    visuellement les oublis pendant le developpement plutot qu'un crash
+    ou un texte vide)."""
+    text = _STRINGS.get(key, key)
+    return text.format(**kwargs) if kwargs else text
 
 # ---------------------------------------------------------------------------
 # Acces memoire Windows bas niveau (ctypes pur, pas de pywin32/psutil/pymem -
@@ -1128,6 +1344,13 @@ class SpeedController:
         addr = ctypes.cast(self.shm_view, ctypes.c_void_p).value + offset
         return ctypes.cast(addr, ctypes.POINTER(ctypes.c_uint8))[0]
 
+    def _write_u32_at(self, offset: int, value: int) -> bool:
+        if not self.shm_view:
+            return False
+        addr = ctypes.cast(self.shm_view, ctypes.c_void_p).value + offset
+        ctypes.cast(addr, ctypes.POINTER(ctypes.c_uint32))[0] = value & 0xFFFFFFFF
+        return True
+
     def _write_u8_at(self, offset: int, value: int) -> bool:
         if not self.shm_view:
             return False
@@ -1228,6 +1451,48 @@ class SpeedController:
     def gecko_hook_error(self) -> int | None:
         return self._read_u8_at(63)
 
+    def set_no_reload(self, enabled: bool) -> bool:
+        """Patch de code (pas de reassertion en boucle) qui supprime
+        l'ecriture du nouveau chargeur apres tir - voir
+        install_no_reload_hook dans native/speedhack.c."""
+        return self._write_u8_at(64, 1 if enabled else 0)
+
+    def no_reload_hook_installed(self) -> bool | None:
+        val = self._read_u8_at(65)
+        return None if val is None else bool(val)
+
+    def no_reload_hook_error(self) -> int | None:
+        return self._read_u8_at(66)
+
+    def set_no_alerts(self, enabled: bool) -> bool:
+        """Court-circuite la fonction qui evalue si Snake doit etre
+        repere/alerte - voir install_no_alerts_hook dans
+        native/speedhack.c (motif CE "aob No Alerts")."""
+        return self._write_u8_at(67, 1 if enabled else 0)
+
+    def no_alerts_hook_installed(self) -> bool | None:
+        val = self._read_u8_at(68)
+        return None if val is None else bool(val)
+
+    def no_alerts_hook_error(self) -> int | None:
+        return self._read_u8_at(69)
+
+    def set_alert_mode_override(self, value: int | None) -> bool:
+        """Force la variable d'etat d'alerte du jeu a `value`
+        (0=Normal, 1=Alerte, 2=Evasion, 3=Prudence - voir
+        ALERT_STATE_NAMES) juste avant qu'elle serve aux transitions,
+        ou desactive le forcage si `value` est None - voir
+        install_alert_override_hook dans native/speedhack.c (motif CE
+        "Alert -- Ignore")."""
+        return self._write_u32_at(70, 0xFFFF if value is None else value)
+
+    def alert_override_hook_installed(self) -> bool | None:
+        val = self._read_u8_at(74)
+        return None if val is None else bool(val)
+
+    def alert_override_hook_error(self) -> int | None:
+        return self._read_u8_at(75)
+
     def patched_mask(self) -> int | None:
         """Diagnostic : quels hooks (voir native/speedhack.c, HOOK_*) ont
         reellement ete poses par la DLL injectee - None si pas injecte."""
@@ -1263,19 +1528,19 @@ class MGS4Live:
         self.linkvarbuf: int | None = None
         self.varbuf: int | None = None
         self.sane = False
-        self.status = "Non connecte"
+        self.status = tr("status.not_connected")
         self.speed = SpeedController()
 
     def attach(self) -> bool:
         self.detach()
         pid = find_pid(PROCESS_NAME)
         if pid is None:
-            self.status = f"{PROCESS_NAME} introuvable - lance le jeu"
+            self.status = tr("status.process_not_found", process=PROCESS_NAME)
             return False
         self.pid = pid
         base = find_module_base(pid, PROCESS_NAME)
         if base is None:
-            self.status = "Module mgs4.exe introuvable dans le process"
+            self.status = tr("status.module_not_found")
             return False
         try:
             self.proc = ProcessHandle(pid)
@@ -1283,7 +1548,7 @@ class MGS4Live:
             self.linkvarbuf = struct.unpack("<Q", self.proc.read_bytes(base + LINKVARBUF_POINTER_RVA, 8))[0]
             self.varbuf = struct.unpack("<Q", self.proc.read_bytes(base + VARBUF_POINTER_RVA, 8))[0]
             if self.varbuf == 0:
-                self.status = "Pointeur varbuf nul (pas encore de partie chargee ?)"
+                self.status = tr("status.null_varbuf")
                 return False
         except OSError as e:
             self.status = str(e)
@@ -1296,19 +1561,14 @@ class MGS4Live:
                 raw = self.read_item(item_id)
                 if raw != 0:
                     self.sane = False
-                    self.status = (
-                        f"Verification echouee : item[{item_id:#04x}] = {raw} "
-                        "(attendu 0 sur toutes les saves connues) - chaine de "
-                        "pointeurs probablement invalide pour cette build, "
-                        "ecriture desactivee"
-                    )
+                    self.status = tr("status.check_failed", item_id=f"{item_id:#04x}", raw=raw)
                     return False
         except OSError as e:
             self.sane = False
-            self.status = f"Verification impossible : {e}"
+            self.status = tr("status.check_error", error=e)
             return False
         self.sane = True
-        self.status = f"Connecte (varbuf={self.varbuf:#x}), verification OK"
+        self.status = tr("status.connected", varbuf=f"{self.varbuf:#x}")
         return True
 
     def detach(self):
@@ -1334,7 +1594,7 @@ class MGS4Live:
             self.proc.read_bytes(self.base, 2)
         except OSError:
             self.detach()
-            self.status = f"{PROCESS_NAME} ferme ou inaccessible - reconnecte-toi"
+            self.status = tr("status.process_lost", process=PROCESS_NAME)
             return False
         return True
 
@@ -1389,6 +1649,51 @@ class MGS4Live:
 
     def gecko_hook_error(self) -> int | None:
         return self.speed.gecko_hook_error()
+
+    def set_no_reload(self, enabled: bool) -> bool:
+        """Injecte la DLL au premier appel (paresseux, comme
+        set_game_speed) - voir SpeedController.set_no_reload."""
+        if not (self.connected and self.sane and self.pid):
+            return False
+        if not self.speed.ensure_injected(self.pid):
+            return False
+        return self.speed.set_no_reload(enabled)
+
+    def no_reload_hook_installed(self) -> bool | None:
+        return self.speed.no_reload_hook_installed()
+
+    def no_reload_hook_error(self) -> int | None:
+        return self.speed.no_reload_hook_error()
+
+    def set_no_alerts(self, enabled: bool) -> bool:
+        """Injecte la DLL au premier appel (paresseux) - voir
+        SpeedController.set_no_alerts."""
+        if not (self.connected and self.sane and self.pid):
+            return False
+        if not self.speed.ensure_injected(self.pid):
+            return False
+        return self.speed.set_no_alerts(enabled)
+
+    def no_alerts_hook_installed(self) -> bool | None:
+        return self.speed.no_alerts_hook_installed()
+
+    def no_alerts_hook_error(self) -> int | None:
+        return self.speed.no_alerts_hook_error()
+
+    def set_alert_mode_override(self, value: int | None) -> bool:
+        """Injecte la DLL au premier appel (paresseux) - voir
+        SpeedController.set_alert_mode_override."""
+        if not (self.connected and self.sane and self.pid):
+            return False
+        if not self.speed.ensure_injected(self.pid):
+            return False
+        return self.speed.set_alert_mode_override(value)
+
+    def alert_override_hook_installed(self) -> bool | None:
+        return self.speed.alert_override_hook_installed()
+
+    def alert_override_hook_error(self) -> int | None:
+        return self.speed.alert_override_hook_error()
 
     def last_damaged_actor(self) -> int | None:
         """Diagnostic uniquement, voir SpeedController.last_damaged_actor."""
@@ -1734,19 +2039,28 @@ class MGS4Live:
 # de base, motifs) n'a jamais eu d'ID retrouve (voir SPECIAL_CAMO_NAMES
 # infirme dans mgs4save.py) - section vide pour l'instant, cf.
 # CAMO_GROUPS/group_totals dans gui_app.py qui a le meme trou.
-_FACECAMO_NAMES_VISIBLE: dict[int, str] = dict(mgs4save.FACECAMO_NAMES)
+_FACECAMO_NAMES_VISIBLE: dict[int, str] = {i: facecamo_name(i) for i in mgs4save.FACECAMO_NAMES}
 _FACECAMO_IDS_ORDERED: list[int] = sorted(
     _FACECAMO_NAMES_VISIBLE, key=lambda i: mgs4save.FACECAMO_SORT_ORDER.get(i, 999)
 )
-_VEST_NAMES_VISIBLE: dict[int, str] = {k: v for k, v in mgs4save.VEST_NAMES.items() if isinstance(k, int)}
+_VEST_NAMES_VISIBLE: dict[int, str] = {k: vest_name(k) for k in mgs4save.VEST_NAMES if isinstance(k, int)}
 _OCTOCAMO_BASE_NAMES: dict[int, str] = {}  # jamais trouve, voir commentaire ci-dessus
 
 _CLASSIFIED_IDS = (
     set(mgs4save.GENERAL_ITEM_NAMES) | set(_VEST_NAMES_VISIBLE) | set(_FACECAMO_NAMES_VISIBLE)
     | set(mgs4save.OUTFIT_NAMES) | set(mgs4save.FIGURE_NAMES) | set(mgs4save.SONG_NAMES)
 )
+def item_unclassified_format() -> str:
+    """Gabarit de format positionnel brut (ex. "Objet #{:02d}") - pas via
+    tr() qui attend des arguments nommes, celui-ci est applique avec
+    .format(id) a l'appel (voir TableTab, qui l'utilise aussi pour les
+    ID absents de son dict names)."""
+    return _STRINGS.get("item.unclassified_format", "Objet #{:02d}")
+
+
 _NON_CLASSES_NAMES: dict[int, str] = {
-    i: f"Objet #{i:02d}" for i in range(mgs4save.ITEM_STATE_COUNT) if i not in _CLASSIFIED_IDS
+    i: item_unclassified_format().format(i)
+    for i in range(mgs4save.ITEM_STATE_COUNT) if i not in _CLASSIFIED_IDS
 }
 
 # Objets generaux confirmes structurels (jamais un vrai objet, voir
@@ -1755,7 +2069,7 @@ _NON_CLASSES_NAMES: dict[int, str] = {
 # comme deja fait pour l'onglet Objets de l'appli principale, pour ne pas
 # polluer les tests "a l'aveugle" avec des cases qui ne font jamais rien.
 _GENERAL_ITEMS_VISIBLE = {
-    k: v for k, v in mgs4save.GENERAL_ITEM_NAMES.items() if k not in mgs4save.STRUCTURAL_ITEM_IDS
+    k: item_name(k) for k in mgs4save.GENERAL_ITEM_NAMES if k not in mgs4save.STRUCTURAL_ITEM_IDS
 }
 
 # Objets empilables (quantite en stock), pas de sens "Obtenu"=1 fige - voir
@@ -1767,12 +2081,15 @@ GENERAL_ITEM_QUANTITY_IDS = {0x01, 0x02, 0x03, 0x04, 0x05}  # Ration/Nouilles/Re
 # propre convention 0/1/2, voir TrainerWindow)
 # FaceCamo/Gilet ne sont plus ici : fusionnes dans l'onglet "OctoCamo"
 # dedie (GroupedItemsTab), construit a part dans TrainerWindow.
-ITEM_CATEGORIES: list[tuple[str, dict[int, str]]] = [
-    ("Objets", _GENERAL_ITEMS_VISIBLE),
-    ("Tenues", mgs4save.OUTFIT_NAMES),
-    ("Statuettes", mgs4save.FIGURE_NAMES),
-    ("Chansons", mgs4save.SONG_NAMES),
-    ("Non classes", _NON_CLASSES_NAMES),
+# (cle stable - jamais traduite, sert aux comparaisons logiques en aval -,
+# libelle affiche, dict id->nom) - la cle stable evite de comparer du
+# texte traduit dans la logique (fragile, casserait selon la langue).
+ITEM_CATEGORIES: list[tuple[str, str, dict[int, str]]] = [
+    ("items", tr("tab.items"), _GENERAL_ITEMS_VISIBLE),
+    ("outfits", tr("tab.outfits"), {i: outfit_name(i) for i in mgs4save.OUTFIT_NAMES}),
+    ("figures", tr("tab.figures"), {i: figure_name(i) for i in mgs4save.FIGURE_NAMES}),
+    ("songs", tr("tab.songs"), mgs4save.SONG_NAMES),
+    ("unclassified", tr("tab.unclassified"), _NON_CLASSES_NAMES),
 ]
 
 
@@ -1880,17 +2197,17 @@ class TableTab(QWidget):
         self.filter_edit = QLineEdit()
         if show_filter:
             filter_row = QHBoxLayout()
-            filter_row.addWidget(QLabel("Filtre (ID ou nom) :"))
+            filter_row.addWidget(QLabel(tr("table.filter_id_name")))
             self.filter_edit.textChanged.connect(self._apply_filter)
             filter_row.addWidget(self.filter_edit)
             layout.addLayout(filter_row)
 
-        headers = ["ID", "Nom", "Etat", "Valeur brute"]
-        headers.append("Definir (brut)")
+        headers = [tr("table.id"), tr("table.name"), tr("table.state"), tr("table.raw_value")]
+        headers.append(tr("table.set_raw"))
         if self.has_quantity:
-            headers.append("Quantite")
+            headers.append(tr("table.quantity"))
         if self.has_ammo:
-            headers.append("Munitions")
+            headers.append(tr("table.ammo"))
         self.col_state = 2
         self.col_value = 3
         self.col_control = 4
@@ -2010,7 +2327,7 @@ class TableTab(QWidget):
         spin.setMinimumWidth(65)
         control_layout.addWidget(spin)
         self.spin_items[item_id] = spin
-        apply_btn = QPushButton("OK")
+        apply_btn = QPushButton(tr("button.ok"))
         apply_btn.clicked.connect(lambda _checked=False, i=item_id, s=spin: self._write(i, s.value()))
         control_layout.addWidget(apply_btn)
         control.setLayout(control_layout)
@@ -2032,11 +2349,11 @@ class TableTab(QWidget):
                 # mgs4save.py. Ecriture avec le decalage -1 (stockage brut
                 # 0-based).
                 qty_spin.setRange(1, mgs4save.BATTERY_MAX)
-                qty_ok = QPushButton("OK")
+                qty_ok = QPushButton(tr("button.ok"))
                 qty_ok.clicked.connect(lambda _checked=False, i=item_id, s=qty_spin: self._write(i, s.value() - 1))
             else:
                 qty_spin.setRange(0, 0xFFFF)
-                qty_ok = QPushButton("OK")
+                qty_ok = QPushButton(tr("button.ok"))
                 qty_ok.clicked.connect(lambda _checked=False, i=item_id, s=qty_spin: self._write(i, s.value()))
             qty_spin.setMinimumWidth(65)
             qty_layout.addWidget(qty_spin)
@@ -2058,7 +2375,7 @@ class TableTab(QWidget):
             ammo_spin.setRange(0, 0xFFFF)
             ammo_spin.setMinimumWidth(65)
             ammo_layout.addWidget(ammo_spin)
-            ammo_ok = QPushButton("OK")
+            ammo_ok = QPushButton(tr("button.ok"))
             ammo_ok.clicked.connect(lambda _checked=False, i=item_id, s=ammo_spin: self._write_ammo(i, s.value()))
             ammo_layout.addWidget(ammo_ok)
             ammo_control.setLayout(ammo_layout)
@@ -2265,7 +2582,7 @@ class GroupedWeaponsTab(QWidget):
     # vraiment quelque chose en jeu. Menu reduit a 2 choix pour ces
     # categories plutot que 3, sur le meme mecanisme binaire que
     # binary_lock_value (deja utilise pour les objets).
-    BINARY_CATEGORIES = {"Accessoire"}
+    BINARY_CATEGORIES = {"accessory"}  # slug stable, voir WEAPON_GROUP_SLUGS
 
     # ID masques en mode simple (visibles seulement en mode avance) car
     # dangereux a manipuler par un utilisateur non averti - voir
@@ -2275,7 +2592,7 @@ class GroupedWeaponsTab(QWidget):
     # notes.md.
     DANGEROUS_IDS = {0x44}
 
-    def __init__(self, live: MGS4Live, category_ids: list[tuple[str, list[int]]],
+    def __init__(self, live: MGS4Live, category_ids: list[tuple[str, str, list[int]]],
                  names: dict[int, str], reader, writer, quick_states: list[tuple[str, int]],
                  ammo_reader, ammo_writer):
         super().__init__()
@@ -2283,7 +2600,7 @@ class GroupedWeaponsTab(QWidget):
 
         layout = QVBoxLayout(self)
         filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("Filtre (ID ou nom) :"))
+        filter_row.addWidget(QLabel(tr("table.filter_id_name")))
         self.filter_edit = QLineEdit()
         self.filter_edit.textChanged.connect(self._apply_filter)
         filter_row.addWidget(self.filter_edit)
@@ -2293,16 +2610,18 @@ class GroupedWeaponsTab(QWidget):
         scroll.setWidgetResizable(True)
         inner = QWidget()
         inner_layout = QVBoxLayout(inner)
-        for label, ids in category_ids:
+        for slug, label, ids in category_ids:
             if not ids:
                 continue
             header = QLabel(f"{label} ({len(ids)})")
             header.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 6px;")
             inner_layout.addWidget(header)
-            is_binary = label in self.BINARY_CATEGORIES
-            section_quick_states = [("Non poss.", 0), ("Utilisable", 2)] if is_binary else quick_states
+            is_binary = slug in self.BINARY_CATEGORIES
+            section_quick_states = (
+                [(tr("weapon.state_unowned"), 0), (tr("weapon.state_usable"), 2)] if is_binary else quick_states
+            )
             tab = TableTab(
-                live, ids, names, "Arme #{:02d}", reader, writer, section_quick_states,
+                live, ids, names, tr("weapon.unclassified_format"), reader, writer, section_quick_states,
                 ammo_reader=ammo_reader, ammo_writer=ammo_writer,
                 binary_lock_value=0 if is_binary else None,
                 show_filter=False, fit_height=True,
@@ -2352,7 +2671,7 @@ class GroupedItemsTab(QWidget):
 
         layout = QVBoxLayout(self)
         filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("Filtre (ID ou nom) :"))
+        filter_row.addWidget(QLabel(tr("table.filter_id_name")))
         self.filter_edit = QLineEdit()
         self.filter_edit.textChanged.connect(self._apply_filter)
         filter_row.addWidget(self.filter_edit)
@@ -2369,7 +2688,7 @@ class GroupedItemsTab(QWidget):
             header.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 6px;")
             inner_layout.addWidget(header)
             tab = TableTab(
-                live, ids, names, "Objet #{:02d}", reader, writer, quick_states,
+                live, ids, names, item_unclassified_format(), reader, writer, quick_states,
                 binary_lock_value=binary_lock_value,
                 show_filter=False, fit_height=True,
             )
@@ -2417,47 +2736,47 @@ def _frames_to_hms_parts(frames: int) -> tuple[int, int, int]:
 # affichee en haut de l'onglet). Doit couvrir tous les noms de STATS sauf
 # drebin_actuel/drebin_total_ventes (deja exclus en amont, UI dediee).
 STATS_TRAINER_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
-    ("Combat", [
-        ("kills_total", "Kills (total)"),
-        ("headshots", "Headshots"),
-        ("knife_kills", "Kills au couteau"),
-        ("knife_knockouts", "KO au couteau"),
-        ("cqc", "CQC"),
-        ("combat_high", "Poussees d'adrenaline"),
+    (tr("stat_group.combat"), [
+        ("kills_total", tr("stat.kills_total")),
+        ("headshots", tr("stat.headshots")),
+        ("knife_kills", tr("stat.knife_kills")),
+        ("knife_knockouts", tr("stat.knife_knockouts")),
+        ("cqc", tr("stat.cqc")),
+        ("combat_high", tr("stat.combat_high")),
     ]),
-    ("Infiltration", [
-        ("alertes", "Alertes"),
-        ("continues", "Continues"),
-        ("holdups", "Hold-ups"),
-        ("body_searches", "Fouilles corporelles"),
-        ("praises", "Compliments recus"),
+    (tr("stat_group.infiltration"), [
+        ("alertes", tr("stat.alertes")),
+        ("continues", tr("stat.continues")),
+        ("holdups", tr("stat.holdups")),
+        ("body_searches", tr("stat.body_searches")),
+        ("praises", tr("stat.praises")),
     ]),
-    ("Mouvement", [
-        ("roulades_avant", "Roulades en avant"),
-        ("roulades_cote", "Roulades de cote"),
+    (tr("stat_group.movement"), [
+        ("roulades_avant", tr("stat.roulades_avant")),
+        ("roulades_cote", tr("stat.roulades_cote")),
     ]),
-    ("Objets", [
-        ("soins_utilises", "Objets de soin utilises"),
-        ("objets_speciaux_bitmask", "Objets speciaux utilises (bitmask brut)"),
-        ("objets_donnes_milices", "Objets donnes aux milices"),
-        ("weapon_pickups", "Armes ramassees"),
-        ("item_pickups", "Objets ramasses"),
-        ("syringe_uses", "Utilisations seringue"),
-        ("scanning_plug_uses", "Utilisations Scanning Plug"),
-        ("playboy_pages", "Pages Playboy tournees"),
-        ("emotion_magazine_pages", "Pages Emotion tournees"),
-        ("posters_vus", "Posters vus (incertain, voir notes.md)"),
+    (tr("stat_group.items"), [
+        ("soins_utilises", tr("stat.soins_utilises")),
+        ("objets_speciaux_bitmask", tr("stat.objets_speciaux_bitmask")),
+        ("objets_donnes_milices", tr("stat.objets_donnes_milices")),
+        ("weapon_pickups", tr("stat.weapon_pickups")),
+        ("item_pickups", tr("stat.item_pickups")),
+        ("syringe_uses", tr("stat.syringe_uses")),
+        ("scanning_plug_uses", tr("stat.scanning_plug_uses")),
+        ("playboy_pages", tr("stat.playboy_pages")),
+        ("emotion_magazine_pages", tr("stat.emotion_magazine_pages")),
+        ("posters_vus", tr("stat.posters_vus")),
     ]),
-    ("Flashbacks", [
-        ("flashbacks_vues", "Flashbacks declenches (occurrences)"),
+    (tr("stat_group.flashbacks"), [
+        ("flashbacks_vues", tr("stat.flashbacks_vues")),
     ]),
-    ("Temps (HH:MM:SS, approx.)", [
-        ("temps_jeu_frames", "Temps de jeu"),
-        ("temps_accroupi_frames", "Temps accroupi"),
-        ("temps_allonge_frames", "Temps allonge"),
-        ("temps_mur_frames", "Temps contre un mur"),
-        ("temps_boite_carton_frames", "Temps boite carton"),
-        ("temps_baril_frames", "Temps baril"),
+    (tr("stat_group.time"), [
+        ("temps_jeu_frames", tr("stat.temps_jeu_frames")),
+        ("temps_accroupi_frames", tr("stat.temps_accroupi_frames")),
+        ("temps_allonge_frames", tr("stat.temps_allonge_frames")),
+        ("temps_mur_frames", tr("stat.temps_mur_frames")),
+        ("temps_boite_carton_frames", tr("stat.temps_boite_carton_frames")),
+        ("temps_baril_frames", tr("stat.temps_baril_frames")),
     ]),
 ]
 
@@ -2481,10 +2800,10 @@ class StatsTab(QWidget):
     # Bandana=bit0, Camouflage optique=bit1) - valeur = bitmask a ecrire
     # telle quelle dans le champ u16.
     SPECIAL_ITEMS_STATES = [
-        ("Non", 0),
-        ("Bandana", 1),
-        ("Camouflage optique", 2),
-        ("Les deux", 3),
+        (tr("stats.special_items_none"), 0),
+        (item_name(0x0f), 1),
+        (item_name(0x10), 2),
+        (tr("stats.special_items_both"), 3),
     ]
 
     def __init__(self, live: MGS4Live, names: list[str]):
@@ -2497,15 +2816,9 @@ class StatsTab(QWidget):
         self.sections: list[tuple[QLabel, QTableWidget, list[str]]] = []
 
         layout = QVBoxLayout(self)
-        note = QLabel(
-            "Champs de stats globales (linkvarbuf) - fiabilite confirmee individuellement "
-            "seulement pour drebin_actuel pour l'instant, le reste est a verifier au cas par cas."
-        )
-        note.setWordWrap(True)
-        layout.addWidget(note)
 
         filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("Filtre (nom) :"))
+        filter_row.addWidget(QLabel(tr("table.filter_name")))
         self.filter_edit = QLineEdit()
         self.filter_edit.textChanged.connect(self._apply_filter)
         filter_row.addWidget(self.filter_edit)
@@ -2528,7 +2841,7 @@ class StatsTab(QWidget):
         # STATS_TRAINER_GROUPS (ne devrait pas arriver, voir commentaire du
         # dict) atterrit quand meme quelque part plutot que de disparaitre.
         if remaining:
-            self._add_section(inner_layout, "Autres", [(n, n) for n in names if n in remaining])
+            self._add_section(inner_layout, tr("stats.other_group"), [(n, n) for n in names if n in remaining])
 
         inner_layout.addStretch(1)
         scroll.setWidget(inner)
@@ -2543,10 +2856,10 @@ class StatsTab(QWidget):
         # (3 spinbox cote a cote sans autre indication - demande
         # utilisateur 2026-09-25) plutot qu'un "Valeur" generique ambigu.
         all_time_fields = all(name.endswith("_frames") for name, _ in fields)
-        value_header = "Valeur (H : M : S)" if all_time_fields else "Valeur"
+        value_header = tr("stats.value_hms") if all_time_fields else tr("stats.value")
 
         table = QTableWidget(len(fields), 2)
-        table.setHorizontalHeaderLabels(["Champ", value_header])
+        table.setHorizontalHeaderLabels([tr("table.field"), value_header])
         table.verticalHeader().setVisible(False)
         table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -2616,7 +2929,9 @@ class StatsTab(QWidget):
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(2)
         spins = []
-        for i, (maximum, tooltip) in enumerate(((99999, "Heures"), (59, "Minutes"), (59, "Secondes"))):
+        for i, (maximum, tooltip) in enumerate(
+            ((99999, tr("stats.hours")), (59, tr("stats.minutes")), (59, tr("stats.seconds")))
+        ):
             spin = QSpinBox()
             spin.setRange(0, maximum)
             spin.setButtonSymbols(QSpinBox.NoButtons)  # 3 champs cote a cote, fleches inutiles/encombrantes
@@ -2771,8 +3086,14 @@ class VitalsTab(QWidget):
 
         layout = QVBoxLayout(self)
 
+        # Regroupement en QGroupBox par theme (demande utilisateur
+        # 2026-10-01 : l'onglet devenait trop charge en controles empiles
+        # a plat) - purement visuel, aucun changement de comportement des
+        # widgets eux-memes (meme noms, memes connexions).
+        speed_group = QGroupBox(tr("vitals.speed_group"))
+        speed_layout = QVBoxLayout(speed_group)
+
         speed_row = QHBoxLayout()
-        speed_row.addWidget(QLabel("Vitesse du jeu :"))
         self.speed_slider = QSlider(Qt.Horizontal)
         self.speed_slider.setRange(*self.SPEED_SLIDER_RANGE)
         self.speed_slider.setValue(0)
@@ -2781,77 +3102,72 @@ class VitalsTab(QWidget):
         self.speed_value_label = QLabel("100 %")
         self.speed_value_label.setMinimumWidth(60)
         speed_row.addWidget(self.speed_value_label)
-        self.pause_check = QCheckBox("Pause")
+        self.pause_check = QCheckBox(tr("vitals.pause"))
         self.pause_check.toggled.connect(self._on_pause_toggled)
         speed_row.addWidget(self.pause_check)
-        layout.addLayout(speed_row)
+        speed_layout.addLayout(speed_row)
+        layout.addWidget(speed_group)
 
-        speed_note = QLabel(
-            "Ralenti et accelere confirmes fonctionnels en jeu (2026-09-26) - injecte "
-            "une DLL dans le jeu pour tromper son horloge interne (voir notes.md)."
-        )
-        speed_note.setWordWrap(True)
-        layout.addWidget(speed_note)
+        alert_group = QGroupBox(tr("vitals.alert_group"))
+        alert_layout = QVBoxLayout(alert_group)
 
         alert_row = QHBoxLayout()
-        alert_row.addWidget(QLabel("Etat d'alerte (lecture seule) :"))
+        alert_row.addWidget(QLabel(tr("vitals.alert_real_state")))
         self.alert_label = QLabel("?")
         self.alert_label.setStyleSheet("font-weight: bold;")
         alert_row.addWidget(self.alert_label)
         alert_row.addStretch(1)
-        layout.addLayout(alert_row)
+        alert_layout.addLayout(alert_row)
+
+        force_row = QHBoxLayout()
+        force_row.addWidget(QLabel(tr("vitals.alert_force")))
+        self.alert_force_combo = QComboBox()
+        self.alert_force_combo.addItem(tr("vitals.alert_auto"))
+        for state_value in sorted(ALERT_STATE_NAMES):
+            self.alert_force_combo.addItem(alert_state_name(state_value))
+        self.alert_force_combo.setToolTip(tr("vitals.alert_force_tooltip"))
+        self.alert_force_combo.activated.connect(self._on_alert_force_changed)
+        force_row.addWidget(self.alert_force_combo)
+        force_row.addStretch(1)
+        alert_layout.addLayout(force_row)
+
+        self.no_alerts_check = QCheckBox(tr("vitals.no_alerts"))
+        self.no_alerts_check.setToolTip(tr("vitals.no_alerts_tooltip"))
+        self.no_alerts_check.toggled.connect(self._on_no_alerts_toggled)
+        alert_layout.addWidget(self.no_alerts_check)
+        layout.addWidget(alert_group)
+
+        weapons_group = QGroupBox(tr("vitals.weapons_group"))
+        weapons_layout = QVBoxLayout(weapons_group)
 
         weapons_row = QHBoxLayout()
-        self.infinite_ammo_check = QCheckBox("Munitions infinies")
-        self.infinite_ammo_check.setToolTip(
-            "Fige la vraie reserve actuelle de chaque arme au moment ou tu coches (pas "
-            "une valeur fixe artificielle) et la reecrit en continu tant que c'est coche."
-        )
+        self.infinite_ammo_check = QCheckBox(tr("vitals.infinite_ammo"))
+        self.infinite_ammo_check.setToolTip(tr("vitals.infinite_ammo_tooltip"))
         self.infinite_ammo_check.toggled.connect(self._on_infinite_ammo_toggled)
         weapons_row.addWidget(self.infinite_ammo_check)
-        self.no_reload_check = QCheckBox("Pas de rechargement")
-        self.no_reload_check.setToolTip(
-            "Garde le chargeur de chaque arme a sa vraie capacite max en continu "
-            "(distinct de la reserve ci-dessus) - suit automatiquement l'arme "
-            "equipee, pas besoin de recocher en changeant d'arme."
-        )
+        self.no_reload_check = QCheckBox(tr("vitals.no_reload"))
+        self.no_reload_check.setToolTip(tr("vitals.no_reload_tooltip"))
+        self.no_reload_check.toggled.connect(self._on_no_reload_toggled)
         weapons_row.addWidget(self.no_reload_check)
-        self.instant_kill_check = QCheckBox("Un coup, un mort")
-        self.instant_kill_check.setToolTip(
-            "Experimental - patch de code (pas juste lecture/ecriture memoire comme "
-            "le reste du trainer, voir native/speedhack.c). Jamais applique au "
-            "joueur. Le bouton Letal/Non letal a droite choisit l'effet.\n"
-            "Boss : pas d'instruction de degats exploitable trouvee - chaque coup "
-            "reel fait chuter la vie/stamina par paliers de 25% au lieu d'un coup "
-            "instantane, le dernier coup restant un vrai coup du jeu (evite de "
-            "bloquer la fin du combat, voir notes.md)."
-        )
+        self.instant_kill_check = QCheckBox(tr("vitals.instant_kill"))
+        self.instant_kill_check.setToolTip(tr("vitals.instant_kill_tooltip"))
         self.instant_kill_check.toggled.connect(self._apply_instant_kill_mode)
         weapons_row.addWidget(self.instant_kill_check)
         pill, self.lethal_btn, self.non_lethal_btn, self._lethal_group = self._build_pill_toggle(
-            "Létal", "Non létal"
+            tr("vitals.lethal"), tr("vitals.non_lethal")
         )
-        self.lethal_btn.setToolTip("Un coup tue n'importe quel ennemi touche.")
-        self.non_lethal_btn.setToolTip("Les degats normaux ne sont plus appliques du tout.")
+        self.lethal_btn.setToolTip(tr("vitals.lethal_tooltip"))
+        self.non_lethal_btn.setToolTip(tr("vitals.non_lethal_tooltip"))
         self.lethal_btn.toggled.connect(self._apply_instant_kill_mode)
         self.non_lethal_btn.toggled.connect(self._apply_instant_kill_mode)
         weapons_row.addWidget(pill)
         weapons_row.addStretch(1)
-        layout.addLayout(weapons_row)
-
-        one_shot_note = QLabel(
-            "Un coup, un mort : technique differente du reste du trainer (patch de "
-            "code au lieu de lecture/ecriture de donnees) - un peu plus risquee, "
-            "mais protegee (jamais applique au joueur). Peut ne pas fonctionner si "
-            "le motif attendu n'est pas trouve dans cette version du jeu (aucun "
-            "crash dans ce cas, juste sans effet)."
-        )
-        one_shot_note.setWordWrap(True)
-        layout.addWidget(one_shot_note)
+        weapons_layout.addLayout(weapons_row)
+        layout.addWidget(weapons_group)
 
         names = list(VITALS)
         self.table = QTableWidget(len(names), 3)
-        self.table.setHorizontalHeaderLabels(["Champ", "Valeur live", "Verrouiller"])
+        self.table.setHorizontalHeaderLabels([tr("table.field"), tr("table.live_value"), tr("table.lock")])
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.table.horizontalHeader().setMinimumSectionSize(90)
@@ -2913,7 +3229,7 @@ class VitalsTab(QWidget):
         return container, left_btn, right_btn, group
 
     def _build_row(self, row: int, name: str):
-        name_item = QTableWidgetItem(name)
+        name_item = QTableWidgetItem(vital_display_name(name))
         name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
         self.table.setItem(row, 0, name_item)
 
@@ -3000,6 +3316,24 @@ class VitalsTab(QWidget):
             except OSError:
                 pass
 
+    def _on_no_reload_toggled(self, checked: bool):
+        if not (self.live.connected and self.live.sane):
+            return
+        self.live.set_no_reload(checked)
+
+    def _on_no_alerts_toggled(self, checked: bool):
+        if not (self.live.connected and self.live.sane):
+            return
+        self.live.set_no_alerts(checked)
+
+    def _on_alert_force_changed(self, index: int):
+        if not (self.live.connected and self.live.sane):
+            return
+        if index == 0:
+            self.live.set_alert_mode_override(None)
+        else:
+            self.live.set_alert_mode_override(index - 1)
+
     def _reassert_ammo_locks(self):
         """Cycle dedie (AMMO_LOCK_REFRESH_MS, independant du
         rafraichissement general de l'UI) : certaines armes tirent assez
@@ -3014,12 +3348,9 @@ class VitalsTab(QWidget):
                     self.live.write_weapon_ammo(weapon_id, value)
                 except OSError:
                     pass
-        if self.no_reload_check.isChecked():
-            for weapon_id in CONFIRMED_WEAPON_AMMO_RVAS:
-                try:
-                    self.live.write_weapon_magazine(weapon_id, self.live.read_weapon_magazine_max(weapon_id))
-                except OSError:
-                    pass
+        # "Pas de rechargement" : patch de code (install_no_reload_hook),
+        # plus besoin de reassertion ici depuis le 2026-09-29 - voir
+        # _on_no_reload_toggled.
         if self.instant_kill_check.isChecked():
             try:
                 self._reassert_boss_staged_damage()
@@ -3175,6 +3506,8 @@ class VitalsTab(QWidget):
             self.pause_check.setEnabled(False)
             self.infinite_ammo_check.setEnabled(False)
             self.no_reload_check.setEnabled(False)
+            self.no_alerts_check.setEnabled(False)
+            self.alert_force_combo.setEnabled(False)
             self.instant_kill_check.setEnabled(False)
             self.lethal_btn.setEnabled(False)
             self.non_lethal_btn.setEnabled(False)
@@ -3183,6 +3516,8 @@ class VitalsTab(QWidget):
         self.pause_check.setEnabled(True)
         self.infinite_ammo_check.setEnabled(True)
         self.no_reload_check.setEnabled(True)
+        self.no_alerts_check.setEnabled(True)
+        self.alert_force_combo.setEnabled(True)
         self.instant_kill_check.setEnabled(True)
         self.lethal_btn.setEnabled(True)
         self.non_lethal_btn.setEnabled(True)
@@ -3210,100 +3545,24 @@ class VitalsTab(QWidget):
 
         try:
             alert = self.live.read_alert_state()
-            self.alert_label.setText(ALERT_STATE_NAMES.get(alert, f"Inconnu ({alert})"))
+            self.alert_label.setText(alert_state_name(alert) if alert in ALERT_STATE_NAMES else tr("alert.unknown", value=alert))
         except OSError:
             self.alert_label.setText("?")
 
 
-TRAINER_VERSION = "V1.4"
+TRAINER_VERSION = "V2.0"
 
-TRAINER_HELP_TEXT = (
-    "Ce trainer lit et ÉCRIT en direct la mémoire du process mgs4.exe "
-    "pendant une partie en cours (pas le fichier de sauvegarde) : force "
-    "n'importe quel champ déjà identifié (armes, objets, stats, "
-    "vie/stamina/stress/batterie Solid Eye...) et sert aussi d'outil de "
-    "recherche pour les ID encore inconnus.\n\n"
-    "Nécessite que MGS4 (version Steam) soit lancé avec une partie "
-    "chargée — \"(Re)connecter\" tente de s'attacher au process en "
-    "cours.\n\n"
-    "Calibré et testé sur la version Steam 1.4.1 du JEU (à ne pas "
-    "confondre avec la version ci-dessus, qui est celle du trainer). "
-    "Les adresses mémoire dépendent de la version exacte de l'exe : une mise à jour "
-    "du jeu peut toutes les décaler d'un coup (déjà arrivé le "
-    "2026-09-24, corrigé depuis). Si une future mise à jour casse la "
-    "détection (bloqué sur \"Non connecté\", ou le contrôle de "
-    "cohérence échoue en boucle après reconnexion), voir notes.md pour "
-    "la méthode de recalibration.\n\n"
-    "Usage solo uniquement, à tes risques : ce n'est pas un outil "
-    "officiel, il lit/écrit dans la mémoire d'un autre processus, ce "
-    "qu'un antivirus peut signaler à tort. Certains champs restent en "
-    "confiance basse ou pas encore testés individuellement (voir "
-    "notes.md au cas par cas). Le \"Mode avancé\" masque par défaut les "
-    "objets dont le comportement en jeu est incertain ou dangereux "
-    "(ex. un objet dont l'équipement fait planter le jeu, confirmé à "
-    "plusieurs reprises) — à n'activer qu'en connaissance de cause."
-)
+TRAINER_HELP_TEXT = tr("help.text")
 
-# Meme convention que APP_CHANGELOG dans gui_app.py (liste de tuples
-# version/date/description), mais pour le trainer - premiere publication,
-# une seule entree pour l'instant.
+# Chargelog charge depuis locales/<langue>/changelog.json (dict {version:
+# {date, description}}) plutot que code en dur - meme structure
+# symetrique FR/EN que le reste de l'i18n (demande utilisateur
+# 2026-10-01, V2.0). Ordre d'affichage = ordre d'insertion du JSON
+# (Python 3.7+ garde l'ordre des dicts), donc le plus recent doit rester
+# en premier dans le fichier source.
 TRAINER_CHANGELOG = [
-    ("V1.4", "27 septembre 2026",
-     "\"Un coup, un mort\" boss étendu à d'autres Beauty and Beast Corps "
-     "(Raging Raven, Crying Wolf) : détection automatique du boss actif "
-     "et de ses offsets propres, sans configuration manuelle. Nouveau "
-     "hook dédié aux Gecko (robots), séparé de celui des ennemis "
-     "humains - même flag \"Un coup, un mort\", pas de variante non "
-     "létale (n'a pas de sens pour un robot). Section \"Crédits et "
-     "sources\" ajoutée au README (RMLSNK, auteur de la table Cheat "
-     "Engine communautaire dont s'inspirent plusieurs mécanismes de ce "
-     "trainer)."),
-    ("V1.3", "27 septembre 2026",
-     "Nouvel onglet \"Téléportation\" : enregistre/charge des points "
-     "(position X/Y/Z de Snake), téléportation immédiate, édition "
-     "manuelle des 3 axes, export/import de fichiers de points. Repose "
-     "sur un nouveau hook de lecture seule (coordonnées confirmées par "
-     "téléportation réelle en jeu) - expérimental, le jeu peut annuler "
-     "une position invalide (ex. sous le sol), et rien ne garantit qu'un "
-     "point enregistré dans un acte reste valide dans un autre (risque "
-     "de tomber hors du niveau). \"Un coup, un mort\" confirmé "
-     "fonctionnel en jeu sur les ennemis standards ; étendu aux boss via "
-     "un mécanisme différent (dégâts par paliers de 10%, pas une vraie "
-     "mise à mort instantanée) mais peu fiable - a déjà bloqué un combat "
-     "de boss nécessitant un rechargement de checkpoint, à utiliser en "
-     "connaissance de cause."),
-    ("V1.2", "26 septembre 2026",
-     "Onglet \"État de jeu\" : Munitions infinies et Pas de rechargement "
-     "figent les vraies valeurs de chaque arme (pas un nombre fixe "
-     "artificiel), suivent l'arme équipée automatiquement, réassertion "
-     "rapide dédiée (50ms) pour les armes qui tirent vite. Nouveau : "
-     "\"Un coup, un mort\" (+ mode Létal/Non létal) - première technique "
-     "de patch de code du projet (pas juste hook mémoire), portée du "
-     "script Cheat Engine communautaire (MGS4.CT, aob Damage) - jamais "
-     "appliqué au joueur."),
-    ("V1.1", "26 septembre 2026",
-     "Onglet \"État de jeu\" : nouveau curseur de vitesse du jeu (ralenti "
-     "10% à accéléré 300%, centré sur la vitesse normale) et case "
-     "\"Pause\" (gel complet du process). Le ralenti/accéléré injecte "
-     "une petite DLL dans mgs4.exe pour tromper son horloge interne "
-     "(première technique d'injection de code du projet, jusque-là "
-     "uniquement lecture/écriture mémoire externe) - confirmé "
-     "fonctionnel en jeu dans les deux sens, voir le README pour le "
-     "détail technique et les avertissements associés."),
-    ("V1.0", "25 septembre 2026",
-     "Première publication : lecture/écriture mémoire live (formule "
-     "linéaire pour l'état des armes, tables munitions/objets/"
-     "accessoires) pour toutes les entrées déjà identifiées côté "
-     "MGS4SaveStats. Onglet \"État de jeu\" (vie, stamina, stress, "
-     "batterie Solid Eye, santé Metal Gear REX en curseur %, "
-     "verrouillage pour vie/endurance infinies, état d'alerte en "
-     "lecture seule). Onglet Stats réorganisé en mini-tables par thème, "
-     "champs de temps en HH:MM:SS, select dédié pour les objets "
-     "spéciaux utilisés. Les munitions d'une arme non \"Utilisable\" "
-     "sont masquées plutôt que d'afficher la sentinelle 65535, "
-     "corrigée automatiquement à 10 dès que l'arme devient utilisable. "
-     "\"Mode avancé\" masquant par défaut les objets internes/de debug "
-     "dangereux."),
+    (version_label, entry["date"], entry["description"])
+    for version_label, entry in CHANGELOG_STRINGS.items()
 ]
 
 
@@ -3313,7 +3572,7 @@ class HelpDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Aide")
+        self.setWindowTitle(tr("window.help"))
         self.setMinimumSize(480, 420)
         layout = QVBoxLayout(self)
 
@@ -3328,7 +3587,7 @@ class HelpDialog(QDialog):
         help_text.setWordWrap(True)
         layout.addWidget(help_text)
 
-        changelog_title = QLabel("CHANGELOG")
+        changelog_title = QLabel(tr("help.changelog_title"))
         changelog_title_font = changelog_title.font()
         changelog_title_font.setBold(True)
         changelog_title.setFont(changelog_title_font)
@@ -3356,7 +3615,7 @@ class HelpDialog(QDialog):
         scroll.setWidget(content)
         layout.addWidget(scroll, 1)
 
-        close_btn = QPushButton("Fermer")
+        close_btn = QPushButton(tr("button.close"))
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn)
 
@@ -3378,19 +3637,16 @@ class TeleportTab(QWidget):
 
         layout = QVBoxLayout(self)
 
-        warning = QLabel(
-            "Experimental : le jeu peut annuler une teleportation vers une position "
-            "invalide (ex. sous le sol) - voir le bouton Aide pour le detail."
-        )
+        warning = QLabel(tr("teleport.warning"))
         warning.setWordWrap(True)
         layout.addWidget(warning)
 
         pos_row = QHBoxLayout()
-        pos_row.addWidget(QLabel("Position actuelle :"))
+        pos_row.addWidget(QLabel(tr("teleport.current_position")))
         self.current_pos_label = QLabel("?")
         pos_row.addWidget(self.current_pos_label)
         pos_row.addStretch(1)
-        save_btn = QPushButton("Enregistrer ici...")
+        save_btn = QPushButton(tr("teleport.save_here"))
         save_btn.clicked.connect(self._save_current_position)
         pos_row.addWidget(save_btn)
         layout.addLayout(pos_row)
@@ -3409,27 +3665,27 @@ class TeleportTab(QWidget):
             spin.setSingleStep(10.0)
             edit_row.addWidget(spin)
             self.axis_spins[axis] = spin
-        refresh_pos_btn = QPushButton("Actualiser depuis le jeu")
+        refresh_pos_btn = QPushButton(tr("teleport.refresh_from_game"))
         refresh_pos_btn.clicked.connect(self._pull_current_position)
         edit_row.addWidget(refresh_pos_btn)
-        apply_pos_btn = QPushButton("Téléporter ici")
+        apply_pos_btn = QPushButton(tr("teleport.teleport_here"))
         apply_pos_btn.clicked.connect(self._apply_manual_position)
         edit_row.addWidget(apply_pos_btn)
         edit_row.addStretch(1)
         layout.addLayout(edit_row)
 
         file_row = QHBoxLayout()
-        export_btn = QPushButton("Exporter les points vers un fichier...")
+        export_btn = QPushButton(tr("teleport.export"))
         export_btn.clicked.connect(self._export_points)
         file_row.addWidget(export_btn)
-        import_btn = QPushButton("Importer des points depuis un fichier...")
+        import_btn = QPushButton(tr("teleport.import"))
         import_btn.clicked.connect(self._import_points)
         file_row.addWidget(import_btn)
         file_row.addStretch(1)
         layout.addLayout(file_row)
 
         self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["Nom", "X", "Y", "Z"])
+        self.table.setHorizontalHeaderLabels([tr("table.name"), "X", "Y", "Z"])
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -3438,10 +3694,10 @@ class TeleportTab(QWidget):
         layout.addWidget(self.table, 1)
 
         action_row = QHBoxLayout()
-        teleport_btn = QPushButton("Téléporter vers le point sélectionné")
+        teleport_btn = QPushButton(tr("teleport.teleport_to_selected"))
         teleport_btn.clicked.connect(self._teleport_selected)
         action_row.addWidget(teleport_btn)
-        delete_btn = QPushButton("Supprimer le point sélectionné")
+        delete_btn = QPushButton(tr("teleport.delete_selected"))
         delete_btn.clicked.connect(self._delete_selected)
         action_row.addWidget(delete_btn)
         action_row.addStretch(1)
@@ -3475,11 +3731,10 @@ class TeleportTab(QWidget):
     def _save_current_position(self):
         pos = self.live.player_position()
         if pos is None:
-            QMessageBox.warning(self, "Position introuvable",
-                                 "Impossible de lire la position actuelle (pas encore de "
-                                 "coordonnees capturees - deplace-toi un peu en jeu et reessaie).")
+            warn_dialog(self, tr("teleport.position_not_found_title"),
+                                 tr("teleport.position_not_found_body"))
             return
-        name, ok = QInputDialog.getText(self, "Nom du point", "Nom de ce point de teleportation :")
+        name, ok = QInputDialog.getText(self, tr("teleport.point_name_title"), tr("teleport.point_name_body"))
         if not ok or not name.strip():
             return
         x, y, z = pos
@@ -3490,9 +3745,8 @@ class TeleportTab(QWidget):
     def _pull_current_position(self):
         pos = self.live.player_position()
         if pos is None:
-            QMessageBox.warning(self, "Position introuvable",
-                                 "Impossible de lire la position actuelle (pas encore de "
-                                 "coordonnees capturees - deplace-toi un peu en jeu et reessaie).")
+            warn_dialog(self, tr("teleport.position_not_found_title"),
+                                 tr("teleport.position_not_found_body"))
             return
         x, y, z = pos
         self.axis_spins["X"].setValue(x)
@@ -3504,12 +3758,11 @@ class TeleportTab(QWidget):
         y = self.axis_spins["Y"].value()
         z = self.axis_spins["Z"].value()
         if not self.live.set_player_position(x, y, z):
-            QMessageBox.warning(self, "Teleportation impossible",
-                                 "Pointeur de Snake introuvable actuellement.")
+            warn_dialog(self, tr("teleport.teleport_failed_title"), tr("teleport.snake_pointer_not_found"))
 
     def _export_points(self):
         path, _ = QFileDialog.getSaveFileName(
-            self, "Exporter les points de teleportation", "", "JSON (*.json)")
+            self, tr("teleport.export_dialog_title"), "", "JSON (*.json)")
         if not path:
             return
         if not path.lower().endswith(".json"):
@@ -3518,11 +3771,11 @@ class TeleportTab(QWidget):
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(self.points, f, indent=2, ensure_ascii=False)
         except OSError as exc:
-            QMessageBox.warning(self, "Export impossible", str(exc))
+            warn_dialog(self, tr("teleport.export_failed_title"), str(exc))
 
     def _import_points(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Importer des points de teleportation", "", "JSON (*.json)")
+            self, tr("teleport.import_dialog_title"), "", "JSON (*.json)")
         if not path:
             return
         try:
@@ -3531,17 +3784,17 @@ class TeleportTab(QWidget):
             if not isinstance(imported, list) or not all(
                 isinstance(p, dict) and {"name", "x", "y", "z"} <= p.keys() for p in imported
             ):
-                raise ValueError("format inattendu (attendu : liste de {name, x, y, z})")
+                raise ValueError(tr("teleport.unexpected_format"))
         except (OSError, json.JSONDecodeError, ValueError) as exc:
-            QMessageBox.warning(self, "Import impossible", str(exc))
+            warn_dialog(self, tr("teleport.import_failed_title"), str(exc))
             return
-        replace = QMessageBox.question(
-            self, "Importer",
-            f"{len(imported)} point(s) trouve(s). Remplacer la liste actuelle ?\n"
-            "(Non = ajouter a la suite de la liste actuelle)",
-            QMessageBox.Yes | QMessageBox.No,
-        )
-        if replace == QMessageBox.Yes:
+        box = QMessageBox(self)
+        box.setWindowTitle(tr("teleport.import_title"))
+        box.setText(tr("teleport.import_confirm", count=len(imported)))
+        yes_btn = box.addButton(tr("button.yes"), QMessageBox.YesRole)
+        box.addButton(tr("button.no"), QMessageBox.NoRole)
+        box.exec()
+        if box.clickedButton() == yes_btn:
             self.points = imported
         else:
             self.points.extend(imported)
@@ -3560,8 +3813,7 @@ class TeleportTab(QWidget):
             return
         point = self.points[row]
         if not self.live.set_player_position(point["x"], point["y"], point["z"]):
-            QMessageBox.warning(self, "Teleportation impossible",
-                                 "Pointeur de Snake introuvable actuellement.")
+            warn_dialog(self, tr("teleport.teleport_failed_title"), tr("teleport.snake_pointer_not_found"))
 
     def _delete_selected(self):
         row = self._selected_row()
@@ -3582,7 +3834,7 @@ class TeleportTab(QWidget):
         self.setEnabled(True)
         pos = self.live.player_position()
         if pos is None:
-            self.current_pos_label.setText("? (pas encore capture, deplace-toi un peu)")
+            self.current_pos_label.setText(tr("teleport.not_captured_yet"))
         else:
             x, y, z = pos
             self.current_pos_label.setText(f"X={x:.1f}  Y={y:.1f}  Z={z:.1f}")
@@ -3591,7 +3843,7 @@ class TeleportTab(QWidget):
 class TrainerWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"MGS4 - Trainer de recherche (memoire live) - {TRAINER_VERSION}")
+        self.setWindowTitle(tr("window.title", version=TRAINER_VERSION))
         self.resize(1400, 640)
         self.live = MGS4Live()
 
@@ -3600,23 +3852,31 @@ class TrainerWindow(QMainWindow):
         layout = QVBoxLayout(central)
 
         top_row = QHBoxLayout()
-        self.status_label = QLabel("Non connecte")
+        self.status_label = QLabel(tr("status.not_connected"))
         self.status_label.setWordWrap(True)
         top_row.addWidget(self.status_label, stretch=1)
 
-        self.advanced_check = QCheckBox("Mode avance (valeurs brutes)")
+        self.advanced_check = QCheckBox(tr("window.advanced_mode"))
         self.advanced_check.toggled.connect(self._on_advanced_toggled)
         top_row.addWidget(self.advanced_check)
 
-        refresh_btn = QPushButton("Rafraichir maintenant")
+        refresh_btn = QPushButton(tr("window.refresh_now"))
         refresh_btn.clicked.connect(self.refresh)
         top_row.addWidget(refresh_btn)
-        reconnect_btn = QPushButton("(Re)connecter")
+        reconnect_btn = QPushButton(tr("window.reconnect"))
         reconnect_btn.clicked.connect(self.try_attach)
         top_row.addWidget(reconnect_btn)
-        help_btn = QPushButton("Aide")
+        help_btn = QPushButton(tr("window.help"))
         help_btn.clicked.connect(lambda: HelpDialog(self).exec())
         top_row.addWidget(help_btn)
+
+        self.language_combo = QComboBox()
+        self._language_codes = list(SUPPORTED_LANGUAGES)
+        for code in self._language_codes:
+            self.language_combo.addItem(SUPPORTED_LANGUAGES[code])
+        self.language_combo.setCurrentIndex(self._language_codes.index(_LANG))
+        self.language_combo.activated.connect(self._on_language_changed)
+        top_row.addWidget(self.language_combo)
         layout.addLayout(top_row)
 
         # Conteneur dedie (pas juste un layout) pour pouvoir desactiver tout
@@ -3624,7 +3884,7 @@ class TrainerWindow(QMainWindow):
         self.drebin_container = QWidget()
         drebin_row = QHBoxLayout(self.drebin_container)
         drebin_row.setContentsMargins(0, 0, 0, 0)
-        drebin_row.addWidget(QLabel("Points Drebin - Actuel :"))
+        drebin_row.addWidget(QLabel(tr("window.drebin_current")))
         self.drebin_actuel_label = QLabel("?")
         self.drebin_actuel_label.setMinimumWidth(80)
         drebin_row.addWidget(self.drebin_actuel_label)
@@ -3632,12 +3892,12 @@ class TrainerWindow(QMainWindow):
         self.drebin_actuel_spin.setRange(0, 2_000_000_000)
         self.drebin_actuel_spin.setMinimumWidth(110)
         drebin_row.addWidget(self.drebin_actuel_spin)
-        drebin_actuel_ok = QPushButton("OK")
+        drebin_actuel_ok = QPushButton(tr("button.ok"))
         drebin_actuel_ok.clicked.connect(self._write_drebin_actuel)
         drebin_row.addWidget(drebin_actuel_ok)
 
         drebin_row.addSpacing(20)
-        drebin_row.addWidget(QLabel("Ventes (cumul) :"))
+        drebin_row.addWidget(QLabel(tr("window.drebin_sales")))
         self.drebin_ventes_label = QLabel("?")
         self.drebin_ventes_label.setMinimumWidth(80)
         drebin_row.addWidget(self.drebin_ventes_label)
@@ -3645,7 +3905,7 @@ class TrainerWindow(QMainWindow):
         self.drebin_ventes_spin.setRange(0, 2_000_000_000)
         self.drebin_ventes_spin.setMinimumWidth(110)
         drebin_row.addWidget(self.drebin_ventes_spin)
-        drebin_ventes_ok = QPushButton("OK")
+        drebin_ventes_ok = QPushButton(tr("button.ok"))
         drebin_ventes_ok.clicked.connect(self._write_drebin_ventes)
         drebin_row.addWidget(drebin_ventes_ok)
         drebin_row.addStretch(1)
@@ -3664,11 +3924,11 @@ class TrainerWindow(QMainWindow):
         # garde-fous (deja source de confusion une fois, voir notes.md).
         stats_names = [n for n in mgs4save.STATS if n not in ("drebin_actuel", "drebin_total_ventes")]
         stats_tab = StatsTab(self.live, stats_names)
-        self.tabs.addTab(stats_tab, f"Stats ({len(stats_names)})")
+        self.tabs.addTab(stats_tab, tr("tab.stats_count", count=len(stats_names)))
         self.item_tabs.append(stats_tab)
 
         vitals_tab = VitalsTab(self.live)
-        self.tabs.addTab(vitals_tab, "Etat de jeu")
+        self.tabs.addTab(vitals_tab, tr("tab.game_state"))
         self.item_tabs.append(vitals_tab)
 
         # Un seul onglet "Armes", sections empilees par categorie (meme
@@ -3694,52 +3954,56 @@ class TrainerWindow(QMainWindow):
                 continue
             group = mgs4save.WEAPON_CATEGORIES.get(weapon_id, "Non identifiée")
             weapon_ids_by_group[group].append(weapon_id)
-        weapon_category_ids = [(g, weapon_ids_by_group[g]) for g in mgs4save.WEAPON_GROUP_ORDER]
+        weapon_category_ids = [
+            (WEAPON_GROUP_SLUGS.get(g, g), weapon_group_label(g), weapon_ids_by_group[g])
+            for g in mgs4save.WEAPON_GROUP_ORDER
+        ]
+        weapon_names_localized = {i: weapon_name(i) for i in mgs4save.WEAPON_NAMES}
 
         weapons_tab = GroupedWeaponsTab(
-            self.live, weapon_category_ids, mgs4save.WEAPON_NAMES,
+            self.live, weapon_category_ids, weapon_names_localized,
             self.live.read_weapon, self.live.write_weapon,
-            [("Non poss.", 0), ("Verrouillée", 1), ("Utilisable", 2)],
+            [(tr("weapon.state_unowned"), 0), (tr("weapon.state_locked"), 1), (tr("weapon.state_usable"), 2)],
             self.live.read_weapon_ammo, self.live.write_weapon_ammo,
         )
-        total_weapons = sum(len(ids) for _g, ids in weapon_category_ids)
-        self.tabs.addTab(weapons_tab, f"Armes ({total_weapons})")
+        total_weapons = sum(len(ids) for _s, _g, ids in weapon_category_ids)
+        self.tabs.addTab(weapons_tab, tr("tab.weapons_count", count=total_weapons))
         self.item_tabs.append(weapons_tab)
 
-        for label, names in ITEM_CATEGORIES:
+        for key, label, names in ITEM_CATEGORIES:
             ids = sorted(names)
             tab = TableTab(
-                self.live, ids, names, "Objet #{:02d}",
+                self.live, ids, names, item_unclassified_format(),
                 self.live.read_item, self.live.write_item,
-                [("Verrouillé", 65535), ("Obtenu", 1)],
-                quantity_ids=GENERAL_ITEM_QUANTITY_IDS if label == "Objets" else None,
+                [(tr("item.state_locked"), 65535), (tr("item.state_owned"), 1)],
+                quantity_ids=GENERAL_ITEM_QUANTITY_IDS if key == "items" else None,
                 binary_lock_value=65535,
-                battery_link=(mgs4save.BATTERY_ITEM_ID, 0x06) if label == "Objets" else None,
+                battery_link=(mgs4save.BATTERY_ITEM_ID, 0x06) if key == "items" else None,
             )
             self.tabs.addTab(tab, f"{label} ({len(ids)})")
             self.item_tabs.append(tab)
-            if label == "Objets":
+            if key == "items":
                 # Onglet "OctoCamo" fusionne juste apres "Objets" (meme
                 # position qu'avant), sections FaceCamo/Gilet/Octocamo -
                 # voir GroupedItemsTab et le commentaire sur
                 # _FACECAMO_NAMES_VISIBLE plus haut.
                 octocamo_sections = [
-                    ("FaceCamo", _FACECAMO_IDS_ORDERED, _FACECAMO_NAMES_VISIBLE),
-                    ("Gilet", sorted(_VEST_NAMES_VISIBLE), _VEST_NAMES_VISIBLE),
-                    ("Octocamo", sorted(_OCTOCAMO_BASE_NAMES), _OCTOCAMO_BASE_NAMES),
+                    (tr("group.facecamo"), _FACECAMO_IDS_ORDERED, _FACECAMO_NAMES_VISIBLE),
+                    (tr("group.vest"), sorted(_VEST_NAMES_VISIBLE), _VEST_NAMES_VISIBLE),
+                    (tr("group.octocamo"), sorted(_OCTOCAMO_BASE_NAMES), _OCTOCAMO_BASE_NAMES),
                 ]
                 octocamo_tab = GroupedItemsTab(
                     self.live, octocamo_sections,
                     self.live.read_item, self.live.write_item,
-                    [("Verrouillé", 65535), ("Obtenu", 1)],
+                    [(tr("item.state_locked"), 65535), (tr("item.state_owned"), 1)],
                     binary_lock_value=65535,
                 )
                 total_octocamo = sum(len(ids) for _l, ids, _n in octocamo_sections)
-                self.tabs.addTab(octocamo_tab, f"OctoCamo ({total_octocamo})")
+                self.tabs.addTab(octocamo_tab, tr("tab.octocamo_count", count=total_octocamo))
                 self.item_tabs.append(octocamo_tab)
 
         teleport_tab = TeleportTab(self.live)
-        self.tabs.addTab(teleport_tab, "Téléportation")
+        self.tabs.addTab(teleport_tab, tr("tab.teleport"))
         self.item_tabs.append(teleport_tab)
 
         layout.addWidget(self.tabs)
@@ -3767,6 +4031,25 @@ class TrainerWindow(QMainWindow):
     def _on_advanced_toggled(self, checked: bool):
         for tab in self.item_tabs:
             tab.set_advanced(checked)
+
+    def _on_language_changed(self, index: int):
+        code = self._language_codes[index]
+        if code == _LANG:
+            return
+        # QMessageBox.question() affiche ses boutons Oui/Non standards dans
+        # la langue par defaut de Qt (pas la notre) - boutons personnalises
+        # via tr() pour eviter ce decalage.
+        box = QMessageBox(self)
+        box.setWindowTitle(tr("language.restart_title"))
+        box.setText(tr("language.restart_body", language=SUPPORTED_LANGUAGES[code]))
+        yes_btn = box.addButton(tr("button.yes"), QMessageBox.YesRole)
+        box.addButton(tr("button.no"), QMessageBox.NoRole)
+        box.exec()
+        if box.clickedButton() != yes_btn:
+            self.language_combo.setCurrentIndex(self._language_codes.index(_LANG))
+            return
+        set_language(code)
+        restart_trainer()
 
     def refresh(self):
         if self.live.connected and not self.live.check_alive():

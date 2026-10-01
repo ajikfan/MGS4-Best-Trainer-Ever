@@ -1,0 +1,16 @@
+{
+  "handgun": "Handgun",
+  "assault_rifle": "Assault Rifle",
+  "sniper_rifle": "Sniper Rifle",
+  "shotgun": "Shotgun",
+  "smg": "SMG",
+  "grenade_launcher": "Grenade Launcher",
+  "machine_gun": "Machine Gun",
+  "rocket_launcher": "Rocket Launcher",
+  "grenade": "Grenade",
+  "explosive": "Explosive",
+  "magazine": "Magazine",
+  "other": "Other",
+  "accessory": "Accessory",
+  "unidentified": "Unidentified"
+}

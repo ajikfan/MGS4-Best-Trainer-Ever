@@ -1,0 +1,86 @@
+{
+  "beauty": {
+    "description": "Absorbe la Psyché de l'ennemi en combat rapproché ; le stress de Snake double en plein soleil.",
+    "name": "Beauté"
+  },
+  "corpse": {
+    "description": "Obtenu en étant tué plus de 41 fois au cours d'une même partie. Permet de se faire passer pour un cadavre : les soldats, et même certaines armes sans pilote, peuvent s'y méprendre lorsque Snake reste allongé au sol.",
+    "name": "Cadavre"
+  },
+  "crying": {
+    "description": "Fait pleurer les ennemis lorsqu'ils repèrent Snake.",
+    "name": "Pleurs"
+  },
+  "desert_3color": {
+    "description": "Motif de camouflage standard, sans effet spécial.",
+    "name": "3 Couleurs Désert"
+  },
+  "digital_b": {
+    "description": "Motif imitant l'eau : camouflage optimal dans ou à proximité de l'eau.",
+    "name": "Digit. B"
+  },
+  "digital_r": {
+    "description": "Motif de camouflage rouge, sans effet spécial.",
+    "name": "Digit. R"
+  },
+  "fly": {
+    "description": "Effet très puissant en combat rapproché, lié à l'odeur qui attire les mouches — augmente en contrepartie le stress de Snake.",
+    "name": "Mouche"
+  },
+  "forest": {
+    "description": "Motif de camouflage standard, sans effet spécial.",
+    "name": "Forêt"
+  },
+  "gear": {
+    "description": "Réduit les pertes de Psyché et améliore l'efficacité du camouflage.",
+    "name": "Gear"
+  },
+  "golden": {
+    "description": "Obtenu en ayant une sauvegarde de Metal Gear Solid: Master Collection Vol. 1.",
+    "name": "Doré"
+  },
+  "haven": {
+    "description": "Porte le Camo Index à 99 % tant que Snake reste immobile, mais accélère la dégradation de sa vie et de sa Psyché.",
+    "name": "Haven"
+  },
+  "infiltration": {
+    "description": "Motif de camouflage standard, sans effet spécial.",
+    "name": "Infiltration"
+  },
+  "laughing": {
+    "description": "Fait rire les ennemis lorsqu'ils repèrent Snake.",
+    "name": "Rire"
+  },
+  "marpat": {
+    "description": "Motif de camouflage standard, sans effet spécial.",
+    "name": "Marpat"
+  },
+  "metal": {
+    "description": "Réduit de moitié les pertes de vie et de Psyché, au prix de −10 % de Camo Index.",
+    "name": "Metal"
+  },
+  "olive": {
+    "description": "Motif de camouflage standard, sans effet spécial.",
+    "name": "Olive"
+  },
+  "preorder": {
+    "description": "Obtenu en précommandant Metal Gear Solid: Master Collection Vol. 2.",
+    "name": "Précommande"
+  },
+  "raging": {
+    "description": "Fait entrer les ennemis en rage lorsqu'ils repèrent Snake.",
+    "name": "Rage"
+  },
+  "screaming": {
+    "description": "Fait hurler et paniquer les ennemis lorsqu'ils repèrent Snake.",
+    "name": "Hurler"
+  },
+  "snake": {
+    "description": "Assomme les soldats normaux en un seul coup et atténue certains effets de stress et de douleur, au prix de −10 % de Camo Index.",
+    "name": "Snake"
+  },
+  "tiger_stripe": {
+    "description": "Motif de camouflage standard, sans effet spécial.",
+    "name": "Tigré"
+  }
+}

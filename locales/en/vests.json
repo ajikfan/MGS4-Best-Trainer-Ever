@@ -1,0 +1,42 @@
+{
+  "45": {
+    "condition": "Available from the start of the game.",
+    "name": "Vest - Khaki"
+  },
+  "46": {
+    "condition": "Available from the start of the game.",
+    "name": "Vest - Olive"
+  },
+  "47": {
+    "condition": "Available from the start of the game.",
+    "name": "Vest - Black"
+  },
+  "48": {
+    "condition": "Available from the start of the game.",
+    "name": "Vest - Gray"
+  },
+  "49": {
+    "condition": "Available from the start of the game.",
+    "name": "Vest - Navy"
+  },
+  "50": {
+    "condition": "Automatically unlocked after finishing the game once.",
+    "name": "Vest - Green"
+  },
+  "51": {
+    "condition": "Automatically unlocked after finishing the game once.",
+    "name": "Vest - Blue"
+  },
+  "52": {
+    "condition": "Automatically unlocked after finishing the game once.",
+    "name": "Vest - Red"
+  },
+  "53": {
+    "condition": "Automatically unlocked after finishing the game once.",
+    "name": "Vest - Orange"
+  },
+  "54": {
+    "condition": "Automatically unlocked after finishing the game once.",
+    "name": "Vest - Brown"
+  }
+}

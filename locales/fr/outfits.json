@@ -1,0 +1,22 @@
+{
+  "26": {
+    "condition": "Acte 1, dans le refuge de la milice, secteur nord-est du sous-sol (un casier de rangement). Utilisable uniquement pendant l'Acte 1.",
+    "name": "Déguisement de milicien du Moyen-Orient"
+  },
+  "27": {
+    "condition": "Acte 2, village de la vallée de la Cove, dans le bâtiment fermé près du mur de départ (faire du bruit pour attirer le soldat caché à l'intérieur et le maîtriser). Utilisable uniquement pendant l'Acte 2.",
+    "name": "Déguisement de rebelle d'Amérique du Sud"
+  },
+  "28": {
+    "condition": "Fourni automatiquement au tout début de l'Acte 3. Utilisable uniquement pendant l'Acte 3.",
+    "name": "Déguisement civil de l'Europe de l'Est"
+  },
+  "29": {
+    "condition": "Obtenir l'emblème ASSASSIN.",
+    "name": "Costume d'Altaïr"
+  },
+  "30": {
+    "condition": "Terminer le jeu une première fois.",
+    "name": "Costume de Snake"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "26": {
+    "condition": "Act 1, inside the militia hideout, northeast basement area (a storage locker). Usable only during Act 1.",
+    "name": "Middle Eastern Militia Disguise"
+  },
+  "27": {
+    "condition": "Act 2, Cove Valley village, in the closed building near the starting wall (make noise to lure out the soldier hiding inside and knock him out). Usable only during Act 2.",
+    "name": "South American Rebel Disguise"
+  },
+  "28": {
+    "condition": "Automatically provided at the very start of Act 3. Usable only during Act 3.",
+    "name": "Eastern European Civilian Disguise"
+  },
+  "29": {
+    "condition": "Obtain the ASSASSIN emblem.",
+    "name": "Altair's Outfit"
+  },
+  "30": {
+    "condition": "Finish the game once.",
+    "name": "Snake Costume"
+  }
+}

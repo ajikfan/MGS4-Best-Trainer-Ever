@@ -1,0 +1,22 @@
+{
+  "55": {
+    "condition": "Vaincre l'unité FROG avec des armes non létales, Acte 1 (Palais de l'Avent). Cas particulier : contrairement aux 4 autres, la statuette se trouve après le combat.",
+    "name": "Unité FROG"
+  },
+  "56": {
+    "condition": "Vaincre Laughing Octopus avec des armes non létales, Acte 2 (station de recherche, Amérique du Sud).",
+    "name": "Laughing Octopus"
+  },
+  "57": {
+    "condition": "Vaincre Raging Raven avec des armes non létales, Acte 3 (tour de pierre, Prague, Europe de l'Est).",
+    "name": "Raging Raven"
+  },
+  "58": {
+    "condition": "Vaincre Crying Wolf avec des armes non létales, Acte 4 (champ de neige, Shadow Moses).",
+    "name": "Crying Wolf"
+  },
+  "59": {
+    "condition": "Vaincre Screaming Mantis, Acte 5 (Outer Haven).",
+    "name": "Screaming Mantis"
+  }
+}

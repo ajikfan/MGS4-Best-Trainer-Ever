@@ -1,0 +1,58 @@
+{
+  "31": {
+    "condition": "Obtenu automatiquement après avoir vaincu Laughing Octopus, Acte 2. Augmente le pourcentage de camouflage.",
+    "name": "FaceCamo"
+  },
+  "32": {
+    "condition": "Obtenu automatiquement au début de l'Acte 3.",
+    "name": "Jeune Snake"
+  },
+  "33": {
+    "condition": "Vaincre Screaming Mantis.",
+    "name": "Screaming Beauty"
+  },
+  "34": {
+    "condition": "Vaincre Laughing Octopus avec des armes non létales.",
+    "name": "Laughing Beauty"
+  },
+  "35": {
+    "condition": "Vaincre Raging Raven avec des armes non létales.",
+    "name": "Raging Beauty"
+  },
+  "36": {
+    "condition": "Vaincre Crying Wolf avec des armes non létales.",
+    "name": "Crying Beauty"
+  },
+  "37": {
+    "condition": "Obtenu automatiquement au début de l'Acte 3 (comme Jeune Snake, avec un bandana en plus).",
+    "name": "Jeune Snake avec bandana"
+  },
+  "38": {
+    "condition": "Le percuter avec le Mk.II pendant n'importe quel briefing de mission interactif.",
+    "name": "Otacon"
+  },
+  "39": {
+    "condition": "Le percuter avec le Mk.II pendant le briefing de mission interactif n°1.",
+    "name": "Campbell"
+  },
+  "40": {
+    "condition": "Avoir le rang BIG BOSS.",
+    "name": "Big Boss"
+  },
+  "41": {
+    "condition": "Avoir au moins 60 armes.",
+    "name": "Drebin"
+  },
+  "42": {
+    "condition": "Obtenu automatiquement au début de l'Acte 4.",
+    "name": "MGS1"
+  },
+  "43": {
+    "condition": "Percuter Sunny avec le Mk.II pendant un briefing de mission interactif (par élimination, à confirmer).",
+    "name": "Raiden - Visière fermée"
+  },
+  "44": {
+    "condition": "Percuter Naomi avec le Mk.II pendant un briefing de mission interactif (confirmé par l'utilisateur).",
+    "name": "Raiden - Visière ouverte"
+  }
+}

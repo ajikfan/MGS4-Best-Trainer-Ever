@@ -1,0 +1,86 @@
+{
+  "beauty": {
+    "description": "Absorbs enemy Psyche in close combat; Snake's stress doubles in direct sunlight.",
+    "name": "Beauty"
+  },
+  "corpse": {
+    "description": "Obtained by being killed more than 41 times in a single playthrough. Lets you pass for a corpse: soldiers, and even some unmanned weapons, can be fooled when Snake lies flat on the ground.",
+    "name": "Corpse"
+  },
+  "crying": {
+    "description": "Makes enemies cry when they spot Snake.",
+    "name": "Crying"
+  },
+  "desert_3color": {
+    "description": "Standard camo pattern, no special effect.",
+    "name": "3-Color Desert"
+  },
+  "digital_b": {
+    "description": "Pattern mimicking water: optimal camouflage in or near water.",
+    "name": "Digital B"
+  },
+  "digital_r": {
+    "description": "Red camo pattern, no special effect.",
+    "name": "Digital R"
+  },
+  "fly": {
+    "description": "Very powerful effect in close combat, tied to a smell that attracts flies - increases Snake's stress in return.",
+    "name": "Fly"
+  },
+  "forest": {
+    "description": "Standard camo pattern, no special effect.",
+    "name": "Forest"
+  },
+  "gear": {
+    "description": "Reduces Psyche loss and improves camouflage efficiency.",
+    "name": "Gear"
+  },
+  "golden": {
+    "description": "Obtained by having a Metal Gear Solid: Master Collection Vol. 1 save file.",
+    "name": "Golden"
+  },
+  "haven": {
+    "description": "Keeps the Camo Index at 99% as long as Snake stays still, but accelerates the drain on his health and Psyche.",
+    "name": "Haven"
+  },
+  "infiltration": {
+    "description": "Standard camo pattern, no special effect.",
+    "name": "Infiltration"
+  },
+  "laughing": {
+    "description": "Makes enemies laugh when they spot Snake.",
+    "name": "Laughing"
+  },
+  "marpat": {
+    "description": "Standard camo pattern, no special effect.",
+    "name": "Marpat"
+  },
+  "metal": {
+    "description": "Halves health and Psyche loss, at the cost of -10% Camo Index.",
+    "name": "Metal"
+  },
+  "olive": {
+    "description": "Standard camo pattern, no special effect.",
+    "name": "Olive"
+  },
+  "preorder": {
+    "description": "Obtained by pre-ordering Metal Gear Solid: Master Collection Vol. 2.",
+    "name": "Pre-order"
+  },
+  "raging": {
+    "description": "Makes enemies go into a rage when they spot Snake.",
+    "name": "Raging"
+  },
+  "screaming": {
+    "description": "Makes enemies scream and panic when they spot Snake.",
+    "name": "Screaming"
+  },
+  "snake": {
+    "description": "Knocks out regular soldiers in a single hit and reduces certain stress and pain effects, at the cost of -10% Camo Index.",
+    "name": "Snake"
+  },
+  "tiger_stripe": {
+    "description": "Standard camo pattern, no special effect.",
+    "name": "Tiger Stripe"
+  }
+}

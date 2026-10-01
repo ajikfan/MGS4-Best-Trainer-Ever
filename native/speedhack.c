@@ -63,7 +63,37 @@
  * gecko_hook_error - meme principe que damage_hook_installed/error mais
  * pour install_gecko_one_shot_kill_hook (instruction de degats separee,
  * propre aux Gecko, partage le flag one_shot_kill mais pas non_lethal -
- * "non letal" n'a pas de sens pour un robot). */
+ * "non letal" n'a pas de sens pour un robot). [64] uint8 no_reload (1 =
+ * actif), [65] uint8 no_reload_hook_installed, [66] uint8
+ * no_reload_hook_error - patch de code (pas de reassertion en boucle
+ * cote Python) qui supprime l'ecriture du nouveau chargeur apres tir,
+ * motif "No Reload" du CE table (voir install_no_reload_hook). [67]
+ * uint8 no_alerts (1 = actif - la fonction qui evalue si Snake doit etre
+ * repere/alerte est court-circuitee, motif "aob No Alerts" du CE table,
+ * voir install_no_alerts_hook), [68] uint8 no_alerts_hook_installed,
+ * [69] uint8 no_alerts_hook_error (memes codes que damage_hook_error),
+ * [70] uint32 alert_mode_override (0xFFFF = desactive, sinon force la
+ * valeur ecrite dans la variable d'etat d'alerte du jeu juste avant
+ * qu'elle serve a la comparaison qui decide des transitions - motif
+ * "Alert -- Ignore" du CE table, voir install_alert_override_hook -
+ * complementaire de no_alerts : celui-ci empeche la detection en amont,
+ * alert_mode_override force la valeur APRES calcul), [74] uint8
+ * alert_override_hook_installed, [75] uint8 alert_override_hook_error.
+ * [76] uint64 combat_array_ptr (diagnostic uniquement, lecture seule -
+ * pointeur vers le conteneur du tableau des "capteurs" de detection par
+ * ennemi proche, lu par B5F120/install_no_alerts_hook pour agreger
+ * l'etat d'alerte reel - voir install_combat_array_hook), [84] uint8
+ * combat_array_hook_installed, [85] uint8 combat_array_hook_error. [86]
+ * uint8 dispatch_hook_installed, [87] uint8 dispatch_hook_error -
+ * install_alert_dispatch_hook, hook sur l'entree de la VRAIE fonction de
+ * diffusion d'etat d'alerte (edx = nouvel etat, propage a l'IA/l'audio/
+ * l'affichage - trouvee par point d'arret materiel x64dbg, 2026-10-01,
+ * demande utilisateur). Reutilise alert_mode_override (meme champ,
+ * meme convention 0xFFFF=desactive) - contrairement a
+ * install_alert_override_hook (desactive, agissait trop en aval sur une
+ * simple valeur de cache), celui-ci intercepte le PARAMETRE edx a
+ * l'entree de la fonction qui propage reellement le changement partout,
+ * bien plus susceptible d'avoir un effet visible. */
 #pragma pack(push, 1)
 typedef struct {
     double speed;
@@ -86,6 +116,20 @@ typedef struct {
     UINT8 coord_hook_error;
     UINT8 gecko_hook_installed;
     UINT8 gecko_hook_error;
+    UINT8 no_reload;
+    UINT8 no_reload_hook_installed;
+    UINT8 no_reload_hook_error;
+    UINT8 no_alerts;
+    UINT8 no_alerts_hook_installed;
+    UINT8 no_alerts_hook_error;
+    UINT32 alert_mode_override;
+    UINT8 alert_override_hook_installed;
+    UINT8 alert_override_hook_error;
+    UINT64 combat_array_ptr;
+    UINT8 combat_array_hook_installed;
+    UINT8 combat_array_hook_error;
+    UINT8 dispatch_hook_installed;
+    UINT8 dispatch_hook_error;
 } SharedState;
 #pragma pack(pop)
 
@@ -927,6 +971,621 @@ static BOOL install_gecko_one_shot_kill_hook(void) {
     return TRUE;
 }
 
+/* "Pas de rechargement" par patch de code plutot que reassertion en
+ * boucle cote Python (demande utilisateur 2026-09-29) - motif repris du
+ * script CE communautaire "No Reload". Contrairement au CE original (qui
+ * NOP la seule instruction en dur), ce trampoline garde un flag
+ * activable/desactivable : l'instruction qui ecrit le nouveau nombre de
+ * munitions du chargeur apres tir est sautee quand no_reload=1, executee
+ * normalement sinon - une seule mise en place au chargement, pas de
+ * reecriture periodique de la valeur elle-meme.
+ *
+ * Trampoline (31 octets) :
+ *   0   push rax / mov rax,&no_reload / movzx eax,[rax] / cmp al,1 / pop rax
+ *   17  je SKIP (offset23)            (no_reload actif : saute l'ecriture)
+ *   19  DO_WRITE: <4 octets originaux : mov [rbx+xx],cx>
+ *   23  SKIP: <3 octets originaux : test r10d,r10d>
+ *   26  jmp BACK
+ *   31  (fin) */
+static BOOL install_no_reload_hook(void) {
+    HMODULE base = GetModuleHandle(NULL);
+    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
+    SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
+
+    /* 66 03 ? 66 89 ? ? 45 85 D2 - point d'injection reel a +3 (debut de
+     * "mov [rbx+xx],cx", 4 octets, suivi de "test r10d,r10d", 3 octets -
+     * 7 octets au total a rediriger). */
+    static const BYTE pattern[] = {0x66, 0x03, 0, 0x66, 0x89, 0, 0, 0x45, 0x85, 0xD2};
+    static const char mask[] = "xx?xx??xxx";
+
+    BYTE *raw = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
+    if (!raw) {
+        g_shared->no_reload_hook_error = 1;
+        return FALSE;
+    }
+    BYTE *objNoReload = raw + 3;
+
+    BYTE *trampoline = alloc_near(objNoReload, 4096);
+    if (!trampoline) {
+        g_shared->no_reload_hook_error = 2;
+        return FALSE;
+    }
+
+    UINT64 noReloadAddr = (UINT64)&g_shared->no_reload;
+    BYTE code[31];
+    SIZE_T p = 0;
+
+    /* push rax ; mov rax,&no_reload ; movzx eax,[rax] ; cmp al,1 ; pop rax */
+    code[p++] = 0x50;
+    code[p++] = 0x48;
+    code[p++] = 0xB8;
+    memcpy(&code[p], &noReloadAddr, 8);
+    p += 8;
+    code[p++] = 0x0F;
+    code[p++] = 0xB6;
+    code[p++] = 0x00;
+    code[p++] = 0x3C;
+    code[p++] = 0x01;
+    code[p++] = 0x58;
+    /* je SKIP (offset23) */
+    code[p++] = 0x74;
+    code[p++] = (BYTE)(23 - 19);
+
+    /* DO_WRITE (offset19) : instruction originale (4 octets copies tels quels) */
+    memcpy(&code[p], objNoReload, 4);
+    p += 4;
+
+    /* SKIP (offset23) : instruction originale (3 octets copies tels quels) */
+    memcpy(&code[p], objNoReload + 4, 3);
+    p += 3;
+
+    /* jmp BACK (vers objNoReload+7, suite du code original jamais modifiee) */
+    code[p++] = 0xE9;
+    {
+        BYTE *nextInstrAddr = trampoline + p + 4;
+        INT64 rel64 = (INT64)(objNoReload + 7) - (INT64)nextInstrAddr;
+        if (rel64 > 0x7FFFFFFFLL || rel64 < -0x80000000LL) {
+            g_shared->no_reload_hook_error = 3;
+            return FALSE;
+        }
+        INT32 rel = (INT32)rel64;
+        memcpy(&code[p], &rel, 4);
+        p += 4;
+    }
+
+    memcpy(trampoline, code, p);
+
+    INT64 relToTrampoline = (INT64)trampoline - (INT64)(objNoReload + 5);
+    if (relToTrampoline > 0x7FFFFFFFLL || relToTrampoline < -0x80000000LL) {
+        g_shared->no_reload_hook_error = 3;
+        return FALSE;
+    }
+
+    DWORD oldProt;
+    VirtualProtect(objNoReload, 7, PAGE_EXECUTE_READWRITE, &oldProt);
+    objNoReload[0] = 0xE9;
+    INT32 relJmp = (INT32)relToTrampoline;
+    memcpy(objNoReload + 1, &relJmp, 4);
+    objNoReload[5] = 0x90; /* nop de bourrage : 7 octets remplaces par jmp rel32 (5) */
+    objNoReload[6] = 0x90;
+    VirtualProtect(objNoReload, 7, oldProt, &oldProt);
+
+    return TRUE;
+}
+
+/* "No Alerts" + forcage d'etat - court-circuite entierement la fonction
+ * qui evalue l'etat d'alerte de Snake (motif CE "aob No Alerts", auteur
+ * RMLSNK ; meme fonction que celle lue/ecrite par "Alert -- Ignore" plus
+ * bas, mgs4.exe+B5F120). Point d'injection = tout debut de la fonction
+ * (son prologue, "mov [rsp+08],rcx").
+ *
+ * Deux usages independants du meme court-circuit, par ordre de priorite :
+ *  1. no_alerts=1 : ret immediat avec eax=0 - la fonction ne calcule
+ *     jamais rien, Snake n'est jamais considere repere (les ennemis
+ *     continuent de reagir localement, mais l'etat global ne bascule
+ *     jamais).
+ *  2. alert_mode_override != 0xFFFF : ret immediat avec eax=la valeur
+ *     voulue - la fonction renvoie directement l'etat force comme si
+ *     elle l'avait reellement calcule, pour TOUS ses appelants (y
+ *     compris les deux appels de install_alert_override_hook plus bas,
+ *     qui deviennent redondants une fois ce court-circuit actif, voir
+ *     commentaire de cette fonction). Corrige le defaut de
+ *     install_alert_override_hook seul (qui ne devenait visible qu'au
+ *     prochain evenement de detection reel, demande utilisateur
+ *     2026-10-01 : "changer l'etat manuellement doit etre efficace
+ *     directement") - en forcant directement ce que la fonction
+ *     source renvoie, plus besoin d'attendre un appel declenche par une
+ *     vraie detection.
+ * Sinon (les deux a leur valeur par defaut) : prologue original execute,
+ * fonction tourne normalement.
+ *
+ * Trampoline (57 octets) :
+ *   0   push rax / mov rax,&no_alerts / movzx eax,[rax] / cmp al,1 / pop rax
+ *   17  jne CHECK_OVERRIDE (offset22)
+ *   19  xor eax,eax
+ *   21  ret
+ *   22  CHECK_OVERRIDE: push r11 / mov r11,&alert_mode_override
+ *   34  mov eax,dword[r11]
+ *   37  cmp eax,0xFFFF
+ *   42  pop r11
+ *   44  je PASS (offset47)              (pas de forcage : on continue normalement)
+ *   46  ret                             (forcage actif : eax deja charge avec la valeur voulue)
+ *   47  PASS: <5 octets originaux : mov [rsp+08],rcx>
+ *   52  jmp BACK
+ *   57  (fin) */
+static BOOL install_no_alerts_hook(void) {
+    HMODULE base = GetModuleHandle(NULL);
+    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
+    SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
+
+    /* mov [rsp+08],rcx ; push rbx ; sub rsp,xxxxxxxx ; mov rbx,rcx ;
+     * call xxxxxxxx ; test eax,eax - signature complete de 23 octets
+     * (reprise telle quelle du motif CE) pour eviter tout faux positif,
+     * mais seuls les 5 premiers octets (le prologue) sont rediriges. */
+    static const BYTE pattern[] = {0x48, 0x89, 0, 0, 0x08, 0, 0x48, 0x81, 0, 0, 0x00, 0, 0,
+                                    0x48, 0x8B, 0, 0xE8, 0, 0, 0, 0, 0x85, 0xC0};
+    static const char mask[] = "xx??x?xx??x??xx?x????xx";
+
+    BYTE *objNoAlert = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
+    if (!objNoAlert) {
+        g_shared->no_alerts_hook_error = 1;
+        return FALSE;
+    }
+
+    BYTE *trampoline = alloc_near(objNoAlert, 4096);
+    if (!trampoline) {
+        g_shared->no_alerts_hook_error = 2;
+        return FALSE;
+    }
+
+    UINT64 noAlertsAddr = (UINT64)&g_shared->no_alerts;
+    UINT64 overrideAddr = (UINT64)&g_shared->alert_mode_override;
+    BYTE code[57];
+    SIZE_T p = 0;
+
+    /* push rax ; mov rax,&no_alerts ; movzx eax,[rax] ; cmp al,1 ; pop rax */
+    code[p++] = 0x50;
+    code[p++] = 0x48;
+    code[p++] = 0xB8;
+    memcpy(&code[p], &noAlertsAddr, 8);
+    p += 8;
+    code[p++] = 0x0F;
+    code[p++] = 0xB6;
+    code[p++] = 0x00;
+    code[p++] = 0x3C;
+    code[p++] = 0x01;
+    code[p++] = 0x58;
+    /* jne CHECK_OVERRIDE (offset22) */
+    code[p++] = 0x75;
+    code[p++] = (BYTE)(22 - 19);
+
+    /* xor eax,eax ; ret (n'execute que si no_alerts==1) */
+    code[p++] = 0x31;
+    code[p++] = 0xC0;
+    code[p++] = 0xC3;
+
+    /* CHECK_OVERRIDE (offset22) : push r11 ; mov r11,&alert_mode_override */
+    code[p++] = 0x41;
+    code[p++] = 0x53;
+    code[p++] = 0x49;
+    code[p++] = 0xBB;
+    memcpy(&code[p], &overrideAddr, 8);
+    p += 8;
+    /* mov eax,dword[r11] */
+    code[p++] = 0x41;
+    code[p++] = 0x8B;
+    code[p++] = 0x03;
+    /* cmp eax,0xFFFF (forme courte, pas de ModRM) */
+    code[p++] = 0x3D;
+    code[p++] = 0xFF;
+    code[p++] = 0xFF;
+    code[p++] = 0x00;
+    code[p++] = 0x00;
+    /* pop r11 */
+    code[p++] = 0x41;
+    code[p++] = 0x5B;
+    /* je PASS (offset47) */
+    code[p++] = 0x74;
+    code[p++] = (BYTE)(47 - 46);
+    /* ret (forcage actif : eax deja charge avec la valeur voulue) */
+    code[p++] = 0xC3;
+
+    /* PASS (offset47) : instruction originale (5 octets copies tels quels) */
+    memcpy(&code[p], objNoAlert, 5);
+    p += 5;
+
+    /* jmp BACK (vers objNoAlert+5, suite du code original jamais modifiee) */
+    code[p++] = 0xE9;
+    {
+        BYTE *nextInstrAddr = trampoline + p + 4;
+        INT64 rel64 = (INT64)(objNoAlert + 5) - (INT64)nextInstrAddr;
+        if (rel64 > 0x7FFFFFFFLL || rel64 < -0x80000000LL) {
+            g_shared->no_alerts_hook_error = 3;
+            return FALSE;
+        }
+        INT32 rel = (INT32)rel64;
+        memcpy(&code[p], &rel, 4);
+        p += 4;
+    }
+
+    memcpy(trampoline, code, p);
+
+    INT64 relToTrampoline = (INT64)trampoline - (INT64)(objNoAlert + 5);
+    if (relToTrampoline > 0x7FFFFFFFLL || relToTrampoline < -0x80000000LL) {
+        g_shared->no_alerts_hook_error = 3;
+        return FALSE;
+    }
+
+    DWORD oldProt;
+    VirtualProtect(objNoAlert, 5, PAGE_EXECUTE_READWRITE, &oldProt);
+    objNoAlert[0] = 0xE9;
+    INT32 relJmp = (INT32)relToTrampoline;
+    memcpy(objNoAlert + 1, &relJmp, 4);
+    /* pas de bourrage : 5 octets rediriges, jmp rel32 fait exactement 5 octets */
+    VirtualProtect(objNoAlert, 5, oldProt, &oldProt);
+
+    return TRUE;
+}
+
+/* "Alert -- Ignore" - force la valeur de la variable d'etat d'alerte du
+ * jeu juste avant qu'elle soit ecrite puis comparee pour decider des
+ * transitions (motif CE "Alert -- Ignore", auteur RMLSNK - l'adresse
+ * statique qu'il ecrit, mgs4.exe+1D77AB8, est deja exposee en lecture
+ * seule cote Python sous le nom ALERT_STATE_RVA, confirmee fiable en
+ * lecture mais PAS en ecriture directe car le jeu la recalcule en
+ * continu - d'ou la necessite de ce patch de code, qui intercepte la
+ * valeur juste avant qu'elle reparte en lecture/comparaison, plutot que
+ * d'essayer de reecrire par-dessus un resultat deja perime).
+ * alert_mode_override = 0xFFFF (desactive, comportement normal) ou une
+ * des valeurs ALERT_STATE_NAMES cote Python (0=Normal, 1=Alerte,
+ * 2=Evasion, 3=Prudence) pour forcer cet etat.
+ *
+ * Trampoline (37 octets) :
+ *   0   push r11
+ *   2   mov r11,&alert_mode_override
+ *   12  cmp dword[r11],0xFFFF
+ *   19  je PASS (offset24)              (pas de forcage : eax garde sa valeur calculee)
+ *   21  mov eax,dword[r11]              (forcage : eax <- valeur voulue)
+ *   24  PASS: pop r11
+ *   26  <6 octets originaux : mov [mgs4.exe+xxxxxxxx],eax>
+ *   32  jmp BACK
+ *   37  (fin) */
+static BOOL install_alert_override_hook(void) {
+    HMODULE base = GetModuleHandle(NULL);
+    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
+    SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
+
+    /* mov edi,edx ; call xxxxxxxx ; mov rcx,rbp ; mov [xxxxxxxx],eax -
+     * motif CE repris tel quel (12 octets de signature), point reel
+     * d'injection a +0xA (le "mov [xxxxxxxx],eax" de 6 octets). */
+    static const BYTE pattern[] = {0x8B, 0, 0xE8, 0, 0, 0, 0, 0x48, 0x8B, 0, 0x89, 0x05};
+    static const char mask[] = "x?x????xx?xx";
+
+    BYTE *raw = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
+    if (!raw) {
+        g_shared->alert_override_hook_error = 1;
+        return FALSE;
+    }
+    BYTE *objAlert = raw + 0xA;
+
+    BYTE *trampoline = alloc_near(objAlert, 4096);
+    if (!trampoline) {
+        g_shared->alert_override_hook_error = 2;
+        return FALSE;
+    }
+
+    UINT64 overrideAddr = (UINT64)&g_shared->alert_mode_override;
+    BYTE code[37];
+    SIZE_T p = 0;
+
+    /* push r11 */
+    code[p++] = 0x41;
+    code[p++] = 0x53;
+    /* mov r11,&alert_mode_override */
+    code[p++] = 0x49;
+    code[p++] = 0xBB;
+    memcpy(&code[p], &overrideAddr, 8);
+    p += 8;
+    /* cmp dword[r11],0xFFFF */
+    code[p++] = 0x41;
+    code[p++] = 0x81;
+    code[p++] = 0x3B;
+    code[p++] = 0xFF;
+    code[p++] = 0xFF;
+    code[p++] = 0x00;
+    code[p++] = 0x00;
+    /* je PASS (offset24) */
+    code[p++] = 0x74;
+    code[p++] = (BYTE)(24 - 21);
+    /* mov eax,dword[r11] */
+    code[p++] = 0x41;
+    code[p++] = 0x8B;
+    code[p++] = 0x03;
+
+    /* PASS (offset24) : pop r11 */
+    code[p++] = 0x41;
+    code[p++] = 0x5B;
+
+    /* instruction originale (6 octets : 89 05 + disp32) - "mov [rip+disp32],eax"
+     * (ModRM=05 => mod=00,reg=000,rm=101, cas special RIP-relatif en
+     * mode 64 bits, PAS une adresse absolue). Copier ces 6 octets tels
+     * quels dans le trampoline (a une tout autre adresse memoire) ferait
+     * pointer l'ecriture n'importe ou - bug reel corrige ici (2026-10-01,
+     * voir notes.md) : le disp32 est recalcule pour continuer a viser la
+     * MEME adresse absolue (mgs4.exe+1D77AB8) depuis sa nouvelle position. */
+    {
+        INT32 origDisp32;
+        memcpy(&origDisp32, objAlert + 2, 4);
+        UINT64 targetAbs = (UINT64)(objAlert + 6) + (INT64)origDisp32;
+
+        SIZE_T instrOffset = p;
+        memcpy(&code[p], objAlert, 6);
+        p += 6;
+
+        INT64 newDisp64 = (INT64)targetAbs - (INT64)(trampoline + instrOffset + 6);
+        if (newDisp64 > 0x7FFFFFFFLL || newDisp64 < -0x80000000LL) {
+            g_shared->alert_override_hook_error = 3;
+            return FALSE;
+        }
+        INT32 newDisp32 = (INT32)newDisp64;
+        memcpy(&code[instrOffset + 2], &newDisp32, 4);
+    }
+
+    /* jmp BACK (vers objAlert+6, suite du code original jamais modifiee) */
+    code[p++] = 0xE9;
+    {
+        BYTE *nextInstrAddr = trampoline + p + 4;
+        INT64 rel64 = (INT64)(objAlert + 6) - (INT64)nextInstrAddr;
+        if (rel64 > 0x7FFFFFFFLL || rel64 < -0x80000000LL) {
+            g_shared->alert_override_hook_error = 3;
+            return FALSE;
+        }
+        INT32 rel = (INT32)rel64;
+        memcpy(&code[p], &rel, 4);
+        p += 4;
+    }
+
+    memcpy(trampoline, code, p);
+
+    INT64 relToTrampoline = (INT64)trampoline - (INT64)(objAlert + 5);
+    if (relToTrampoline > 0x7FFFFFFFLL || relToTrampoline < -0x80000000LL) {
+        g_shared->alert_override_hook_error = 3;
+        return FALSE;
+    }
+
+    DWORD oldProt;
+    VirtualProtect(objAlert, 6, PAGE_EXECUTE_READWRITE, &oldProt);
+    objAlert[0] = 0xE9;
+    INT32 relJmp = (INT32)relToTrampoline;
+    memcpy(objAlert + 1, &relJmp, 4);
+    objAlert[5] = 0x90; /* nop de bourrage : 6 octets remplaces par jmp rel32 (5) */
+    VirtualProtect(objAlert, 6, oldProt, &oldProt);
+
+    return TRUE;
+}
+
+/* Hook diagnostique (lecture seule, aucun changement de comportement) -
+ * capture le pointeur retourne par l'appel qui recupere le conteneur du
+ * tableau de "capteurs" de detection par ennemi (chaque entree = 224
+ * octets, agregees en MAX/somme par B5F120 pour calculer l'etat
+ * d'alerte reel, voir install_no_alerts_hook) - demande utilisateur
+ * 2026-10-01 : trouver ce tableau pour pouvoir forcer une seule entree
+ * reelle plutot que les valeurs agregees (qui ne sont que des resultats
+ * d'affichage, jamais lues par le reste du jeu, voir notes.md). Point
+ * d'injection juste apres le "call" qui renvoie ce pointeur dans rax,
+ * avant qu'il soit copie dans r15 par le code original.
+ *
+ * Trampoline (27 octets) :
+ *   0   push r11 / mov r11,&combat_array_ptr
+ *   12  mov [r11],rax
+ *   15  pop r11
+ *   17  <5 octets originaux : mov [rsp+30],rax>
+ *   22  jmp BACK
+ *   27  (fin) */
+static BOOL install_combat_array_hook(void) {
+    HMODULE base = GetModuleHandle(NULL);
+    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
+    SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
+
+    /* call xxxxxxxx ; mov [rsp+30],rax ; mov r15,rax ; test rax,rax -
+     * signature de 16 octets, point reel d'injection a +5 (juste apres
+     * le call, debut de "mov [rsp+30],rax"). */
+    static const BYTE pattern[] = {0xE8, 0, 0, 0, 0, 0x48, 0x89, 0x44, 0x24, 0x30,
+                                    0x4C, 0x8B, 0xF8, 0x48, 0x85, 0xC0};
+    static const char mask[] = "x????xxxxxxxxxxx";
+
+    BYTE *raw = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
+    if (!raw) {
+        g_shared->combat_array_hook_error = 1;
+        return FALSE;
+    }
+    BYTE *objCombatArray = raw + 5;
+
+    BYTE *trampoline = alloc_near(objCombatArray, 4096);
+    if (!trampoline) {
+        g_shared->combat_array_hook_error = 2;
+        return FALSE;
+    }
+
+    UINT64 combatArrayAddr = (UINT64)&g_shared->combat_array_ptr;
+    BYTE code[27];
+    SIZE_T p = 0;
+
+    /* push r11 ; mov r11,&combat_array_ptr */
+    code[p++] = 0x41;
+    code[p++] = 0x53;
+    code[p++] = 0x49;
+    code[p++] = 0xBB;
+    memcpy(&code[p], &combatArrayAddr, 8);
+    p += 8;
+    /* mov [r11],rax */
+    code[p++] = 0x49;
+    code[p++] = 0x89;
+    code[p++] = 0x03;
+    /* pop r11 */
+    code[p++] = 0x41;
+    code[p++] = 0x5B;
+
+    /* instruction originale (5 octets copies tels quels) */
+    memcpy(&code[p], objCombatArray, 5);
+    p += 5;
+
+    /* jmp BACK (vers objCombatArray+5, suite du code original jamais modifiee) */
+    code[p++] = 0xE9;
+    {
+        BYTE *nextInstrAddr = trampoline + p + 4;
+        INT64 rel64 = (INT64)(objCombatArray + 5) - (INT64)nextInstrAddr;
+        if (rel64 > 0x7FFFFFFFLL || rel64 < -0x80000000LL) {
+            g_shared->combat_array_hook_error = 3;
+            return FALSE;
+        }
+        INT32 rel = (INT32)rel64;
+        memcpy(&code[p], &rel, 4);
+        p += 4;
+    }
+
+    memcpy(trampoline, code, p);
+
+    INT64 relToTrampoline = (INT64)trampoline - (INT64)(objCombatArray + 5);
+    if (relToTrampoline > 0x7FFFFFFFLL || relToTrampoline < -0x80000000LL) {
+        g_shared->combat_array_hook_error = 3;
+        return FALSE;
+    }
+
+    DWORD oldProt;
+    VirtualProtect(objCombatArray, 5, PAGE_EXECUTE_READWRITE, &oldProt);
+    objCombatArray[0] = 0xE9;
+    INT32 relJmp = (INT32)relToTrampoline;
+    memcpy(objCombatArray + 1, &relJmp, 4);
+    /* pas de bourrage : 5 octets rediriges, jmp rel32 fait exactement 5 octets */
+    VirtualProtect(objCombatArray, 5, oldProt, &oldProt);
+
+    return TRUE;
+}
+
+/* Force le PARAMETRE edx (nouvel etat d'alerte) a l'entree de la
+ * fonction qui diffuse reellement le changement d'etat a tout le jeu
+ * (reinitialise une serie de champs sur l'objet gestionnaire puis
+ * appelle plusieurs sous-fonctions avec ce meme edx - IA, audio,
+ * affichage - voir notes.md pour le detail de la pile d'appels trouvee
+ * via point d'arret materiel x64dbg, 2026-10-01). Contrairement a
+ * install_alert_override_hook (desactive, n'agissait qu'en aval sur une
+ * simple valeur de cache jamais relue par le reste du jeu), celui-ci
+ * agit a la toute premiere etape utile, avant que la valeur ne soit
+ * propagee partout - bien plus susceptible d'avoir un effet reel.
+ * Reutilise alert_mode_override (meme flag que install_alert_override_hook,
+ * 0xFFFF = desactive).
+ *
+ * Trampoline (36 octets) :
+ *   0   push r11 / mov r11,&alert_mode_override
+ *   12  mov eax,dword[r11]
+ *   15  cmp eax,0xFFFF
+ *   20  je PASS (offset24)              (pas de forcage : edx garde sa valeur)
+ *   22  mov edx,eax                     (forcage : edx <- valeur voulue)
+ *   24  PASS: pop r11
+ *   26  <5 octets originaux : mov [rsp+8],rbx>
+ *   31  jmp BACK
+ *   36  (fin) */
+static BOOL install_alert_dispatch_hook(void) {
+    HMODULE base = GetModuleHandle(NULL);
+    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
+    SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
+
+    /* Prologue complet de la fonction (37 octets, tous fixes - aucun
+     * joker necessaire, deja tres specifique grace aux constantes
+     * immediates 0xE0/0x14C). */
+    static const BYTE pattern[] = {
+        0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18,
+        0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57, 0x48, 0x81, 0xEC, 0xE0, 0x00, 0x00,
+        0x00, 0x8B, 0x81, 0x4C, 0x01, 0x00, 0x00};
+    static const char mask[] = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+
+    BYTE *objDispatch = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
+    if (!objDispatch) {
+        g_shared->dispatch_hook_error = 1;
+        return FALSE;
+    }
+
+    BYTE *trampoline = alloc_near(objDispatch, 4096);
+    if (!trampoline) {
+        g_shared->dispatch_hook_error = 2;
+        return FALSE;
+    }
+
+    UINT64 overrideAddr = (UINT64)&g_shared->alert_mode_override;
+    BYTE code[36];
+    SIZE_T p = 0;
+
+    /* push r11 ; mov r11,&alert_mode_override */
+    code[p++] = 0x41;
+    code[p++] = 0x53;
+    code[p++] = 0x49;
+    code[p++] = 0xBB;
+    memcpy(&code[p], &overrideAddr, 8);
+    p += 8;
+    /* mov eax,dword[r11] */
+    code[p++] = 0x41;
+    code[p++] = 0x8B;
+    code[p++] = 0x03;
+    /* cmp eax,0xFFFF */
+    code[p++] = 0x3D;
+    code[p++] = 0xFF;
+    code[p++] = 0xFF;
+    code[p++] = 0x00;
+    code[p++] = 0x00;
+    /* je PASS (offset24) */
+    code[p++] = 0x74;
+    code[p++] = (BYTE)(24 - 22);
+    /* mov edx,eax */
+    code[p++] = 0x89;
+    code[p++] = 0xC2;
+
+    /* PASS (offset24) : pop r11 */
+    code[p++] = 0x41;
+    code[p++] = 0x5B;
+
+    /* instruction originale (5 octets copies tels quels) */
+    memcpy(&code[p], objDispatch, 5);
+    p += 5;
+
+    /* jmp BACK (vers objDispatch+5, suite du code original jamais modifiee) */
+    code[p++] = 0xE9;
+    {
+        BYTE *nextInstrAddr = trampoline + p + 4;
+        INT64 rel64 = (INT64)(objDispatch + 5) - (INT64)nextInstrAddr;
+        if (rel64 > 0x7FFFFFFFLL || rel64 < -0x80000000LL) {
+            g_shared->dispatch_hook_error = 3;
+            return FALSE;
+        }
+        INT32 rel = (INT32)rel64;
+        memcpy(&code[p], &rel, 4);
+        p += 4;
+    }
+
+    memcpy(trampoline, code, p);
+
+    INT64 relToTrampoline = (INT64)trampoline - (INT64)(objDispatch + 5);
+    if (relToTrampoline > 0x7FFFFFFFLL || relToTrampoline < -0x80000000LL) {
+        g_shared->dispatch_hook_error = 3;
+        return FALSE;
+    }
+
+    DWORD oldProt;
+    VirtualProtect(objDispatch, 5, PAGE_EXECUTE_READWRITE, &oldProt);
+    objDispatch[0] = 0xE9;
+    INT32 relJmp = (INT32)relToTrampoline;
+    memcpy(objDispatch + 1, &relJmp, 4);
+    /* pas de bourrage : 5 octets rediriges, jmp rel32 fait exactement 5 octets */
+    VirtualProtect(objDispatch, 5, oldProt, &oldProt);
+
+    return TRUE;
+}
+
 static DWORD WINAPI InitThread(LPVOID param) {
     (void)param;
     InitializeCriticalSection(&g_lock);
@@ -955,6 +1614,20 @@ static DWORD WINAPI InitThread(LPVOID param) {
             g_shared->coord_hook_error = 0;
             g_shared->gecko_hook_installed = 0;
             g_shared->gecko_hook_error = 0;
+            g_shared->no_reload = 0;
+            g_shared->no_reload_hook_installed = 0;
+            g_shared->no_reload_hook_error = 0;
+            g_shared->no_alerts = 0;
+            g_shared->no_alerts_hook_installed = 0;
+            g_shared->no_alerts_hook_error = 0;
+            g_shared->alert_mode_override = 0xFFFF;
+            g_shared->alert_override_hook_installed = 0;
+            g_shared->alert_override_hook_error = 0;
+            g_shared->combat_array_ptr = 0;
+            g_shared->combat_array_hook_installed = 0;
+            g_shared->combat_array_hook_error = 0;
+            g_shared->dispatch_hook_installed = 0;
+            g_shared->dispatch_hook_error = 0;
         }
     }
 
@@ -983,6 +1656,34 @@ static DWORD WINAPI InitThread(LPVOID param) {
 
     if (g_shared && install_gecko_one_shot_kill_hook()) {
         g_shared->gecko_hook_installed = 1;
+    }
+
+    if (g_shared && install_no_reload_hook()) {
+        g_shared->no_reload_hook_installed = 1;
+    }
+
+    if (g_shared && install_no_alerts_hook()) {
+        g_shared->no_alerts_hook_installed = 1;
+    }
+
+    /* Devenu redondant depuis que install_no_alerts_hook court-circuite
+     * directement mgs4.exe+B5F120 (la fonction source) pour le forcage
+     * d'etat - celui-ci n'agissait qu'en aval, sur UNE seule des deux
+     * valeurs ecrites a partir du resultat de cette fonction, et son
+     * effet ne devenait visible qu'au prochain appel reellement
+     * declenche par une detection (2026-10-01, demande utilisateur :
+     * "changer l'etat manuellement doit etre efficace directement").
+     * Garde pour reference/diagnostic (alert_override_hook_installed
+     * reste donc a 0, fonction toujours definie plus haut) mais plus
+     * installee par defaut. */
+    (void)install_alert_override_hook;
+
+    if (g_shared && install_combat_array_hook()) {
+        g_shared->combat_array_hook_installed = 1;
+    }
+
+    if (g_shared && install_alert_dispatch_hook()) {
+        g_shared->dispatch_hook_installed = 1;
     }
 
     /* patch_import_everywhere (pas juste le module principal) : le 1er

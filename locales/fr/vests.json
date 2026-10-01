@@ -1,0 +1,42 @@
+{
+  "45": {
+    "condition": "Disponible dès le début de la partie.",
+    "name": "Gilet - Kaki"
+  },
+  "46": {
+    "condition": "Disponible dès le début de la partie.",
+    "name": "Gilet - Olive"
+  },
+  "47": {
+    "condition": "Disponible dès le début de la partie.",
+    "name": "Gilet - Noir"
+  },
+  "48": {
+    "condition": "Disponible dès le début de la partie.",
+    "name": "Gilet - Gris"
+  },
+  "49": {
+    "condition": "Disponible dès le début de la partie.",
+    "name": "Gilet - Bleu marine"
+  },
+  "50": {
+    "condition": "Débloqué automatiquement en terminant le jeu une première fois.",
+    "name": "Gilet - Vert"
+  },
+  "51": {
+    "condition": "Débloqué automatiquement en terminant le jeu une première fois.",
+    "name": "Gilet - Bleu"
+  },
+  "52": {
+    "condition": "Débloqué automatiquement en terminant le jeu une première fois.",
+    "name": "Gilet - Rouge"
+  },
+  "53": {
+    "condition": "Débloqué automatiquement en terminant le jeu une première fois.",
+    "name": "Gilet - Orange"
+  },
+  "54": {
+    "condition": "Débloqué automatiquement en terminant le jeu une première fois.",
+    "name": "Gilet - Brun"
+  }
+}

@@ -1,4 +1,4 @@
-# MGS4 Trainer — V1.4
+# MGS4 Trainer — V2.0
 
 Trainer de recherche/édition mémoire live pour Metal Gear Solid 4
 (portage PC Steam) : lit et **écrit** en direct la mémoire du process

@@ -1,0 +1,26 @@
+{
+  "V2.0": {
+    "date": "October 1, 2026",
+    "description": "Trainer fully translated into English, with a language selector (automatic restart, choice remembered). New \"Force Alert State\" control in the Game State tab: a dropdown (Automatic/Normal/Alert/Evasion/Caution) that forces the in-game state via a code patch on the real state-dispatch function (found via a hardware breakpoint, not just a cached value like previous attempts), automatically reverting to the real state in Automatic mode. New \"No Alerts\" checkbox (short-circuits the function that triggers the alert state, with no effect on enemies' local detection). Game State tab reorganized into visual groups (Speed/Alert/Weapons & Combat) to stay readable with these additions."
+  },
+  "V1.4": {
+    "date": "September 27, 2026",
+    "description": "\"One Shot, One Kill\" for bosses extended to other Beauty and Beast Corps members (Raging Raven, Crying Wolf): automatic detection of the active boss and its own offsets, no manual setup needed. New dedicated hook for Gecko units (robots), separate from the one for human enemies - same \"One Shot, One Kill\" flag, no non-lethal variant (doesn't make sense for a robot). \"Credits and Sources\" section added to the README (RMLSNK, author of the community Cheat Engine table that several of this trainer's mechanisms are based on)."
+  },
+  "V1.3": {
+    "date": "September 27, 2026",
+    "description": "New \"Teleportation\" tab: save/load points (Snake's X/Y/Z position), instant teleport, manual editing of the 3 axes, export/import point files. Built on a new read-only hook (coordinates confirmed via a real in-game teleport) - experimental, the game can reject an invalid position (e.g. below the floor), and nothing guarantees a point saved in one act stays valid in another (risk of falling out of the level). \"One Shot, One Kill\" confirmed working in-game on standard enemies; extended to bosses via a different mechanism (damage in 10% steps, not a true instant kill) but unreliable - has already softlocked a boss fight requiring a checkpoint reload, use with caution."
+  },
+  "V1.2": {
+    "date": "September 26, 2026",
+    "description": "\"Game State\" tab: Infinite Ammo and No Reload freeze each weapon's real values (not an artificial fixed number), automatically follow the equipped weapon, with a dedicated fast reassertion cycle (50ms) for fast-firing weapons. New: \"One Shot, One Kill\" (+ Lethal/Non-lethal mode) - the project's first code-patch technique (not just a memory hook), ported from the community Cheat Engine script (MGS4.CT, aob Damage) - never applied to the player."
+  },
+  "V1.1": {
+    "date": "September 26, 2026",
+    "description": "\"Game State\" tab: new game speed slider (10% slow motion to 300% fast forward, centered on normal speed) and a \"Pause\" checkbox (full process freeze). Slow motion/fast forward injects a small DLL into mgs4.exe to fool its internal clock (the project's first code-injection technique, until now only external memory read/write) - confirmed working in-game both ways, see the README for technical details and related warnings."
+  },
+  "V1.0": {
+    "date": "September 25, 2026",
+    "description": "First release: live memory read/write (linear formula for weapon state, ammo/item/accessory tables) for every entry already identified on the MGS4SaveStats side. \"Game State\" tab (health, stamina, stress, Solid Eye battery, Metal Gear REX health as % sliders, lock for infinite health/stamina, read-only alert state). Stats tab reorganized into themed mini-tables, time fields shown as HH:MM:SS, dedicated dropdown for special items used. Ammo for a weapon that isn't \"Usable\" is hidden instead of showing the 65535 sentinel, automatically corrected to 10 as soon as the weapon becomes usable. \"Advanced mode\" hiding dangerous internal/debug items by default."
+  }
+}

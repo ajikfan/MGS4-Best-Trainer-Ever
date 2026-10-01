@@ -1,0 +1,16 @@
+{
+  "handgun": "Arme de poing",
+  "assault_rifle": "Fusil d'assaut",
+  "sniper_rifle": "Fusil Sniper",
+  "shotgun": "Fusil à pompe",
+  "smg": "Pistolet-mitrailleur",
+  "grenade_launcher": "Lance-grenade",
+  "machine_gun": "Mitrailleuse",
+  "rocket_launcher": "Lance-roquette",
+  "grenade": "Grenade",
+  "explosive": "Explosif",
+  "magazine": "Magazine",
+  "other": "Autre",
+  "accessory": "Accessoire",
+  "unidentified": "Non identifiée"
+}

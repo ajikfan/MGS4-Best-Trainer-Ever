@@ -1,0 +1,26 @@
+{
+  "V2.0": {
+    "date": "1 octobre 2026",
+    "description": "Trainer traduit intégralement en anglais, avec sélecteur de langue (redémarrage automatique, choix mémorisé). Nouveau système \"Forcer l'état d'alerte\" dans l'onglet État de jeu : liste déroulante (Automatique/Normal/Alerte/Évasion/Prudence) qui force l'état en jeu via un patch de code sur la vraie fonction de diffusion (trouvée par point d'arrêt matériel, pas juste une valeur de cache comme les tentatives précédentes), avec retour automatique sur l'état réel en mode Automatique. Nouvelle case \"Pas d'alerte\" (court-circuite la fonction qui déclenche le passage en alerte, sans effet sur la détection locale des ennemis). Onglet État de jeu réorganisé en groupes visuels (Vitesse/Alerte/Armes et combat) pour rester lisible avec l'ajout de ces fonctionnalités."
+  },
+  "V1.4": {
+    "date": "27 septembre 2026",
+    "description": "\"Un coup, un mort\" boss étendu à d'autres Beauty and Beast Corps (Raging Raven, Crying Wolf) : détection automatique du boss actif et de ses offsets propres, sans configuration manuelle. Nouveau hook dédié aux Gecko (robots), séparé de celui des ennemis humains - même flag \"Un coup, un mort\", pas de variante non létale (n'a pas de sens pour un robot). Section \"Crédits et sources\" ajoutée au README (RMLSNK, auteur de la table Cheat Engine communautaire dont s'inspirent plusieurs mécanismes de ce trainer)."
+  },
+  "V1.3": {
+    "date": "27 septembre 2026",
+    "description": "Nouvel onglet \"Téléportation\" : enregistre/charge des points (position X/Y/Z de Snake), téléportation immédiate, édition manuelle des 3 axes, export/import de fichiers de points. Repose sur un nouveau hook de lecture seule (coordonnées confirmées par téléportation réelle en jeu) - expérimental, le jeu peut annuler une position invalide (ex. sous le sol), et rien ne garantit qu'un point enregistré dans un acte reste valide dans un autre (risque de tomber hors du niveau). \"Un coup, un mort\" confirmé fonctionnel en jeu sur les ennemis standards ; étendu aux boss via un mécanisme différent (dégâts par paliers de 10%, pas une vraie mise à mort instantanée) mais peu fiable - a déjà bloqué un combat de boss nécessitant un rechargement de checkpoint, à utiliser en connaissance de cause."
+  },
+  "V1.2": {
+    "date": "26 septembre 2026",
+    "description": "Onglet \"État de jeu\" : Munitions infinies et Pas de rechargement figent les vraies valeurs de chaque arme (pas un nombre fixe artificiel), suivent l'arme équipée automatiquement, réassertion rapide dédiée (50ms) pour les armes qui tirent vite. Nouveau : \"Un coup, un mort\" (+ mode Létal/Non létal) - première technique de patch de code du projet (pas juste hook mémoire), portée du script Cheat Engine communautaire (MGS4.CT, aob Damage) - jamais appliqué au joueur."
+  },
+  "V1.1": {
+    "date": "26 septembre 2026",
+    "description": "Onglet \"État de jeu\" : nouveau curseur de vitesse du jeu (ralenti 10% à accéléré 300%, centré sur la vitesse normale) et case \"Pause\" (gel complet du process). Le ralenti/accéléré injecte une petite DLL dans mgs4.exe pour tromper son horloge interne (première technique d'injection de code du projet, jusque-là uniquement lecture/écriture mémoire externe) - confirmé fonctionnel en jeu dans les deux sens, voir le README pour le détail technique et les avertissements associés."
+  },
+  "V1.0": {
+    "date": "25 septembre 2026",
+    "description": "Première publication : lecture/écriture mémoire live (formule linéaire pour l'état des armes, tables munitions/objets/accessoires) pour toutes les entrées déjà identifiées côté MGS4SaveStats. Onglet \"État de jeu\" (vie, stamina, stress, batterie Solid Eye, santé Metal Gear REX en curseur %, verrouillage pour vie/endurance infinies, état d'alerte en lecture seule). Onglet Stats réorganisé en mini-tables par thème, champs de temps en HH:MM:SS, select dédié pour les objets spéciaux utilisés. Les munitions d'une arme non \"Utilisable\" sont masquées plutôt que d'afficher la sentinelle 65535, corrigée automatiquement à 10 dès que l'arme devient utilisable. \"Mode avancé\" masquant par défaut les objets internes/de debug dangereux."
+  }
+}
