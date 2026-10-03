@@ -1300,10 +1300,11 @@ class SpeedController:
         for _attempt in range(20):
             handle = kernel32.OpenFileMappingW(FILE_MAP_ALL_ACCESS, False, SPEEDHACK_SHM_NAME)
             if handle:
-                # 48 (pas 22) : marge de securite sur l'alignement/padding
-                # eventuel du struct SharedState cote C, sans impact ici
+                # 256 : marge de securite sur l'alignement/padding
+                # eventuel du struct SharedState cote C (actuellement 204
+                # octets avec reg_dump/reg_dump_seq), sans impact ici
                 # puisqu'on adresse chaque champ par son propre offset.
-                view = kernel32.MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, 80)
+                view = kernel32.MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, 256)
                 kernel32.CloseHandle(handle)  # la vue mappee reste valide, plus besoin du handle
                 if view:
                     self.shm_view = view

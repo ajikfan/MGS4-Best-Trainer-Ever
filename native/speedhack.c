@@ -62,7 +62,7 @@
  * uint8 coord_hook_error, [62] uint8 gecko_hook_installed, [63] uint8
  * gecko_hook_error - meme principe que damage_hook_installed/error mais
  * pour install_gecko_one_shot_kill_hook (instruction de degats separee,
- * propre aux Gecko, partage le flag one_shot_kill mais pas non_lethal -
+ * commune aux Gecko et aux tanks, partage le flag one_shot_kill mais pas non_lethal -
  * "non letal" n'a pas de sens pour un robot). [64] uint8 no_reload (1 =
  * actif), [65] uint8 no_reload_hook_installed, [66] uint8
  * no_reload_hook_error - patch de code (pas de reassertion en boucle
@@ -93,7 +93,54 @@
  * install_alert_override_hook (desactive, agissait trop en aval sur une
  * simple valeur de cache), celui-ci intercepte le PARAMETRE edx a
  * l'entree de la fonction qui propage reellement le changement partout,
- * bien plus susceptible d'avoir un effet visible. */
+ * bien plus susceptible d'avoir un effet visible. [88] uint64
+ * reg_dump[14] (rbx,rcx,rdx,rsi,rbp,rsp,r8,r9,r10,r11,r12,r13,r14,r15 -
+ * dans cet ordre - captures brutes de TOUS les registres generaux au
+ * meme point d'accroche que last_damaged_actor, diagnostic uniquement,
+ * ajoute 2026-10-02 pour chercher un pointeur vers l'arme/projectile a
+ * l'origine d'un coup, rdi deja couvert par last_damaged_actor), [192]
+ * uint32 reg_dump_seq (incremente a chaque coup, pour detecter cote
+ * Python qu'une nouvelle capture est disponible sans comparer les 14
+ * valeurs une a une). uint64 damage_hook_addr (adresse absolue du site
+ * patche - diagnostic, pose un breakpoint x64dbg directement dessus
+ * sans avoir a rechercher le motif, ce qui ne marche plus une fois le
+ * hook installe puisque les octets originaux sont alors deja ecrases).
+ * uint8 railgun_instant_kill (1 = actif - force un coup fatal sur
+ * chaque tir de Rail Gun, quelle que soit sa charge reelle. Meme
+ * mecanisme que one_shot_kill mais conditionne sur l'arme active
+ * (r15d==0x2d a l'entree du hook de degats) plutot qu'un reglage
+ * global, jamais applique au joueur). uint8 railgun_force_charge (1 =
+ * actif - la vraie solution trouvee le 2026-10-02 : le niveau de
+ * charge du Rail Gun est encode dans 3 bits (0b001/0b010/0b100,
+ * paliers 1/2/3) aux bits 24-26 du dword [victime+0x10C], le MEME
+ * champ dont les 9 bits bas donnent deja l'ID d'arme - voir
+ * install_railgun_force_charge_hook, qui intercepte ce champ bien PLUS
+ * TOT que le hook de degats (chez l'appelant, avant que les degats
+ * ne soient calcules a partir de la charge - patcher au hook de
+ * degats existant est trop tard, la valeur a deja ete consommee).
+ * uint8 force_charge_hook_installed, uint8 force_charge_hook_error
+ * (memes codes que damage_hook_error). uint64 probe_rsi/probe_rdi/
+ * probe_rbx/probe_r12, uint32 probe_seq, uint8 probe_hook_installed/
+ * probe_hook_error - diagnostic temporaire (2026-10-02) : dump brut de
+ * ces 4 registres juste avant `mov ecx,r12d` / `call 633F70` (l'appel
+ * qui calcule les degats reels), pour verifier ce que contient r12 a
+ * cet instant precis - le hook sur [rsi+10C] force bien la memoire
+ * mais n'a aucun effet visible en jeu, donc r12 ne semble pas (ou pas
+ * seulement) derive de cette lecture.
+ *
+ * Tentative (retiree le 2026-10-02, a cause un crash) : capturer un
+ * last_gecko_actor au hook Gecko (install_gecko_one_shot_kill_hook,
+ * ecrit [r9+0x314]) pour voir si les tanks y passent - resultat
+ * inconclusif (gecko_actor jamais mis a jour par un tir sur un tank)
+ * et le jeu a plante peu apres, cause probable mais non confirmee -
+ * retire plutot que risque.
+ *
+ * uint8 tank_whitelist_hook_installed/error, uint8
+ * tank_flags_hook_installed/error (2026-10-03) - diagnostics des deux
+ * hooks qui etendent one_shot_kill aux tanks touches par n'importe
+ * quelle arme, voir install_tank_whitelist_hook et
+ * install_tank_flags_hook. Au-dela des 256 premiers octets mappes par
+ * live_trainer.py : lisibles seulement en elargissant la vue cote Python. */
 #pragma pack(push, 1)
 typedef struct {
     double speed;
@@ -130,6 +177,24 @@ typedef struct {
     UINT8 combat_array_hook_error;
     UINT8 dispatch_hook_installed;
     UINT8 dispatch_hook_error;
+    UINT64 reg_dump[14];
+    UINT32 reg_dump_seq;
+    UINT64 damage_hook_addr;
+    UINT8 railgun_instant_kill;
+    UINT8 railgun_force_charge;
+    UINT8 force_charge_hook_installed;
+    UINT8 force_charge_hook_error;
+    UINT64 probe_rsi;
+    UINT64 probe_rdi;
+    UINT64 probe_rbx;
+    UINT64 probe_r12;
+    UINT32 probe_seq;
+    UINT8 probe_hook_installed;
+    UINT8 probe_hook_error;
+    UINT8 tank_whitelist_hook_installed;
+    UINT8 tank_whitelist_hook_error;
+    UINT8 tank_flags_hook_installed;
+    UINT8 tank_flags_hook_error;
 } SharedState;
 #pragma pack(pop)
 
@@ -451,6 +516,7 @@ static BOOL install_one_shot_kill_hook(void) {
         g_shared->damage_hook_error = 1;
         return FALSE;
     }
+    g_shared->damage_hook_addr = (UINT64)objDamage;
 
     BYTE *trampoline = alloc_near(objDamage, 4096);
     if (!trampoline) {
@@ -461,8 +527,54 @@ static BOOL install_one_shot_kill_hook(void) {
     UINT64 oneShotAddr = (UINT64)&g_shared->one_shot_kill;
     UINT64 nonLethalAddr = (UINT64)&g_shared->non_lethal;
     UINT64 lastActorAddr = (UINT64)&g_shared->last_damaged_actor;
-    BYTE code[98];
+    UINT64 regDumpAddr = (UINT64)&g_shared->reg_dump[0];
+    UINT64 regSeqAddr = (UINT64)&g_shared->reg_dump_seq;
+    BYTE code[320];
     SIZE_T p = 0;
+
+    /* push rax ; mov rax,&reg_dump ; mov [rax+N],<reg> pour rbx,rcx,rdx,
+     * rsi,rbp,rsp,r8..r15 (14 registres, dans cet ordre) ; mov
+     * rax,&reg_dump_seq ; inc dword ptr [rax] ; pop rax - lecture pure
+     * (aucun registre source n'est modifie par un mov vers la memoire),
+     * ne touche ni les flags utilises plus loin (tous recalcules par
+     * leurs propres cmp) ni rdi/ecx dont la suite du trampoline depend.
+     * Objectif : chercher un pointeur vers l'arme/projectile a l'origine
+     * d'un coup parmi des registres encore non inspectes (rdi seul est
+     * deja couvert par last_damaged_actor ci-dessous). */
+    code[p++] = 0x50;
+    code[p++] = 0x48;
+    code[p++] = 0xB8;
+    memcpy(&code[p], &regDumpAddr, 8);
+    p += 8;
+    {
+        static const BYTE regMovs[14][4] = {
+            {0x48, 0x89, 0x58, 0x00}, /* rbx  -> +0  */
+            {0x48, 0x89, 0x48, 0x08}, /* rcx  -> +8  */
+            {0x48, 0x89, 0x50, 0x10}, /* rdx  -> +16 */
+            {0x48, 0x89, 0x70, 0x18}, /* rsi  -> +24 */
+            {0x48, 0x89, 0x68, 0x20}, /* rbp  -> +32 */
+            {0x48, 0x89, 0x60, 0x28}, /* rsp  -> +40 */
+            {0x4C, 0x89, 0x40, 0x30}, /* r8   -> +48 */
+            {0x4C, 0x89, 0x48, 0x38}, /* r9   -> +56 */
+            {0x4C, 0x89, 0x50, 0x40}, /* r10  -> +64 */
+            {0x4C, 0x89, 0x58, 0x48}, /* r11  -> +72 */
+            {0x4C, 0x89, 0x60, 0x50}, /* r12  -> +80 */
+            {0x4C, 0x89, 0x68, 0x58}, /* r13  -> +88 */
+            {0x4C, 0x89, 0x70, 0x60}, /* r14  -> +96 */
+            {0x4C, 0x89, 0x78, 0x68}, /* r15  -> +104 */
+        };
+        for (int i = 0; i < 14; i++) {
+            memcpy(&code[p], regMovs[i], 4);
+            p += 4;
+        }
+    }
+    code[p++] = 0x48;
+    code[p++] = 0xB8;
+    memcpy(&code[p], &regSeqAddr, 8);
+    p += 8;
+    code[p++] = 0xFF; /* inc dword ptr [rax] */
+    code[p++] = 0x00;
+    code[p++] = 0x58; /* pop rax */
 
     /* push rax ; mov rax,&last_damaged_actor ; mov [rax],rdi ; pop rax -
      * diagnostic : trace le dernier personnage touche (avant le filtre
@@ -476,6 +588,63 @@ static BOOL install_one_shot_kill_hook(void) {
     code[p++] = 0x89;
     code[p++] = 0x38; /* mov [rax],rdi (ModRM: mod=00,reg=rdi(111),rm=rax(000)) */
     code[p++] = 0x58;
+
+    /* Rail Gun instant kill (ajoute 2026-10-02, demande utilisateur - a
+     * defaut d'avoir trouve la valeur de charge live malgre une longue
+     * investigation ce soir, voir notes.md) : bloc independant insere
+     * AVANT tout le reste (propre copie du filtre d'equipe, jamais
+     * applique au joueur) - saute vers SKIP_RG (= le debut du code
+     * original ci-dessous, inchange) si equipe joueur, si l'arme active
+     * (r15d, voir reg_dump plus haut) n'est pas le Rail Gun (0x2d) ou si
+     * le flag railgun_instant_kill est desactive. Reutilise le meme
+     * mecanisme que one_shot_kill (xor ecx,ecx avant l'ecriture
+     * originale) mais conditionne sur l'arme plutot qu'un reglage
+     * global. Tous les sauts ci-dessous sont patches dynamiquement (pas
+     * de constantes codees en dur) puisqu'ils retombent au milieu d'un
+     * bloc existant dont les distances hardcodees ne doivent pas etre
+     * perturbees par une insertion. */
+    UINT64 railgunKillAddr = (UINT64)&g_shared->railgun_instant_kill;
+    SIZE_T rgSkipPatch[3];
+    int rgSkipCount = 0;
+    SIZE_T rgPassJmpPatch;
+
+    code[p++] = 0x83; /* cmp dword ptr [rdi+0x7C],0 */
+    code[p++] = 0x7F;
+    code[p++] = (BYTE)DAMAGE_TARGET_TEAM_OFFSET;
+    code[p++] = 0x00;
+    code[p++] = 0x74; /* je SKIP_RG (rel8, patche plus bas) */
+    rgSkipPatch[rgSkipCount++] = p;
+    code[p++] = 0;
+
+    code[p++] = 0x41; code[p++] = 0x81; code[p++] = 0xFF; /* cmp r15d,0x2d */
+    { INT32 imm = 0x2d; memcpy(&code[p], &imm, 4); p += 4; }
+    code[p++] = 0x75; /* jne SKIP_RG */
+    rgSkipPatch[rgSkipCount++] = p;
+    code[p++] = 0;
+
+    code[p++] = 0x50; /* push rax */
+    code[p++] = 0x48; code[p++] = 0xB8;
+    memcpy(&code[p], &railgunKillAddr, 8);
+    p += 8;
+    code[p++] = 0x0F; code[p++] = 0xB6; code[p++] = 0x00; /* movzx eax,byte[rax] */
+    code[p++] = 0x58; /* pop rax */
+    code[p++] = 0x3C; code[p++] = 0x01; /* cmp al,1 */
+    code[p++] = 0x75; /* jne SKIP_RG */
+    rgSkipPatch[rgSkipCount++] = p;
+    code[p++] = 0;
+
+    code[p++] = 0x31; code[p++] = 0xC9; /* xor ecx,ecx */
+    code[p++] = 0xE9; /* jmp PASS (rel32, patche plus bas une fois PASS connu) */
+    rgPassJmpPatch = p;
+    p += 4;
+
+    /* SKIP_RG : */
+    {
+        SIZE_T skipTarget = p;
+        for (int i = 0; i < rgSkipCount; i++) {
+            code[rgSkipPatch[i]] = (BYTE)(skipTarget - (rgSkipPatch[i] + 1));
+        }
+    }
 
     /* cmp dword ptr [rdi+0x7C], 0 */
     code[p++] = 0x83;
@@ -555,6 +724,10 @@ static BOOL install_one_shot_kill_hook(void) {
     }
     /* PASS (offset87) : instruction originale (6 octets copies tels quels
      * depuis le motif trouve, plutot que recodes a la main). */
+    {
+        INT32 rel = (INT32)(p - (rgPassJmpPatch + 4));
+        memcpy(&code[rgPassJmpPatch], &rel, 4);
+    }
     memcpy(&code[p], objDamage, 6);
     p += 6;
     /* jmp BACK (vers objDamage+6, suite du code original jamais modifiee) */
@@ -586,6 +759,234 @@ static BOOL install_one_shot_kill_hook(void) {
     memcpy(objDamage + 1, &relJmp, 4);
     objDamage[5] = 0x90; /* nop de bourrage : l'instruction remplacee fait 6 octets, jmp rel32 en fait 5 */
     VirtualProtect(objDamage, 6, oldProt, &oldProt);
+
+    return TRUE;
+}
+
+/* Hook sur mov ebp,dword ptr[rsi+0x10C] chez l'appelant de la fonction de
+ * degats - PAS le meme point d'accroche que install_one_shot_kill_hook
+ * (trop tard : a ce moment-la les degats bases sur la charge ont deja ete
+ * calcules et passes en parametre). Trouve le 2026-10-02 par remontee
+ * manuelle du code dans x64dbg : [rsi+0x10C] est le MEME champ que celui
+ * lu plus tard par le hook de degats (9 bits bas = ID d'arme, deja connu),
+ * mais ses bits 24-26 encodent le niveau de charge en bitmask
+ * (0b001/0b010/0b100 = palier 1/2/3, confirme par 3 tirs controles). Si
+ * railgun_force_charge est actif et que l'arme est le Rail Gun (meme
+ * masque &0x1FF que pour l'ID d'arme), force ces 3 bits a 0b100 (palier
+ * max) juste apres que le jeu l'ait lu dans r12d - laisse le reste du
+ * calcul (table de degats par arme, clamp) se faire normalement avec
+ * cette valeur forcee, plutot que d'ecraser le resultat final.
+ *
+ * CORRECTION 2026-10-02 (2e tentative) : la 1ere version accrochait sur
+ * `mov ebp,[rsi+10C]` (une relecture plus tardive du meme champ, utilisee
+ * pour un test sans rapport) - sans effet en jeu car r12d, le VRAI
+ * vecteur vers le calcul des degats (voir mov ecx,r12d juste avant
+ * call 633F70), est deja charge PLUS TOT via `mov r12d,[rsi+10C]`,
+ * retrouve en remontant le code a la main dans x64dbg.286 octets avant
+ * la "fausse" lecture. Accroche maintenant directement sur cette
+ * lecture-la.
+ *
+ * Disposition du trampoline :
+ *   0   <7 octets originaux copies tels quels : mov r12d,[rsi+10C]>
+ *   7   push rax ; mov rax,&railgun_force_charge ; movzx eax,[rax] ;
+ *       cmp al,1 ; pop rax ; jne SKIP
+ *       mov eax,r12d ; and eax,1FF ; cmp eax,2D ; jne SKIP
+ *       and r12d,F8FFFFFF ; or r12d,04000000
+ *       mov dword ptr[rsi+10C],r12d (coherence, voir plus bas)
+ *  SKIP:
+ *       jmp BACK (vers le motif trouve + 7) */
+static BOOL install_railgun_force_charge_hook(void) {
+    HMODULE base = GetModuleHandle(NULL);
+    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
+    SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
+
+    /* mov r12d,dword ptr[rsi+10C] ; mov ebp,r12d - les 3 octets de la 2e
+     * instruction servent juste de signature supplementaire, non modifies. */
+    static const BYTE pattern[] = {0x44, 0x8B, 0xA6, 0x0C, 0x01, 0x00, 0x00, 0x41, 0x8B, 0xEC};
+    static const char mask[] = "xxxxxxxxxx";
+
+    BYTE *objChargeRead = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
+    if (!objChargeRead) {
+        g_shared->force_charge_hook_error = 1;
+        return FALSE;
+    }
+
+    BYTE *trampoline = alloc_near(objChargeRead, 4096);
+    if (!trampoline) {
+        g_shared->force_charge_hook_error = 2;
+        return FALSE;
+    }
+
+    UINT64 forceChargeAddr = (UINT64)&g_shared->railgun_force_charge;
+    BYTE code[128];
+    SIZE_T p = 0;
+
+    /* instruction originale (7 octets) : mov r12d,dword ptr [rsi+10C] */
+    memcpy(&code[p], objChargeRead, 7);
+    p += 7;
+
+    code[p++] = 0x50; /* push rax */
+    code[p++] = 0x48;
+    code[p++] = 0xB8;
+    memcpy(&code[p], &forceChargeAddr, 8);
+    p += 8;
+    code[p++] = 0x0F; code[p++] = 0xB6; code[p++] = 0x00; /* movzx eax,byte[rax] */
+    code[p++] = 0x3C; code[p++] = 0x01; /* cmp al,1 */
+    code[p++] = 0x58; /* pop rax */
+    code[p++] = 0x75; /* jne SKIP */
+    SIZE_T skip1 = p;
+    code[p++] = 0;
+
+    code[p++] = 0x44; code[p++] = 0x89; code[p++] = 0xE0; /* mov eax,r12d */
+    code[p++] = 0x25; /* and eax,1FF */
+    { UINT32 imm = 0x1FF; memcpy(&code[p], &imm, 4); p += 4; }
+    code[p++] = 0x3D; /* cmp eax,2D */
+    { UINT32 imm = 0x2D; memcpy(&code[p], &imm, 4); p += 4; }
+    code[p++] = 0x75; /* jne SKIP */
+    SIZE_T skip2 = p;
+    code[p++] = 0;
+
+    code[p++] = 0x41; code[p++] = 0x81; code[p++] = 0xE4; /* and r12d,F8FFFFFF */
+    { UINT32 imm = 0xF8FFFFFF; memcpy(&code[p], &imm, 4); p += 4; }
+    code[p++] = 0x41; code[p++] = 0x81; code[p++] = 0xCC; /* or r12d,04000000 */
+    { UINT32 imm = 0x04000000; memcpy(&code[p], &imm, 4); p += 4; }
+    /* reecrit aussi en memoire : la 2e lecture plus tardive (mov ebp,
+     * [rsi+10C], notre ancien point d'accroche) la relit depuis la
+     * memoire, pas depuis r12d - sans cette ecriture elle verrait encore
+     * l'ancienne valeur. mov dword ptr[rsi+10C],r12d */
+    code[p++] = 0x44; code[p++] = 0x89; code[p++] = 0xA6;
+    { UINT32 imm = 0x10C; memcpy(&code[p], &imm, 4); p += 4; }
+
+    /* SKIP: */
+    {
+        SIZE_T skipTarget = p;
+        code[skip1] = (BYTE)(skipTarget - (skip1 + 1));
+        code[skip2] = (BYTE)(skipTarget - (skip2 + 1));
+    }
+
+    /* jmp BACK (vers objChargeRead+7) */
+    code[p++] = 0xE9;
+    {
+        BYTE *nextInstrAddr = trampoline + p + 4;
+        INT64 rel64 = (INT64)(objChargeRead + 7) - (INT64)nextInstrAddr;
+        if (rel64 > 0x7FFFFFFFLL || rel64 < -0x80000000LL) {
+            g_shared->force_charge_hook_error = 3;
+            return FALSE;
+        }
+        INT32 rel = (INT32)rel64;
+        memcpy(&code[p], &rel, 4);
+        p += 4;
+    }
+
+    memcpy(trampoline, code, p);
+
+    INT64 relToTrampoline = (INT64)trampoline - (INT64)(objChargeRead + 5);
+    if (relToTrampoline > 0x7FFFFFFFLL || relToTrampoline < -0x80000000LL) {
+        g_shared->force_charge_hook_error = 3;
+        return FALSE;
+    }
+
+    DWORD oldProt;
+    VirtualProtect(objChargeRead, 7, PAGE_EXECUTE_READWRITE, &oldProt);
+    objChargeRead[0] = 0xE9;
+    INT32 relJmp = (INT32)relToTrampoline;
+    memcpy(objChargeRead + 1, &relJmp, 4);
+    /* instruction remplacee = 7 octets, jmp rel32 = 5, 2 octets de bourrage */
+    objChargeRead[5] = 0x90;
+    objChargeRead[6] = 0x90;
+    VirtualProtect(objChargeRead, 7, oldProt, &oldProt);
+
+    return TRUE;
+}
+
+/* Hook de diagnostic temporaire (2026-10-02) sur `mov edx,ebx ; mov
+ * ecx,r12d` juste avant `call 633F70` (la fonction qui calcule reellement
+ * les degats) - dump brut de rsi/rdi/rbx/r12 a cet instant precis pour
+ * verifier d'ou vient r12 (le hook sur [rsi+10C] force bien la memoire
+ * mais n'a aucun effet visible, donc r12 ne semble pas en deriver
+ * directement a cet endroit). Lecture seule, ne modifie rien.
+ *
+ * Disposition du trampoline :
+ *   0   <5 octets originaux : mov edx,ebx ; mov ecx,r12d>
+ *   5   push rax ; mov rax,&probe_rsi ; mov [rax],rsi ; mov [rax+8],rdi ;
+ *       mov [rax+10],rbx ; mov [rax+18],r12 ; mov rax,&probe_seq ;
+ *       inc dword[rax] ; pop rax
+ *       jmp BACK (vers le motif trouve + 5) */
+static BOOL install_r12_probe_hook(void) {
+    HMODULE base = GetModuleHandle(NULL);
+    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
+    SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
+
+    static const BYTE pattern[] = {0x8B, 0xD3, 0x41, 0x8B, 0xCC, 0xE8};
+    static const char mask[] = "xxxxxx";
+
+    BYTE *objProbe = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
+    if (!objProbe) {
+        g_shared->probe_hook_error = 1;
+        return FALSE;
+    }
+
+    BYTE *trampoline = alloc_near(objProbe, 4096);
+    if (!trampoline) {
+        g_shared->probe_hook_error = 2;
+        return FALSE;
+    }
+
+    UINT64 rsiAddr = (UINT64)&g_shared->probe_rsi;
+    UINT64 seqAddr = (UINT64)&g_shared->probe_seq;
+    BYTE code[96];
+    SIZE_T p = 0;
+
+    /* instruction originale (5 octets) : mov edx,ebx ; mov ecx,r12d */
+    memcpy(&code[p], objProbe, 5);
+    p += 5;
+
+    code[p++] = 0x50; /* push rax */
+    code[p++] = 0x48;
+    code[p++] = 0xB8;
+    memcpy(&code[p], &rsiAddr, 8);
+    p += 8;
+    code[p++] = 0x48; code[p++] = 0x89; code[p++] = 0x30;        /* mov [rax],rsi */
+    code[p++] = 0x48; code[p++] = 0x89; code[p++] = 0x78; code[p++] = 0x08;  /* mov [rax+8],rdi */
+    code[p++] = 0x48; code[p++] = 0x89; code[p++] = 0x58; code[p++] = 0x10; /* mov [rax+10],rbx */
+    code[p++] = 0x4C; code[p++] = 0x89; code[p++] = 0x60; code[p++] = 0x18; /* mov [rax+18],r12 */
+    code[p++] = 0x48;
+    code[p++] = 0xB8;
+    memcpy(&code[p], &seqAddr, 8);
+    p += 8;
+    code[p++] = 0xFF; code[p++] = 0x00; /* inc dword ptr [rax] */
+    code[p++] = 0x58; /* pop rax */
+
+    /* jmp BACK (vers objProbe+5) */
+    code[p++] = 0xE9;
+    {
+        BYTE *nextInstrAddr = trampoline + p + 4;
+        INT64 rel64 = (INT64)(objProbe + 5) - (INT64)nextInstrAddr;
+        if (rel64 > 0x7FFFFFFFLL || rel64 < -0x80000000LL) {
+            g_shared->probe_hook_error = 3;
+            return FALSE;
+        }
+        INT32 rel = (INT32)rel64;
+        memcpy(&code[p], &rel, 4);
+        p += 4;
+    }
+
+    memcpy(trampoline, code, p);
+
+    INT64 relToTrampoline = (INT64)trampoline - (INT64)(objProbe + 5);
+    if (relToTrampoline > 0x7FFFFFFFLL || relToTrampoline < -0x80000000LL) {
+        g_shared->probe_hook_error = 3;
+        return FALSE;
+    }
+
+    DWORD oldProt;
+    VirtualProtect(objProbe, 5, PAGE_EXECUTE_READWRITE, &oldProt);
+    objProbe[0] = 0xE9;
+    INT32 relJmp = (INT32)relToTrampoline;
+    memcpy(objProbe + 1, &relJmp, 4);
+    VirtualProtect(objProbe, 5, oldProt, &oldProt);
 
     return TRUE;
 }
@@ -858,9 +1259,16 @@ static BOOL install_coord_tracker_hook(void) {
     return TRUE;
 }
 
-/* One-shot-kill pour les Gecko (robots bipedes) - instruction de degats
- * SEPARATE de celle des ennemis humains (install_one_shot_kill_hook),
- * motif repris du script CE communautaire "aob Damage Gecko". Meme
+/* One-shot-kill pour les Gecko (robots bipedes) ET les tanks - instruction
+ * de degats SEPARATE de celle des ennemis humains (install_one_shot_kill_hook),
+ * motif repris du script CE communautaire "aob Damage Gecko".
+ * Precision 2026-10-03 : ce motif ne correspond qu'a un seul endroit
+ * (mgs4.exe+B22082 cette version), la fonction de degats commune
+ * (B21FF0 : r9/rcx = objet de vie, edx = degats, [r9+318] = vie max)
+ * utilisee aussi bien par les Gecko que par les tanks - confirme en jeu
+ * sur les deux. Pour les tanks, voir aussi install_tank_whitelist_hook
+ * et install_tank_flags_hook, sans lesquels seules 4 armes atteignent
+ * cette fonction. Meme
  * mecanisme (ecrase ecx par 0 juste avant l'ecriture de vie), mais :
  *  - acteur cible dans r9 (pas rdi), instruction 7 octets (pas 6, prefixe
  *    REX.B necessaire pour adresser r9) ;
@@ -968,6 +1376,216 @@ static BOOL install_gecko_one_shot_kill_hook(void) {
     objDamageGecko[6] = 0x90;
     VirtualProtect(objDamageGecko, 7, oldProt, &oldProt);
 
+    return TRUE;
+}
+
+/* Ecrit un rel32 de code[at] (fin d'instruction = trampoline+at+4) vers
+ * target - FALSE si hors de portee. Utilise par les hooks tanks. */
+static BOOL put_rel32(BYTE *code, SIZE_T at, BYTE *trampoline, BYTE *target) {
+    INT64 rel64 = (INT64)target - (INT64)(trampoline + at + 4);
+    if (rel64 > 0x7FFFFFFFLL || rel64 < -0x80000000LL) {
+        return FALSE;
+    }
+    INT32 rel = (INT32)rel64;
+    memcpy(&code[at], &rel, 4);
+    return TRUE;
+}
+
+/* Remplace `len` octets a `at` par jmp rel32 vers trampoline (+ nops). */
+static BOOL patch_jmp(BYTE *at, SIZE_T len, BYTE *trampoline) {
+    INT64 rel64 = (INT64)trampoline - (INT64)(at + 5);
+    if (rel64 > 0x7FFFFFFFLL || rel64 < -0x80000000LL) {
+        return FALSE;
+    }
+    DWORD oldProt;
+    VirtualProtect(at, len, PAGE_EXECUTE_READWRITE, &oldProt);
+    at[0] = 0xE9;
+    INT32 rel = (INT32)rel64;
+    memcpy(at + 1, &rel, 4);
+    for (SIZE_T i = 5; i < len; i++) {
+        at[i] = 0x90;
+    }
+    VirtualProtect(at, len, oldProt, &oldProt);
+    return TRUE;
+}
+
+/* Tanks, partie 1/2 (2026-10-03) : liste blanche d'armes du callback de
+ * collision des tanks (mgs4.exe+102F0C0 cette version, le callback que
+ * pointent les 11 colliders du tank). Ce callback n'ajoute un coup dans
+ * la liste de coups du tank ([acteur+0x438]) que si l'ID d'arme vaut
+ * 0x28, 0x2D, 0x68 ou 0x99 (`sub ebx,28 ; je ACCEPT ; sub ebx,5 ; je ...`)
+ * - toute autre arme (balles, etc.) est ignoree avant meme d'etre
+ * enregistree, d'ou l'absence totale d'effet de one_shot_kill.
+ * Si one_shot_kill est actif ET que l'attaquant (rsi) est le joueur
+ * (meme test que le jeu juste au-dessus : `call 8DA180 ; cmp rsi,[rax]`),
+ * saute directement a ACCEPT (verification de trajectoire puis ajout du
+ * coup), sinon execute la liste blanche normalement.
+ *
+ * Trampoline :
+ *   push rax ; push rcx
+ *   mov rax,&one_shot_kill ; movzx eax,[rax] ; cmp al,1 ; jne ORIG
+ *   mov rax,<fonction joueur> ; call rax ; cmp rsi,[rax] ; jne ORIG
+ *   pop rcx ; pop rax ; jmp ACCEPT
+ *  ORIG:
+ *   pop rcx ; pop rax ; sub ebx,28 ; je ACCEPT ; jmp BACK (motif+5) */
+static BOOL install_tank_whitelist_hook(void) {
+    HMODULE base = GetModuleHandle(NULL);
+    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
+    SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
+
+    /* sub ebx,28 ; je +0F ; sub ebx,5 ; je +0A ; sub ebx,3B ; je +05 ;
+     * cmp ebx,31 ; jne +5E - unique dans le module. */
+    static const BYTE pattern[] = {0x83, 0xEB, 0x28, 0x74, 0x0F, 0x83, 0xEB, 0x05, 0x74, 0x0A,
+                                   0x83, 0xEB, 0x3B, 0x74, 0x05, 0x83, 0xFB, 0x31, 0x75};
+    static const char mask[] = "xxxxxxxxxxxxxxxxxxx";
+
+    BYTE *objWl = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
+    if (!objWl) {
+        g_shared->tank_whitelist_hook_error = 1;
+        return FALSE;
+    }
+    BYTE *accept = objWl + 5 + 0x0F;
+
+    /* Fonction qui renvoie le pointeur vers le joueur : cible du
+     * `call 8DA180` situe 0x28 octets avant le motif (verifie). */
+    BYTE *callSite = objWl - 0x28;
+    if (callSite[0] != 0xE8) {
+        g_shared->tank_whitelist_hook_error = 4;
+        return FALSE;
+    }
+    INT32 callRel;
+    memcpy(&callRel, callSite + 1, 4);
+    UINT64 playerFn = (UINT64)(callSite + 5 + callRel);
+
+    BYTE *trampoline = alloc_near(objWl, 4096);
+    if (!trampoline) {
+        g_shared->tank_whitelist_hook_error = 2;
+        return FALSE;
+    }
+
+    UINT64 oneShotAddr = (UINT64)&g_shared->one_shot_kill;
+    BYTE code[96];
+    SIZE_T p = 0;
+    BOOL ok = TRUE;
+
+    code[p++] = 0x50; /* push rax */
+    code[p++] = 0x51; /* push rcx */
+    code[p++] = 0x48; code[p++] = 0xB8; /* mov rax,&one_shot_kill */
+    memcpy(&code[p], &oneShotAddr, 8);
+    p += 8;
+    code[p++] = 0x0F; code[p++] = 0xB6; code[p++] = 0x00; /* movzx eax,byte[rax] */
+    code[p++] = 0x3C; code[p++] = 0x01; /* cmp al,1 */
+    code[p++] = 0x75; /* jne ORIG */
+    SIZE_T toOrig1 = p++;
+    code[p++] = 0x48; code[p++] = 0xB8; /* mov rax,<fonction joueur> */
+    memcpy(&code[p], &playerFn, 8);
+    p += 8;
+    code[p++] = 0xFF; code[p++] = 0xD0; /* call rax (feuille : ne touche que rax/rcx) */
+    code[p++] = 0x48; code[p++] = 0x3B; code[p++] = 0x30; /* cmp rsi,[rax] */
+    code[p++] = 0x75; /* jne ORIG */
+    SIZE_T toOrig2 = p++;
+    code[p++] = 0x59; /* pop rcx */
+    code[p++] = 0x58; /* pop rax */
+    code[p++] = 0xE9; /* jmp ACCEPT */
+    ok &= put_rel32(code, p, trampoline, accept);
+    p += 4;
+
+    /* ORIG: */
+    code[toOrig1] = (BYTE)(p - (toOrig1 + 1));
+    code[toOrig2] = (BYTE)(p - (toOrig2 + 1));
+    code[p++] = 0x59; /* pop rcx */
+    code[p++] = 0x58; /* pop rax */
+    code[p++] = 0x83; code[p++] = 0xEB; code[p++] = 0x28; /* sub ebx,28 (original) */
+    code[p++] = 0x0F; code[p++] = 0x84; /* je ACCEPT (original, en rel32) */
+    ok &= put_rel32(code, p, trampoline, accept);
+    p += 4;
+    code[p++] = 0xE9; /* jmp BACK */
+    ok &= put_rel32(code, p, trampoline, objWl + 5);
+    p += 4;
+
+    if (!ok) {
+        g_shared->tank_whitelist_hook_error = 3;
+        return FALSE;
+    }
+    memcpy(trampoline, code, p);
+
+    /* 5 octets remplaces : sub ebx,28 (3) + je rel8 (2) */
+    if (!patch_jmp(objWl, 5, trampoline)) {
+        g_shared->tank_whitelist_hook_error = 3;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+/* Tanks, partie 2/2 (2026-10-03) : gestionnaire de coups du tank
+ * (mgs4.exe+FF9290 cette version). Une fois le coup enregistre (partie
+ * 1), il ne cause des degats que si ses drapeaux ([composant+0x10C],
+ * meme champ que pour le Rail Gun : 9 bits bas = ID d'arme) ont le bit
+ * 12 ou le bit 9 - sinon rien. Si one_shot_kill est actif, force le bit 9
+ * dans edx (registre seulement, la memoire n'est pas modifiee) juste
+ * apres sa lecture : le coup prend alors le chemin "degats" (call
+ * B21FF0), ou install_gecko_one_shot_kill_hook - qui est en realite le
+ * hook de la fonction de degats des TANKS, son motif AOB ne correspond
+ * qu'a mgs4.exe+B22082 - met la vie a 0. Le bit 15 (coup ignore) reste
+ * respecte : il est teste avant les deux autres.
+ *
+ * Trampoline :
+ *   mov edx,[rdi+10C] (original)
+ *   push rax ; mov rax,&one_shot_kill ; movzx eax,[rax] ; cmp al,1 ; pop rax
+ *   jne +6 ; or edx,200
+ *   jmp BACK (motif+6) */
+static BOOL install_tank_flags_hook(void) {
+    HMODULE base = GetModuleHandle(NULL);
+    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
+    SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
+
+    /* mov edx,[rdi+10C] ; neg eax ; mov [rsp+50],rbp - unique. */
+    static const BYTE pattern[] = {0x8B, 0x97, 0x0C, 0x01, 0x00, 0x00, 0xF7, 0xD8,
+                                   0x48, 0x89, 0x6C, 0x24, 0x50};
+    static const char mask[] = "xxxxxxxxxxxxx";
+
+    BYTE *objFl = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
+    if (!objFl) {
+        g_shared->tank_flags_hook_error = 1;
+        return FALSE;
+    }
+
+    BYTE *trampoline = alloc_near(objFl, 4096);
+    if (!trampoline) {
+        g_shared->tank_flags_hook_error = 2;
+        return FALSE;
+    }
+
+    UINT64 oneShotAddr = (UINT64)&g_shared->one_shot_kill;
+    BYTE code[64];
+    SIZE_T p = 0;
+
+    memcpy(&code[p], objFl, 6); /* mov edx,[rdi+10C] */
+    p += 6;
+    code[p++] = 0x50; /* push rax */
+    code[p++] = 0x48; code[p++] = 0xB8; /* mov rax,&one_shot_kill */
+    memcpy(&code[p], &oneShotAddr, 8);
+    p += 8;
+    code[p++] = 0x0F; code[p++] = 0xB6; code[p++] = 0x00; /* movzx eax,byte[rax] */
+    code[p++] = 0x3C; code[p++] = 0x01; /* cmp al,1 */
+    code[p++] = 0x58; /* pop rax (ne touche pas aux flags) */
+    code[p++] = 0x75; code[p++] = 0x06; /* jne +6 */
+    code[p++] = 0x81; code[p++] = 0xCA; /* or edx,200 */
+    { UINT32 imm = 0x200; memcpy(&code[p], &imm, 4); p += 4; }
+    code[p++] = 0xE9; /* jmp BACK */
+    if (!put_rel32(code, p, trampoline, objFl + 6)) {
+        g_shared->tank_flags_hook_error = 3;
+        return FALSE;
+    }
+    p += 4;
+    memcpy(trampoline, code, p);
+
+    if (!patch_jmp(objFl, 6, trampoline)) {
+        g_shared->tank_flags_hook_error = 3;
+        return FALSE;
+    }
     return TRUE;
 }
 
@@ -1603,6 +2221,20 @@ static DWORD WINAPI InitThread(LPVOID param) {
             g_shared->damage_hook_error = 0;
             g_shared->non_lethal = 0;
             g_shared->last_damaged_actor = 0;
+            memset((void *)g_shared->reg_dump, 0, sizeof(g_shared->reg_dump));
+            g_shared->reg_dump_seq = 0;
+            g_shared->damage_hook_addr = 0;
+            g_shared->railgun_instant_kill = 0;
+            g_shared->railgun_force_charge = 0;
+            g_shared->force_charge_hook_installed = 0;
+            g_shared->force_charge_hook_error = 0;
+            g_shared->probe_rsi = 0;
+            g_shared->probe_rdi = 0;
+            g_shared->probe_rbx = 0;
+            g_shared->probe_r12 = 0;
+            g_shared->probe_seq = 0;
+            g_shared->probe_hook_installed = 0;
+            g_shared->probe_hook_error = 0;
             g_shared->boss_actor = 0;
             g_shared->boss_hook_installed = 0;
             g_shared->boss_hook_error = 0;
@@ -1628,6 +2260,10 @@ static DWORD WINAPI InitThread(LPVOID param) {
             g_shared->combat_array_hook_error = 0;
             g_shared->dispatch_hook_installed = 0;
             g_shared->dispatch_hook_error = 0;
+            g_shared->tank_whitelist_hook_installed = 0;
+            g_shared->tank_whitelist_hook_error = 0;
+            g_shared->tank_flags_hook_installed = 0;
+            g_shared->tank_flags_hook_error = 0;
         }
     }
 
@@ -1638,6 +2274,18 @@ static DWORD WINAPI InitThread(LPVOID param) {
      * effet, mais ne doit jamais planter le jeu. */
     if (g_shared && install_one_shot_kill_hook()) {
         g_shared->damage_hook_installed = 1;
+    }
+
+    /* Hook independant, voir install_railgun_force_charge_hook - trouve
+     * le 2026-10-02, point d'accroche different (chez l'appelant) de
+     * celui du hook de degats ci-dessus. */
+    if (g_shared && install_railgun_force_charge_hook()) {
+        g_shared->force_charge_hook_installed = 1;
+    }
+
+    /* Hook de diagnostic temporaire, voir install_r12_probe_hook. */
+    if (g_shared && install_r12_probe_hook()) {
+        g_shared->probe_hook_installed = 1;
     }
 
     /* Hook de tracking pur, voir install_boss_tracker_hook - independant
@@ -1656,6 +2304,14 @@ static DWORD WINAPI InitThread(LPVOID param) {
 
     if (g_shared && install_gecko_one_shot_kill_hook()) {
         g_shared->gecko_hook_installed = 1;
+    }
+
+    if (g_shared && install_tank_whitelist_hook()) {
+        g_shared->tank_whitelist_hook_installed = 1;
+    }
+
+    if (g_shared && install_tank_flags_hook()) {
+        g_shared->tank_flags_hook_installed = 1;
     }
 
     if (g_shared && install_no_reload_hook()) {
