@@ -197,6 +197,24 @@ typedef struct {
     UINT8 tank_flags_hook_error;
     UINT8 charge_level_hook_installed;
     UINT8 charge_level_hook_error;
+    UINT32 octocamo_hidden[16];
+    UINT8 octocamo_hide_hook_installed;
+    UINT8 octocamo_hide_hook_error;
+    /* Reserve (anciennes demandes visage/motif, remplacees par l'appel
+     * generique ci-dessous) - garde pour ne pas decaler les champs. */
+    UINT8 equip_req_reserved[14];
+    UINT8 main_loop_hook_installed;
+    UINT8 main_loop_hook_error;
+    /* Appel dans le fil du jeu : rpc_fn = adresse absolue, 4 arguments
+     * entiers (rcx, rdx, r8, r9), execute au debut de l'image suivante
+     * (boucle principale), resultat (rax) dans rpc_result puis rpc_done=1.
+     * Sert au changement de motif OctoCamo en direct (voir
+     * MGS4Live.equip_octocamo dans live_trainer.py). */
+    UINT8 rpc_pending;
+    UINT8 rpc_done;
+    UINT64 rpc_fn;
+    UINT64 rpc_args[4];
+    UINT64 rpc_result;
 } SharedState;
 #pragma pack(pop)
 
@@ -1672,6 +1690,198 @@ static BOOL install_charge_level_hook(void) {
     return TRUE;
 }
 
+/* OctoCamo : masquer des motifs du menu (2026-10-03). Le menu OctoCamo
+ * (rempli a l'ouverture du menu pause, mgs4.exe+4F3789 cette version)
+ * parcourt la liste des motifs du jeu (code = appel 642320(i)) et ajoute
+ * d'office tous les motifs "speciaux" (boss, numeriques, Mouche, Gear...)
+ * a sa table [objet menu]+0x14B0 - ces motifs ne sont stockes nulle part
+ * dans la partie. Juste apres la lecture du code (`cmp eax,1CAE01`, test
+ * du motif Dore), si le code figure dans octocamo_hidden[] (16 codes 24
+ * bits, 0 = libre, rempli par le trainer), saute directement a la suite
+ * de la boucle (`inc edi`, meme chemin que Dore/Precommande refuses) : le
+ * motif n'apparait pas dans le menu. Effet limite a la session (rien
+ * n'est ecrit dans la sauvegarde).
+ *
+ * Trampoline (remplace cmp eax,1CAE01, 5 octets) :
+ *   push rcx ; push rdx ; mov rcx,&octocamo_hidden ; mov edx,16
+ *  L: cmp [rcx],eax ; je SKIP ; add rcx,4 ; dec edx ; jnz L
+ *   pop rdx ; pop rcx ; cmp eax,1CAE01 ; jmp BACK (motif+5, le jne)
+ *  SKIP: pop rdx ; pop rcx ; jmp SUITE (inc edi, motif+0xA4) */
+static BOOL install_octocamo_hide_hook(void) {
+    HMODULE base = GetModuleHandle(NULL);
+    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
+    SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
+
+    /* mov ecx,edi ; call ???????? ; cmp eax,1CAE01 ; jne +14 - unique. */
+    static const BYTE pattern[] = {0x8B, 0xCF, 0xE8, 0, 0, 0, 0, 0x3D, 0x01, 0xAE, 0x1C, 0x00, 0x75, 0x14};
+    static const char mask[] = "xxx????xxxxxxx";
+
+    BYTE *raw = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
+    if (!raw) {
+        g_shared->octocamo_hide_hook_error = 1;
+        return FALSE;
+    }
+    BYTE *objCmp = raw + 7;
+    BYTE *suite = objCmp + 0xA4;
+    if (suite[0] != 0xFF || suite[1] != 0xC7) { /* inc edi attendu */
+        g_shared->octocamo_hide_hook_error = 4;
+        return FALSE;
+    }
+
+    BYTE *trampoline = alloc_near(objCmp, 4096);
+    if (!trampoline) {
+        g_shared->octocamo_hide_hook_error = 2;
+        return FALSE;
+    }
+
+    UINT64 hiddenAddr = (UINT64)&g_shared->octocamo_hidden[0];
+    BYTE code[96];
+    SIZE_T p = 0;
+    BOOL ok = TRUE;
+
+    code[p++] = 0x51; /* push rcx */
+    code[p++] = 0x52; /* push rdx */
+    code[p++] = 0x48; code[p++] = 0xB9; /* mov rcx,&octocamo_hidden */
+    memcpy(&code[p], &hiddenAddr, 8);
+    p += 8;
+    code[p++] = 0xBA; /* mov edx,16 */
+    { UINT32 imm = 16; memcpy(&code[p], &imm, 4); p += 4; }
+    SIZE_T loop = p;
+    code[p++] = 0x39; code[p++] = 0x01; /* L: cmp [rcx],eax */
+    code[p++] = 0x74; /* je SKIP */
+    SIZE_T toSkip = p++;
+    code[p++] = 0x48; code[p++] = 0x83; code[p++] = 0xC1; code[p++] = 0x04; /* add rcx,4 */
+    code[p++] = 0xFF; code[p++] = 0xCA; /* dec edx */
+    code[p++] = 0x75; /* jnz L */
+    code[p] = (BYTE)(loop - (p + 1));
+    p++;
+    code[p++] = 0x5A; /* pop rdx */
+    code[p++] = 0x59; /* pop rcx */
+    memcpy(&code[p], objCmp, 5); /* cmp eax,1CAE01 (original) */
+    p += 5;
+    code[p++] = 0xE9; /* jmp BACK */
+    ok &= put_rel32(code, p, trampoline, objCmp + 5);
+    p += 4;
+    /* SKIP: */
+    code[toSkip] = (BYTE)(p - (toSkip + 1));
+    code[p++] = 0x5A; /* pop rdx */
+    code[p++] = 0x59; /* pop rcx */
+    code[p++] = 0xE9; /* jmp SUITE */
+    ok &= put_rel32(code, p, trampoline, suite);
+    p += 4;
+
+    if (!ok) {
+        g_shared->octocamo_hide_hook_error = 3;
+        return FALSE;
+    }
+    memcpy(trampoline, code, p);
+
+    if (!patch_jmp(objCmp, 5, trampoline)) {
+        g_shared->octocamo_hide_hook_error = 3;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+/* Appel de fonctions du jeu dans son propre fil (2026-10-03). La boucle
+ * principale (mgs4.exe+3CE55 cette version) appelle a chaque image le
+ * gestionnaire de taches (740280) SANS parametre ; l'appel est redirige
+ * vers un trampoline qui execute d'abord l'appel demande par le trainer
+ * (rpc_fn avec 4 arguments entiers, resultat dans rpc_result, puis
+ * rpc_done = 1) puis saute au gestionnaire (son ret revient normalement
+ * dans la boucle). La demande est effacee AVANT l'appel (pas de boucle si
+ * l'appel plante). Le trainer s'en sert pour equiper en direct, sans menu
+ * (voir MGS4Live._equip_octocamo_live / _equip_facecamo_live dans
+ * live_trainer.py) : il enchaine plusieurs appels, un par image.
+ * Remplace les demandes visage/motif d'origine : le visage appelait
+ * equip_facecamo (n'agit que menu ouvert ; en jeu, plantage pendant le
+ * rechargement du modele de tete - le trainer met maintenant le jeu en
+ * pause avec la fonction du jeu le temps du rechargement) et le motif
+ * equip_camo (4F6D00, corrompait le menu camouflage).
+ *
+ * Trampoline (atteint par call, rsp = 8 mod 16) :
+ *   sub rsp,38h
+ *   mov rax,&rpc_pending ; cmp byte[rax],0 ; je DONE
+ *   mov byte[rax],0 ; charge rcx/rdx/r8/r9 ; call [rpc_fn]
+ *   rpc_result = rax ; rpc_done = 1
+ *  DONE:
+ *   add rsp,38h ; jmp <gestionnaire de taches> */
+static BOOL install_main_loop_hook(void) {
+    HMODULE base = GetModuleHandle(NULL);
+    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
+    SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
+
+    static const BYTE loopPattern[] = {0x84, 0xC0, 0x0F, 0x84, 0, 0, 0, 0, 0x0F, 0x1F, 0x80, 0x00, 0x00,
+                                       0x00, 0x00, 0xE8, 0, 0, 0, 0, 0xE8};
+    static const char loopMask[] = "xxxx????xxxxxxxx????x";
+
+    BYTE *raw = find_pattern((BYTE *)base, imageSize, loopPattern, loopMask, sizeof(loopPattern));
+    if (!raw) {
+        g_shared->main_loop_hook_error = 1;
+        return FALSE;
+    }
+
+    BYTE *callSite = raw + 0x14; /* call <gestionnaire de taches> */
+    INT32 callRel;
+    memcpy(&callRel, callSite + 1, 4);
+    BYTE *taskRunner = callSite + 5 + callRel;
+
+    BYTE *trampoline = alloc_near(callSite, 4096);
+    if (!trampoline) {
+        g_shared->main_loop_hook_error = 2;
+        return FALSE;
+    }
+
+    BYTE code[256];
+    SIZE_T p = 0;
+
+    code[p++] = 0x48; code[p++] = 0x83; code[p++] = 0xEC; code[p++] = 0x38; /* sub rsp,38h */
+    {
+        UINT64 rpcAddr = (UINT64)&g_shared->rpc_pending;
+        UINT64 rpcResultAddr = (UINT64)&g_shared->rpc_result;
+        code[p++] = 0x48; code[p++] = 0xB8; memcpy(&code[p], &rpcAddr, 8); p += 8; /* mov rax,&rpc_pending */
+        code[p++] = 0x80; code[p++] = 0x38; code[p++] = 0x00; /* cmp byte[rax],0 */
+        code[p++] = 0x74; /* je DONE */
+        SIZE_T toDone = p++;
+        code[p++] = 0xC6; code[p++] = 0x00; code[p++] = 0x00; /* mov byte[rax],0 */
+        code[p++] = 0x48; code[p++] = 0x8B; code[p++] = 0x48; code[p++] = 0x0A; /* mov rcx,[rax+0A] */
+        code[p++] = 0x48; code[p++] = 0x8B; code[p++] = 0x50; code[p++] = 0x12; /* mov rdx,[rax+12] */
+        code[p++] = 0x4C; code[p++] = 0x8B; code[p++] = 0x40; code[p++] = 0x1A; /* mov r8,[rax+1A] */
+        code[p++] = 0x4C; code[p++] = 0x8B; code[p++] = 0x48; code[p++] = 0x22; /* mov r9,[rax+22] */
+        code[p++] = 0x48; code[p++] = 0x8B; code[p++] = 0x40; code[p++] = 0x02; /* mov rax,[rax+2] (rpc_fn) */
+        code[p++] = 0xFF; code[p++] = 0xD0; /* call rax */
+        code[p++] = 0x49; code[p++] = 0xBA; memcpy(&code[p], &rpcResultAddr, 8); p += 8; /* mov r10,&rpc_result */
+        code[p++] = 0x49; code[p++] = 0x89; code[p++] = 0x02; /* mov [r10],rax */
+        code[p++] = 0x49; code[p++] = 0xBA; memcpy(&code[p], &rpcAddr, 8); p += 8; /* mov r10,&rpc_pending */
+        code[p++] = 0x41; code[p++] = 0xC6; code[p++] = 0x42; code[p++] = 0x01; code[p++] = 0x01; /* mov byte[r10+1],1 (rpc_done) */
+        code[toDone] = (BYTE)(p - (toDone + 1));
+    }
+    /* DONE: */
+    code[p++] = 0x48; code[p++] = 0x83; code[p++] = 0xC4; code[p++] = 0x38; /* add rsp,38h */
+    code[p++] = 0xE9; /* jmp gestionnaire de taches */
+    if (!put_rel32(code, p, trampoline, taskRunner)) {
+        g_shared->main_loop_hook_error = 3;
+        return FALSE;
+    }
+    p += 4;
+    memcpy(trampoline, code, p);
+
+    /* Remplace la cible du call (meme longueur, 5 octets) : call trampoline. */
+    INT64 rel64 = (INT64)trampoline - (INT64)(callSite + 5);
+    if (rel64 > 0x7FFFFFFFLL || rel64 < -0x80000000LL) {
+        g_shared->main_loop_hook_error = 3;
+        return FALSE;
+    }
+    DWORD oldProt;
+    VirtualProtect(callSite, 5, PAGE_EXECUTE_READWRITE, &oldProt);
+    INT32 rel = (INT32)rel64;
+    memcpy(callSite + 1, &rel, 4);
+    VirtualProtect(callSite, 5, oldProt, &oldProt);
+    return TRUE;
+}
+
 /* Tanks, partie 2/2 (2026-10-03) : gestionnaire de coups du tank
  * (mgs4.exe+FF9290 cette version). Une fois le coup enregistre (partie
  * 1), il ne cause des degats que si ses drapeaux ([composant+0x10C],
@@ -2420,6 +2630,15 @@ static DWORD WINAPI InitThread(LPVOID param) {
             g_shared->tank_flags_hook_error = 0;
             g_shared->charge_level_hook_installed = 0;
             g_shared->charge_level_hook_error = 0;
+            for (int i = 0; i < 16; i++) {
+                g_shared->octocamo_hidden[i] = 0;
+            }
+            g_shared->octocamo_hide_hook_installed = 0;
+            g_shared->octocamo_hide_hook_error = 0;
+            g_shared->main_loop_hook_installed = 0;
+            g_shared->main_loop_hook_error = 0;
+            g_shared->rpc_pending = 0;
+            g_shared->rpc_done = 0;
         }
     }
 
@@ -2472,6 +2691,14 @@ static DWORD WINAPI InitThread(LPVOID param) {
 
     if (g_shared && install_charge_level_hook()) {
         g_shared->charge_level_hook_installed = 1;
+    }
+
+    if (g_shared && install_octocamo_hide_hook()) {
+        g_shared->octocamo_hide_hook_installed = 1;
+    }
+
+    if (g_shared && install_main_loop_hook()) {
+        g_shared->main_loop_hook_installed = 1;
     }
 
     if (g_shared && install_no_reload_hook()) {

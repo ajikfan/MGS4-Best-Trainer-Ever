@@ -1004,9 +1004,9 @@ FACECAMO_CONDITIONS = {
     "Raging Beauty": "Vaincre Raging Raven avec des armes non létales.",
     "Crying Beauty": "Vaincre Crying Wolf avec des armes non létales.",
     "Screaming Beauty": "Vaincre Screaming Mantis.",
-    # Orpheline depuis l'infirmation de 0x27 (voir FACECAMO_NAMES) - gardee
-    # de cote pour reutilisation si la vraie case est retrouvee un jour.
-    "Big Boss (position inconnue)": "Avoir le rang BIG BOSS.",
+    # Vraie case retrouvee le 2026-09-25 (0x28, voir FACECAMO_NAMES) - la
+    # tuile indicative "Big Boss (position inconnue)" a ete retiree.
+    "Big Boss": "Avoir le rang BIG BOSS.",
     # Confirme par l'utilisateur (2026-09-05) + coherent avec le diff isole
     # documente plus haut (VEST_NAMES) : les 5 premieres sont disponibles
     # des le debut de la partie, les 5 suivantes se debloquent
@@ -1024,13 +1024,10 @@ FACECAMO_CONDITIONS = {
 }
 
 # Les 21 motifs OctoCamo (liste complete recompteee par l'utilisateur,
-# 2026-09-06 - ordre officiel du jeu). PAS RELIES A LA VRAIE SAVE : on a
-# prouve que nos anciens ID d'origine (0x14-0x18, ex section "Camouflages
-# speciaux") sont faux (l'utilisateur a confirme le Camo Cadavre debloque
-# alors que ces ID valaient tous 0 - voir notes.md), et on n'a pas retrouve
-# les vrais emplacements pour aucun des 21. Affiches ici a titre indicatif
-# uniquement (toujours "non suivi", jamais dore), avec leur effet special
-# au clic quand il y en a un - pas un vrai etat obtenu/verrouille.
+# 2026-09-06 - ordre officiel du jeu). Nos anciens ID d'origine (0x14-0x18,
+# ex section "Camouflages speciaux") etaient faux (voir notes.md). Seul le
+# Cadavre est relie a la vraie save (2026-10-03, voir OCTOCAMO_TABLE_OFFSET
+# plus bas) ; les autres restent indicatifs (effet special au clic).
 OCTOCAMO_INFO = {
     "Infiltration": "Motif de camouflage standard, sans effet spécial.",
     "Olive": "Motif de camouflage standard, sans effet spécial.",
@@ -1059,6 +1056,100 @@ OCTOCAMO_INFO = {
 # autres sont disponibles d'office pour tout le monde des le debut
 # (confirme par l'utilisateur, 2026-09-06).
 OCTOCAMO_CONDITIONAL = {"Cadavre", "Précommande", "Doré"}
+
+# Motifs OctoCamo : vrais emplacements trouves le 2026-10-03, en memoire
+# live (fonction du jeu qui applique un motif, trouvee par point d'arret
+# materiel) puis verifies sur les 83 saves de l'utilisateur. Memes offsets
+# en memoire (linkvarbuf+X) que dans MGS4.SAV dechiffre.
+#  - OCTOCAMO_EQUIPPED_OFFSET (u32, 24 bits bas) : code du motif equipe.
+#  - OCTOCAMO_TABLE_OFFSET : 20 entrees u32 (code 24 bits + octet haut de
+#    drapeaux, 0x02 ou 0x12 - le bit 0x10 semble etre un marqueur
+#    "nouveau"). Sur TOUTES les saves, emplacements 10-15 = 81EF62 (aucun
+#    des 21 motifs du menu, sens inconnu), Olive, Tigre, Foret, 3 Couleurs
+#    Desert, Marpat ; l'emplacement 16 = Cadavre uniquement sur les saves
+#    qui l'ont (ex. 91DA17/B54D83 avec, B80685/B53FC9 sans, confirme par
+#    l'utilisateur). Les 14 autres motifs n'apparaissent jamais dans cette
+#    table : stockes ailleurs (non trouve).
+# Codes releves en equipant chaque motif tour a tour en jeu (lus a
+# OCTOCAMO_EQUIPPED_OFFSET). D'autres codes equipes existent sur certaines
+# saves (B2F267, 4C3A3E, EB4263...) : probablement des motifs captures
+# automatiquement sur une surface, hors menu.
+OCTOCAMO_EQUIPPED_OFFSET = 0xB28
+OCTOCAMO_TABLE_OFFSET = 0x4BB8
+OCTOCAMO_TABLE_SLOTS = 20
+OCTOCAMO_CODES = {
+    "Infiltration": 0x000000,
+    "Olive": 0xC4C352,
+    "Tigré": 0xD36CC9,
+    "Forêt": 0x69DA66,
+    "3 Couleurs Désert": 0x51A1E9,
+    "Marpat": 0xEEA297,
+    "Cadavre": 0x587DA7,
+    "Pleurs": 0x011699,
+    "Digit. B": 0x4B9985,
+    "Digit. R": 0x029BD9,
+    "Mouche": 0x0121D9,
+    "Gear": 0x249C72,
+    "Haven": 0xA1E0F2,
+    "Rire": 0xE1DD2C,
+    "Metal": 0xF3D870,
+    "Snake": 0x28E4F7,
+    "Rage": 0x2A0D25,
+    "Hurler": 0x5A1D17,
+    "Beauté": 0x25D21F,
+    "Précommande": 0x95C055,
+    "Doré": 0x1CAE01,
+}
+# Motifs dont la possession se lit dans OCTOCAMO_TABLE_OFFSET.
+OCTOCAMO_TRACKED = {"Cadavre"}
+
+# Motifs captures sur une surface par l'OctoCamo puis memorises par le
+# joueur : emplacements 0-9 de OCTOCAMO_TABLE_OFFSET (categorie 1, octet de
+# drapeaux 0x11 juste apres l'enregistrement), avec leurs propres
+# caracteristiques (ex. Beton 350/350/350/500/500/500, Tuile
+# 600/600/600/500/500/500). Nom affiche en jeu releve par l'utilisateur
+# au moment de l'enregistrement (2026-10-03). Autres codes vus sur des
+# saves, nom encore inconnu : B2F267, 535A9C, 79BA3C, 760646, EC5E63,
+# 7E6643, EB4261, EB4263.
+OCTOCAMO_CAPTURED_NAMES = {
+    0x4C3A3E: "Béton",
+    0xEB4260: "Tuile",
+}
+
+# Bonus "Doré"/"Précommande" : lies au compte Steam ou au PC, pas a la
+# partie (confirme par l'utilisateur 2026-10-03 : deja disponibles sur une
+# save du tout debut). Aucun des 83 MGS4.SAV ne les contient (ni dans la
+# table OctoCamo, ni comme motif equipe) ; MGS4 les verifie au lancement
+# (gestionnaire Steam avec callback OnDLCInstalled dans mgs4.exe, config
+# chiffree). Affiches a part ("account_bound"), hors des totaux.
+ACCOUNT_BOUND_NOTE = (
+    "Lié à ton compte Steam ou à ce PC, pas à la sauvegarde : MGS4 le vérifie "
+    "au lancement, ce fichier ne permet donc pas de savoir s'il est disponible."
+)
+ACCOUNT_BOUND_CAMO = {
+    ("FaceCamo", "Doré"),
+    ("FaceCamo", "FaceCamo Doré"),
+    ("Gilet", "Gilet - Doré"),
+    ("Octocamo", "Précommande"),
+    ("Octocamo", "Doré"),
+}
+
+
+def read_octocamo_table_codes(path: str) -> set[int]:
+    """Codes (24 bits) presents dans la table OctoCamo de la save."""
+    with open(path, "rb") as f:
+        data = decrypt(f.read())
+    entries = struct.unpack_from(f"<{OCTOCAMO_TABLE_SLOTS}I", data, OCTOCAMO_TABLE_OFFSET)
+    return {entry & 0xFFFFFF for entry in entries if entry}
+
+
+def read_equipped_octocamo(path: str) -> str | None:
+    """Nom du motif OctoCamo equipe, ou None si le code n'est pas un des
+    21 motifs du menu (motif capture automatiquement, par exemple)."""
+    with open(path, "rb") as f:
+        data = decrypt(f.read())
+    code = struct.unpack_from("<I", data, OCTOCAMO_EQUIPPED_OFFSET)[0] & 0xFFFFFF
+    return next((name for name, c in OCTOCAMO_CODES.items() if c == code), None)
 
 # Onglet fusionne "OctoCamo" (demande utilisateur) : sections Camouflages
 # faciaux + Gilet + Camouflages speciaux dans un seul onglet, comme pour
@@ -1393,11 +1484,11 @@ def read_objects(path: str) -> list[dict]:
 def read_camo(path: str) -> list[dict]:
     """Comme _read_item_collection, mais chaque entree porte en plus une cle
     "group" (affichage en sections : Camouflages faciaux, Gilet, puis
-    Octocamo) et "condition" (texte affiche au clic). La section
-    "Octocamo" n'est PAS reliee a un etat reel de la save (voir
-    OCTOCAMO_INFO) - toujours "owned": False, a titre indicatif
-    seulement."""
+    Octocamo) et "condition" (texte affiche au clic). Dans la section
+    "Octocamo", seul le Cadavre est lu dans la save (OCTOCAMO_TRACKED) ;
+    les autres motifs sont affiches selon leur disponibilite connue."""
     states = read_item_states(path)
+    table_codes = read_octocamo_table_codes(path)
     entries = [
         {
             "id": item_id,
@@ -1412,13 +1503,6 @@ def read_camo(path: str) -> list[dict]:
     # FaceCamo/Gilet dont l'ID reel n'a jamais ete retrouve (voir
     # notes.md) - tuiles indicatives uniquement, toujours affichees
     # verrouillees.
-    entries.append({
-        "id": None,
-        "name": "Big Boss (position inconnue)",
-        "owned": False,
-        "group": "FaceCamo",
-        "condition": FACECAMO_CONDITIONS.get("Big Boss (position inconnue)", ""),
-    })
     entries.append({
         "id": None,
         "name": "Doré",
@@ -1446,14 +1530,21 @@ def read_camo(path: str) -> list[dict]:
             # Seuls Cadavre/Precommande/Dore sont de vraies conditions a
             # remplir - les 18 autres motifs sont disponibles d'office pour
             # tout le monde des le debut (confirme par l'utilisateur,
-            # 2026-09-06), donc affiches "obtenus" par defaut.
+            # 2026-09-06), donc affiches "obtenus" par defaut. Cadavre lu
+            # dans la save ; Precommande/Dore toujours non suivis.
             "name": name,
-            "owned": name not in OCTOCAMO_CONDITIONAL,
+            "owned": (OCTOCAMO_CODES[name] in table_codes) if name in OCTOCAMO_TRACKED
+            else name not in OCTOCAMO_CONDITIONAL,
             "group": "Octocamo",
             "condition": condition,
         }
         for name, condition in OCTOCAMO_INFO.items()
     )
+    for entry in entries:
+        if (entry["group"], entry["name"]) in ACCOUNT_BOUND_CAMO:
+            entry["owned"] = False
+            entry["account_bound"] = True
+            entry["condition"] = f"{entry['condition']}\n\n{ACCOUNT_BOUND_NOTE}".strip()
     return entries
 
 

@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.1
+# MGS4 Trainer — V2.2
 
 Trainer de recherche/édition mémoire live pour Metal Gear Solid 4
 (portage PC Steam) : lit et **écrit** en direct la mémoire du process
@@ -6,7 +6,9 @@ Trainer de recherche/édition mémoire live pour Metal Gear Solid 4
 déjà identifié (armes, objets, stats, vie/stamina/stress/batterie Solid
 Eye...) sans passer par le fichier de sauvegarde, et sert aussi d'outil
 de recherche pour identifier les ID encore inconnus. Contrôle aussi la
-vitesse du jeu (ralenti/accéléré) et la pause, voir plus bas.
+vitesse du jeu (ralenti/accéléré) et la pause, et permet de changer
+d'arme, de tenue, de visage, de gilet ou de motif OctoCamo en direct,
+sans passer par les menus du jeu (voir plus bas).
 
 Projet frère de [MGS4-SaveStats](https://github.com/ajikfan/MGS4-SaveStats)
 (lecture seule des fichiers de sauvegarde) — deux outils distincts et
@@ -55,8 +57,10 @@ pour accélérer (jusqu'à 300%), plus une case "Pause" indépendante.
   qui patche sa table d'imports pour tromper son horloge interne
   (`QueryPerformanceCounter`/`timeGetTime`) et lui faire croire que le
   temps s'écoule plus ou moins vite. Confirmé fonctionnel en jeu dans
-  les deux sens (2026-09-26). L'injection ne se déclenche qu'au premier
-  mouvement réel du curseur (pas à la connexion).
+  les deux sens (2026-09-26). Depuis la V2.2, la DLL est injectée dès
+  que le trainer s'accroche au jeu (elle démarre à vitesse normale, sans
+  effet tant qu'aucun réglage n'est activé) : les boutons "Équiper" et
+  les autres patchs sont prêts sans avoir à toucher un réglage avant.
 
 ## Munitions infinies / Pas de rechargement
 
@@ -149,6 +153,58 @@ dans les drapeaux du coup reçu (soldats et tanks), pour que les dégâts
 d'un tir chargé à fond s'appliquent partout. Confirmé en jeu
 (2026-10-03), y compris un tank détruit d'un seul tir rapide de Rail Gun.
 
+## Équiper en direct, sans menu (V2.2)
+
+Un bouton "Équiper" par ligne dans les onglets OctoCamo, Tenues et
+Armes : le changement s'applique en jeu immédiatement, menu fermé,
+comme si tu l'avais choisi dans le menu. Le trainer appelle les propres
+fonctions du jeu, dans le fil du jeu, via la DLL injectée (après avoir
+vérifié que chaque fonction a bien les octets attendus : sur une autre
+version du jeu, il refuse plutôt que d'appeler n'importe quoi).
+
+- **Motif OctoCamo** : immédiat, tous les motifs connus (y compris les
+  spéciaux et les motifs mémorisés de la partie). Le trainer pilote le
+  contrôleur d'auto-camouflage du jeu, celui qui change la combinaison
+  contre un mur. Les motifs "forcés" (Olive, Cadavre, Pleurs...) restent
+  en place même au contact d'un mur, comme dans le jeu ; les motifs
+  capturés apparaissent en fondu et l'auto-camouflage reprend la main.
+  Si une autre tenue est portée, la combinaison OctoCamo est remise
+  d'abord. Doré et Précommande ne s'équipent que si le jeu les a
+  débloqués sur ton compte.
+- **Visage (FaceCamo) et tenues** (déguisements Moyen-Orient, Amérique
+  du Sud, Europe de l'Est, costume de Snake, Altaïr) : le jeu doit
+  recharger le modèle de Snake, ce qu'il ne fait que jeu en pause. Le
+  trainer met donc le jeu en pause avec sa propre fonction (sans
+  afficher de menu), équipe, attend la fin du rechargement puis reprend :
+  le jeu se fige une fraction de seconde. Comme dans le menu, le visage
+  passe à "aucun" si la tenue ne l'autorise pas (Altaïr). Les
+  déguisements d'un acte fonctionnent aussi dans les autres actes.
+- **Gilet** : immédiat.
+- **Arme** : immédiat si l'arme est dans ton sous-menu rapide des
+  armes (5 places). Sinon, le trainer fait comme le menu pause : il la
+  place dans une place libre du sous-menu, ou à défaut dans la
+  **5e place** (les 4 premières ne sont jamais touchées), charge son
+  modèle puis l'équipe — le jeu se fige le temps de lire le fichier de
+  l'arme. Si l'arme de la 5e place est celle que tu tiens, Snake la
+  range d'abord une fraction de seconde. Seules les armes possédées ont
+  un bouton actif.
+
+Limites connues : le nombre de places du sous-menu des armes ne peut
+pas être augmenté (le menu plante à l'affichage au-delà de 5) ; forcer
+dans la main une arme dont le modèle n'est pas chargé fait planter le
+jeu, d'où le passage par la 5e place.
+
+## Onglet OctoCamo
+
+Visages (FaceCamo), gilets et les 21 motifs OctoCamo connus, plus les
+10 motifs mémorisés de la partie (motifs capturés sur une surface puis
+enregistrés, avec leur nom quand il est connu). Les motifs donnés
+d'office par le jeu peuvent être masqués du menu camouflage (case
+Verrouillé, par un patch du menu, effet pour la session) ; les motifs
+stockés dans la partie (Olive, Tigré, Forêt, 3 couleurs désert, Marpat,
+Cadavre) se débloquent ou se retirent pour de bon. "Équipé :" indique
+le motif porté.
+
 ## Téléportation
 
 Onglet "Téléportation" : enregistre la position actuelle de Snake
@@ -235,6 +291,11 @@ souhaites une correction ou un retrait, ouvre une issue.
   jeu. Protégé contre une application au joueur lui-même, mais reste la
   technique la plus invasive du trainer — expérimental, effet réel pas
   encore confirmé visuellement en jeu.
+- Les boutons "Équiper" appellent des fonctions internes du jeu en
+  dehors de leur contexte normal (menus). Chaque cas a été testé en jeu,
+  mais une situation particulière (cinématique, chargement, séquence
+  scriptée) pourrait encore provoquer un plantage : sauvegarde avant
+  d'expérimenter.
 - Certains champs restent en confiance basse ou pas encore testés
   individuellement (documentés au cas par cas dans le `notes.md` de
   MGS4-SaveStats) : une valeur peut se comporter différemment de ce qui
