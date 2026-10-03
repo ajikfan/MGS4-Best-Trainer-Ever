@@ -1478,6 +1478,19 @@ class SpeedController:
     def no_alerts_hook_error(self) -> int | None:
         return self._read_u8_at(69)
 
+    def set_railgun_force_charge(self, enabled: bool) -> bool:
+        """Force chaque tir de Rail Gun au palier de charge max (bits
+        24-26 du champ [+0x10C], le meme que l'ID d'arme) - voir
+        install_railgun_force_charge_hook dans native/speedhack.c."""
+        return self._write_u8_at(213, 1 if enabled else 0)
+
+    def force_charge_hook_installed(self) -> bool | None:
+        val = self._read_u8_at(214)
+        return None if val is None else bool(val)
+
+    def force_charge_hook_error(self) -> int | None:
+        return self._read_u8_at(215)
+
     def set_alert_mode_override(self, value: int | None) -> bool:
         """Force la variable d'etat d'alerte du jeu a `value`
         (0=Normal, 1=Alerte, 2=Evasion, 3=Prudence - voir
@@ -1680,6 +1693,21 @@ class MGS4Live:
 
     def no_alerts_hook_error(self) -> int | None:
         return self.speed.no_alerts_hook_error()
+
+    def set_railgun_force_charge(self, enabled: bool) -> bool:
+        """Injecte la DLL au premier appel (paresseux) - voir
+        SpeedController.set_railgun_force_charge."""
+        if not (self.connected and self.sane and self.pid):
+            return False
+        if not self.speed.ensure_injected(self.pid):
+            return False
+        return self.speed.set_railgun_force_charge(enabled)
+
+    def force_charge_hook_installed(self) -> bool | None:
+        return self.speed.force_charge_hook_installed()
+
+    def force_charge_hook_error(self) -> int | None:
+        return self.speed.force_charge_hook_error()
 
     def set_alert_mode_override(self, value: int | None) -> bool:
         """Injecte la DLL au premier appel (paresseux) - voir
@@ -3164,6 +3192,11 @@ class VitalsTab(QWidget):
         weapons_row.addWidget(pill)
         weapons_row.addStretch(1)
         weapons_layout.addLayout(weapons_row)
+
+        self.railgun_charge_check = QCheckBox(tr("vitals.railgun_charge"))
+        self.railgun_charge_check.setToolTip(tr("vitals.railgun_charge_tooltip"))
+        self.railgun_charge_check.toggled.connect(self._on_railgun_charge_toggled)
+        weapons_layout.addWidget(self.railgun_charge_check)
         layout.addWidget(weapons_group)
 
         names = list(VITALS)
@@ -3326,6 +3359,11 @@ class VitalsTab(QWidget):
         if not (self.live.connected and self.live.sane):
             return
         self.live.set_no_alerts(checked)
+
+    def _on_railgun_charge_toggled(self, checked: bool):
+        if not (self.live.connected and self.live.sane):
+            return
+        self.live.set_railgun_force_charge(checked)
 
     def _on_alert_force_changed(self, index: int):
         if not (self.live.connected and self.live.sane):
@@ -3508,6 +3546,7 @@ class VitalsTab(QWidget):
             self.infinite_ammo_check.setEnabled(False)
             self.no_reload_check.setEnabled(False)
             self.no_alerts_check.setEnabled(False)
+            self.railgun_charge_check.setEnabled(False)
             self.alert_force_combo.setEnabled(False)
             self.instant_kill_check.setEnabled(False)
             self.lethal_btn.setEnabled(False)
@@ -3518,6 +3557,7 @@ class VitalsTab(QWidget):
         self.infinite_ammo_check.setEnabled(True)
         self.no_reload_check.setEnabled(True)
         self.no_alerts_check.setEnabled(True)
+        self.railgun_charge_check.setEnabled(True)
         self.alert_force_combo.setEnabled(True)
         self.instant_kill_check.setEnabled(True)
         self.lethal_btn.setEnabled(True)
@@ -3551,7 +3591,7 @@ class VitalsTab(QWidget):
             self.alert_label.setText("?")
 
 
-TRAINER_VERSION = "V2.0"
+TRAINER_VERSION = "V2.1"
 
 TRAINER_HELP_TEXT = tr("help.text")
 
@@ -4023,11 +4063,16 @@ class TrainerWindow(QMainWindow):
         """Active/desactive toute l'interface (sauf statut/Rafraichir/
         (Re)connecter) selon que le jeu repond encore ou non - avant ce
         correctif, le statut ne se remettait jamais a jour tout seul apres
-        la fermeture du jeu (restait affiche "Connecte" indefiniment)."""
+        la fermeture du jeu (restait affiche "Connecte" indefiniment).
+        Seul le CONTENU des onglets est desactive, pas la barre d'onglets
+        (V2.1, demande utilisateur) : on peut parcourir l'interface et lire
+        les infobulles sans etre accroche au jeu. Pas de risque : chaque
+        ecriture reverifie elle-meme connected/sane avant d'agir."""
         self.status_label.setText(self.live.status)
         ok = self.live.connected and self.live.sane
         self.drebin_container.setEnabled(ok)
-        self.tabs.setEnabled(ok)
+        for i in range(self.tabs.count()):
+            self.tabs.widget(i).setEnabled(ok)
 
     def _on_advanced_toggled(self, checked: bool):
         for tab in self.item_tabs:

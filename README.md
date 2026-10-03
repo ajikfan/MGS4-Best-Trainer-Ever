@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.0
+# MGS4 Trainer — V2.1
 
 Trainer de recherche/édition mémoire live pour Metal Gear Solid 4
 (portage PC Steam) : lit et **écrit** en direct la mémoire du process
@@ -20,7 +20,9 @@ But : usage solo, à tes risques. Ce n'est pas un outil officiel.
 
 Windows (accès mémoire process via l'API kernel32/psapi, pas portable
 Linux/Mac), et MGS4 lancé avec une partie chargée — le trainer se
-connecte au process en cours, inutile s'il n'est pas lancé.
+connecte au process en cours, inutile s'il n'est pas lancé. Sans le jeu,
+les onglets restent consultables (contenu grisé) pour parcourir
+l'interface et lire les infobulles.
 
 ```
 python live_trainer.py
@@ -103,11 +105,24 @@ Metal Gear RAY (mécha, mécanisme non trouvé) et une phase précise de
 Laughing Octopus (nécessite des tirs létaux pour la déloger d'une
 cachette) restent des cas non fonctionnels connus.
 
-**Gecko (robots) : hook séparé.** Les Gecko ne passent ni par
+**Gecko (robots) et tanks : hook séparé.** Les Gecko ne passent ni par
 l'instruction des ennemis humains ni par celle des boss - un troisième
 patch de code dédié (porté du script CE "aob Damage Gecko") gère leur
 cas, branché sur le même bouton/flag "Un coup, un mort" (pas de variante
-non létale, ça n'a pas de sens pour un robot).
+non létale, ça n'a pas de sens pour un robot). Ce patch vise en réalité
+la fonction de dégâts commune aux Gecko **et aux tanks** (confirmé en
+jeu sur les deux, 2026-10-03).
+
+**Tanks : n'importe quelle arme (V2.1).** Normalement, un tank ignore la
+plupart des armes : son code de collision n'enregistre que les coups de
+4 armes précises, et tous les autres tirs (balles comprises) sont
+écartés avant même d'être comptés, si bien que "Un coup, un mort" ne
+pouvait pas s'appliquer. Deux patchs de code supplémentaires, actifs
+seulement quand "Un coup, un mort" est coché, lèvent ce filtre pour les
+tirs **du joueur** et font passer le coup par le chemin des dégâts :
+une simple balle de fusil détruit alors un tank (confirmé en jeu,
+2026-10-03). Seul le fusil a été testé à ce jour ; une arme
+particulière pourrait encore être filtrée plus loin dans la chaîne.
 
 Modifier `native/speedhack.c` nécessite un compilateur C ciblant Windows
 (testé avec `x86_64-w64-mingw32-gcc` via [MSYS2](https://www.msys2.org/),
@@ -119,6 +134,20 @@ x86_64-w64-mingw32-gcc -shared -O2 -municode -o native/speedhack_x64.dll native/
 
 `mingw64/bin` doit être dans le PATH (sinon `cc1.exe` échoue silencieusement,
 sans aucun message).
+
+## Rail Gun / Solar Gun toujours chargés
+
+Onglet "État de jeu", groupe "Armes et combat". Patch de code : la
+charge du Rail Gun et du Solar Gun est pleine dès l'appui sur la
+gâchette, avec l'effet visuel et le cri de Snake d'un vrai tir chargé à
+fond, et sans dépendre de l'énergie solaire du Solar Gun. Le jeu
+convertit le temps de charge en palier (1 à 3) dans une seule fonction,
+utilisée à la fois pour les effets et pour les drapeaux du projectile ;
+le patch lui fait renvoyer le palier maximal dès que la charge a
+commencé. Deux patchs complémentaires forcent aussi le palier maximal
+dans les drapeaux du coup reçu (soldats et tanks), pour que les dégâts
+d'un tir chargé à fond s'appliquent partout. Confirmé en jeu
+(2026-10-03), y compris un tank détruit d'un seul tir rapide de Rail Gun.
 
 ## Téléportation
 

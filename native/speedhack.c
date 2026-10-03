@@ -195,6 +195,8 @@ typedef struct {
     UINT8 tank_whitelist_hook_error;
     UINT8 tank_flags_hook_installed;
     UINT8 tank_flags_hook_error;
+    UINT8 charge_level_hook_installed;
+    UINT8 charge_level_hook_error;
 } SharedState;
 #pragma pack(pop)
 
@@ -786,11 +788,18 @@ static BOOL install_one_shot_kill_hook(void) {
  * la "fausse" lecture. Accroche maintenant directement sur cette
  * lecture-la.
  *
+ * Etendu au Solar Gun (ID 0x0D) le 2026-10-03 : meme codage de la
+ * charge, verifie par bp log x64dbg a ce point de lecture (tirs non
+ * charges 0x1181020D, tir charge a fond 0x1481020D). Le flag garde son
+ * nom railgun_force_charge.
+ *
  * Disposition du trampoline :
  *   0   <7 octets originaux copies tels quels : mov r12d,[rsi+10C]>
  *   7   push rax ; mov rax,&railgun_force_charge ; movzx eax,[rax] ;
  *       cmp al,1 ; pop rax ; jne SKIP
- *       mov eax,r12d ; and eax,1FF ; cmp eax,2D ; jne SKIP
+ *       mov eax,r12d ; and eax,1FF ; cmp eax,2D ; je FORCE ;
+ *       cmp eax,0D ; jne SKIP
+ *  FORCE:
  *       and r12d,F8FFFFFF ; or r12d,04000000
  *       mov dword ptr[rsi+10C],r12d (coherence, voir plus bas)
  *  SKIP:
@@ -841,11 +850,14 @@ static BOOL install_railgun_force_charge_hook(void) {
     code[p++] = 0x44; code[p++] = 0x89; code[p++] = 0xE0; /* mov eax,r12d */
     code[p++] = 0x25; /* and eax,1FF */
     { UINT32 imm = 0x1FF; memcpy(&code[p], &imm, 4); p += 4; }
-    code[p++] = 0x3D; /* cmp eax,2D */
+    code[p++] = 0x3D; /* cmp eax,2D (Rail Gun) */
     { UINT32 imm = 0x2D; memcpy(&code[p], &imm, 4); p += 4; }
+    code[p++] = 0x74; code[p++] = 0x05; /* je FORCE (saute cmp + jne ci-dessous) */
+    code[p++] = 0x83; code[p++] = 0xF8; code[p++] = 0x0D; /* cmp eax,0D (Solar Gun) */
     code[p++] = 0x75; /* jne SKIP */
     SIZE_T skip2 = p;
     code[p++] = 0;
+    /* FORCE: */
 
     code[p++] = 0x41; code[p++] = 0x81; code[p++] = 0xE4; /* and r12d,F8FFFFFF */
     { UINT32 imm = 0xF8FFFFFF; memcpy(&code[p], &imm, 4); p += 4; }
@@ -1421,8 +1433,24 @@ static BOOL patch_jmp(BYTE *at, SIZE_T len, BYTE *trampoline) {
  * saute directement a ACCEPT (verification de trajectoire puis ajout du
  * coup), sinon execute la liste blanche normalement.
  *
+ * Sert aussi a railgun_force_charge pour les tanks (2026-10-03) : le
+ * hook de charge principal (install_railgun_force_charge_hook) est dans
+ * le code des SOLDATS et ne voit jamais les coups sur un tank (un vrai
+ * tir charge a fond fait 3000 a un tank, un tir force n'en faisait que
+ * 1000). Ici rbp = bloc "attaque" du coup (renvoye par 10314A0, a
+ * l'interieur du coup lui-meme), [rbp+10] = drapeaux (ID d'arme + bits
+ * de charge 24-26), recopies tels quels par l'ajout dans la liste du
+ * tank (D41940) avant tout calcul de degats. Si railgun_force_charge est
+ * actif et l'arme est le Rail Gun (0x2D) ou le Solar Gun (0x0D), force
+ * le palier max dans [rbp+10] avant de continuer.
+ *
  * Trampoline :
  *   push rax ; push rcx
+ *   mov rax,&railgun_force_charge ; cmp byte[rax],1 ; jne OSOK
+ *   cmp ebx,2D ; je CHARGE ; cmp ebx,0D ; jne OSOK
+ *  CHARGE:
+ *   and dword[rbp+10],F8FFFFFF ; or dword[rbp+10],04000000
+ *  OSOK:
  *   mov rax,&one_shot_kill ; movzx eax,[rax] ; cmp al,1 ; jne ORIG
  *   mov rax,<fonction joueur> ; call rax ; cmp rsi,[rax] ; jne ORIG
  *   pop rcx ; pop rax ; jmp ACCEPT
@@ -1465,12 +1493,34 @@ static BOOL install_tank_whitelist_hook(void) {
     }
 
     UINT64 oneShotAddr = (UINT64)&g_shared->one_shot_kill;
-    BYTE code[96];
+    UINT64 forceChargeAddr = (UINT64)&g_shared->railgun_force_charge;
+    BYTE code[128];
     SIZE_T p = 0;
     BOOL ok = TRUE;
 
     code[p++] = 0x50; /* push rax */
     code[p++] = 0x51; /* push rcx */
+
+    code[p++] = 0x48; code[p++] = 0xB8; /* mov rax,&railgun_force_charge */
+    memcpy(&code[p], &forceChargeAddr, 8);
+    p += 8;
+    code[p++] = 0x80; code[p++] = 0x38; code[p++] = 0x01; /* cmp byte[rax],1 */
+    code[p++] = 0x75; /* jne OSOK */
+    SIZE_T toOsok1 = p++;
+    code[p++] = 0x83; code[p++] = 0xFB; code[p++] = 0x2D; /* cmp ebx,2D (Rail Gun) */
+    code[p++] = 0x74; code[p++] = 0x05; /* je CHARGE */
+    code[p++] = 0x83; code[p++] = 0xFB; code[p++] = 0x0D; /* cmp ebx,0D (Solar Gun) */
+    code[p++] = 0x75; /* jne OSOK */
+    SIZE_T toOsok2 = p++;
+    /* CHARGE: and dword[rbp+10],F8FFFFFF ; or dword[rbp+10],04000000 */
+    code[p++] = 0x81; code[p++] = 0x65; code[p++] = 0x10;
+    { UINT32 imm = 0xF8FFFFFF; memcpy(&code[p], &imm, 4); p += 4; }
+    code[p++] = 0x81; code[p++] = 0x4D; code[p++] = 0x10;
+    { UINT32 imm = 0x04000000; memcpy(&code[p], &imm, 4); p += 4; }
+    /* OSOK: */
+    code[toOsok1] = (BYTE)(p - (toOsok1 + 1));
+    code[toOsok2] = (BYTE)(p - (toOsok2 + 1));
+
     code[p++] = 0x48; code[p++] = 0xB8; /* mov rax,&one_shot_kill */
     memcpy(&code[p], &oneShotAddr, 8);
     p += 8;
@@ -1513,6 +1563,110 @@ static BOOL install_tank_whitelist_hook(void) {
     /* 5 octets remplaces : sub ebx,28 (3) + je rel8 (2) */
     if (!patch_jmp(objWl, 5, trampoline)) {
         g_shared->tank_whitelist_hook_error = 3;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+/* Charge cote ARME (2026-10-03) : fonction qui convertit le compteur de
+ * charge en palier (mgs4.exe+97F020 cette version). Pour le Rail Gun
+ * (0x2D) et le Solar Gun (0x0D) uniquement (ID lu dans [[obj+58]+10]),
+ * elle compare le compteur [obj+0x398] (frames de charge maintenue) a des
+ * seuils globaux et renvoie 0/1/2 (paliers 1/2/3) - pour le Solar Gun,
+ * plafonne en plus par l'energie solaire (appel virtuel +0x100). -1 si
+ * pas de charge en cours. 4 appelants, dont la fabrication des drapeaux
+ * du projectile (mgs4+9A5D90 : `or edi,1800000/2800000/4800000`) -
+ * retrouvee en remontant de la creation du projectile (6470D0) au champ
+ * [tireur+0x324] par point d'arret materiel.
+ * Si railgun_force_charge est actif, que l'arme est l'une des deux et que
+ * la charge a commence (compteur > 0), renvoie directement 2 : tous les
+ * appelants voient une charge pleine (effets compris), quel que soit le
+ * temps de charge ou l'energie solaire restante. Complete les hooks de
+ * drapeaux (install_railgun_force_charge_hook, partie charge de
+ * install_tank_whitelist_hook), qui restent en place.
+ *
+ * Trampoline (remplace mov [rsp+10],rbx, 5 octets) :
+ *   mov rax,&railgun_force_charge ; cmp byte[rax],1 ; jne ORIG
+ *   mov rax,[rcx+58] ; test rax,rax ; je ORIG
+ *   mov eax,[rax+10] ; and eax,1FF ; cmp eax,2D ; je CHK ; cmp eax,0D ; jne ORIG
+ *  CHK: cmp dword[rcx+398],0 ; jle ORIG
+ *   mov eax,2 ; ret
+ *  ORIG: mov [rsp+10],rbx ; jmp BACK (motif+5)
+ * rax est libre a l'entree (valeur de retour), rcx/rdx ne sont pas
+ * modifies. */
+static BOOL install_charge_level_hook(void) {
+    HMODULE base = GetModuleHandle(NULL);
+    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
+    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
+    SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
+
+    /* mov [rsp+10],rbx ; push rdi ; sub rsp,20 ; mov rax,[rcx+58] ;
+     * mov rdx,rcx - unique avec ces 17 octets. */
+    static const BYTE pattern[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC,
+                                   0x20, 0x48, 0x8B, 0x41, 0x58, 0x48, 0x8B, 0xD1};
+    static const char mask[] = "xxxxxxxxxxxxxxxxx";
+
+    BYTE *objLvl = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
+    if (!objLvl) {
+        g_shared->charge_level_hook_error = 1;
+        return FALSE;
+    }
+
+    BYTE *trampoline = alloc_near(objLvl, 4096);
+    if (!trampoline) {
+        g_shared->charge_level_hook_error = 2;
+        return FALSE;
+    }
+
+    UINT64 forceChargeAddr = (UINT64)&g_shared->railgun_force_charge;
+    BYTE code[96];
+    SIZE_T p = 0;
+
+    code[p++] = 0x48; code[p++] = 0xB8; /* mov rax,&railgun_force_charge */
+    memcpy(&code[p], &forceChargeAddr, 8);
+    p += 8;
+    code[p++] = 0x80; code[p++] = 0x38; code[p++] = 0x01; /* cmp byte[rax],1 */
+    code[p++] = 0x75; /* jne ORIG */
+    SIZE_T toOrig1 = p++;
+    code[p++] = 0x48; code[p++] = 0x8B; code[p++] = 0x41; code[p++] = 0x58; /* mov rax,[rcx+58] */
+    code[p++] = 0x48; code[p++] = 0x85; code[p++] = 0xC0; /* test rax,rax */
+    code[p++] = 0x74; /* je ORIG */
+    SIZE_T toOrig2 = p++;
+    code[p++] = 0x8B; code[p++] = 0x40; code[p++] = 0x10; /* mov eax,[rax+10] */
+    code[p++] = 0x25; /* and eax,1FF */
+    { UINT32 imm = 0x1FF; memcpy(&code[p], &imm, 4); p += 4; }
+    code[p++] = 0x83; code[p++] = 0xF8; code[p++] = 0x2D; /* cmp eax,2D */
+    code[p++] = 0x74; code[p++] = 0x05; /* je CHK */
+    code[p++] = 0x83; code[p++] = 0xF8; code[p++] = 0x0D; /* cmp eax,0D */
+    code[p++] = 0x75; /* jne ORIG */
+    SIZE_T toOrig3 = p++;
+    /* CHK: cmp dword[rcx+398],0 */
+    code[p++] = 0x83; code[p++] = 0xB9;
+    { UINT32 disp = 0x398; memcpy(&code[p], &disp, 4); p += 4; }
+    code[p++] = 0x00;
+    code[p++] = 0x7E; /* jle ORIG */
+    SIZE_T toOrig4 = p++;
+    code[p++] = 0xB8; /* mov eax,2 */
+    { UINT32 imm = 2; memcpy(&code[p], &imm, 4); p += 4; }
+    code[p++] = 0xC3; /* ret */
+
+    /* ORIG: */
+    code[toOrig1] = (BYTE)(p - (toOrig1 + 1));
+    code[toOrig2] = (BYTE)(p - (toOrig2 + 1));
+    code[toOrig3] = (BYTE)(p - (toOrig3 + 1));
+    code[toOrig4] = (BYTE)(p - (toOrig4 + 1));
+    memcpy(&code[p], objLvl, 5); /* mov [rsp+10],rbx (original) */
+    p += 5;
+    code[p++] = 0xE9; /* jmp BACK */
+    if (!put_rel32(code, p, trampoline, objLvl + 5)) {
+        g_shared->charge_level_hook_error = 3;
+        return FALSE;
+    }
+    p += 4;
+    memcpy(trampoline, code, p);
+
+    if (!patch_jmp(objLvl, 5, trampoline)) {
+        g_shared->charge_level_hook_error = 3;
         return FALSE;
     }
     return TRUE;
@@ -2264,6 +2418,8 @@ static DWORD WINAPI InitThread(LPVOID param) {
             g_shared->tank_whitelist_hook_error = 0;
             g_shared->tank_flags_hook_installed = 0;
             g_shared->tank_flags_hook_error = 0;
+            g_shared->charge_level_hook_installed = 0;
+            g_shared->charge_level_hook_error = 0;
         }
     }
 
@@ -2312,6 +2468,10 @@ static DWORD WINAPI InitThread(LPVOID param) {
 
     if (g_shared && install_tank_flags_hook()) {
         g_shared->tank_flags_hook_installed = 1;
+    }
+
+    if (g_shared && install_charge_level_hook()) {
+        g_shared->charge_level_hook_installed = 1;
     }
 
     if (g_shared && install_no_reload_hook()) {
