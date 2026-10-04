@@ -1850,6 +1850,18 @@ static BOOL install_main_loop_hook(void) {
         code[p++] = 0x48; code[p++] = 0x8B; code[p++] = 0x50; code[p++] = 0x12; /* mov rdx,[rax+12] */
         code[p++] = 0x4C; code[p++] = 0x8B; code[p++] = 0x40; code[p++] = 0x1A; /* mov r8,[rax+1A] */
         code[p++] = 0x4C; code[p++] = 0x8B; code[p++] = 0x48; code[p++] = 0x22; /* mov r9,[rax+22] */
+        /* Convention x64 : l'argument n passe dans rN OU xmmN selon son
+         * type - on remplit les deux, pour pouvoir passer des flottants
+         * (bits du float dans l'argument entier correspondant). */
+        code[p++] = 0x66; code[p++] = 0x48; code[p++] = 0x0F; code[p++] = 0x6E; code[p++] = 0xC1; /* movq xmm0,rcx */
+        code[p++] = 0x66; code[p++] = 0x48; code[p++] = 0x0F; code[p++] = 0x6E; code[p++] = 0xCA; /* movq xmm1,rdx */
+        code[p++] = 0x66; code[p++] = 0x49; code[p++] = 0x0F; code[p++] = 0x6E; code[p++] = 0xD0; /* movq xmm2,r8 */
+        code[p++] = 0x66; code[p++] = 0x49; code[p++] = 0x0F; code[p++] = 0x6E; code[p++] = 0xD9; /* movq xmm3,r9 */
+        /* 5e et 6e arguments (pile) a zero. */
+        code[p++] = 0x48; code[p++] = 0xC7; code[p++] = 0x44; code[p++] = 0x24; code[p++] = 0x20; /* mov qword[rsp+20h],0 */
+        code[p++] = 0x00; code[p++] = 0x00; code[p++] = 0x00; code[p++] = 0x00;
+        code[p++] = 0x48; code[p++] = 0xC7; code[p++] = 0x44; code[p++] = 0x24; code[p++] = 0x28; /* mov qword[rsp+28h],0 */
+        code[p++] = 0x00; code[p++] = 0x00; code[p++] = 0x00; code[p++] = 0x00;
         code[p++] = 0x48; code[p++] = 0x8B; code[p++] = 0x40; code[p++] = 0x02; /* mov rax,[rax+2] (rpc_fn) */
         code[p++] = 0xFF; code[p++] = 0xD0; /* call rax */
         code[p++] = 0x49; code[p++] = 0xBA; memcpy(&code[p], &rpcResultAddr, 8); p += 8; /* mov r10,&rpc_result */

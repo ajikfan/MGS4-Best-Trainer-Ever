@@ -1108,12 +1108,13 @@ OCTOCAMO_TRACKED = {"Cadavre"}
 # drapeaux 0x11 juste apres l'enregistrement), avec leurs propres
 # caracteristiques (ex. Beton 350/350/350/500/500/500, Tuile
 # 600/600/600/500/500/500). Nom affiche en jeu releve par l'utilisateur
-# au moment de l'enregistrement (2026-10-03). Autres codes vus sur des
+# au moment de l'enregistrement (2026-10-03 ; Main le 2026-10-04). Autres codes vus sur des
 # saves, nom encore inconnu : B2F267, 535A9C, 79BA3C, 760646, EC5E63,
 # 7E6643, EB4261, EB4263.
 OCTOCAMO_CAPTURED_NAMES = {
     0x4C3A3E: "Béton",
     0xEB4260: "Tuile",
+    0x8194D1: "Main",
 }
 
 # Bonus "Doré"/"Précommande" : lies au compte Steam ou au PC, pas a la

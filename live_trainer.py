@@ -44,6 +44,7 @@ pointeurs est consideree non fiable et l'ecriture reste desactivee.
 import ctypes
 import json
 import os
+import re
 import struct
 import sys
 import threading
@@ -92,6 +93,7 @@ def _bundled_path(*parts):
 
 
 TRAINER_ICON = _bundled_path("assets", "MGS4_Best_Trainer.ico")
+DEFAULT_TELEPORT_POINTS_FILE = _bundled_path("assets", "default_teleport_points.json")
 
 
 def _writable_data_path(*parts):
@@ -193,6 +195,26 @@ _FACECAMO_LOCALE = load_locale_category("facecamo")
 _VESTS_LOCALE = load_locale_category("vests")
 _OUTFITS_LOCALE = load_locale_category("outfits")
 _OCTOCAMO_LOCALE = load_locale_category("octocamo")
+_STAGES_LOCALE = load_locale_category("stages")
+
+
+def stage_display_name(code: str) -> str:
+    return _STAGES_LOCALE.get(code, code)
+
+
+def act_number(progress: int) -> int | None:
+    """Acte depuis la progression (bornes de mgs4save.ACT_RANGES : 1 a 5,
+    6 = epilogue)."""
+    for index, (lo, hi, _name) in enumerate(mgs4save.ACT_RANGES, start=1):
+        if lo <= progress <= hi:
+            return index
+    return None
+
+
+def act_display_name(act: int | None) -> str:
+    if act is None:
+        return "?"
+    return tr("teleport.epilogue") if act > 5 else tr("teleport.act", n=act)
 
 # Cles stables (pas d'ID numerique reel pour les motifs OctoCamo, voir
 # mgs4save.OCTOCAMO_INFO) - doit rester synchronise avec les cles de
@@ -1826,35 +1848,95 @@ class MGS4Live:
         """Diagnostic uniquement, voir SpeedController.coord_actor."""
         return self.speed.coord_actor()
 
+    # Position de Snake (2026-10-04) : entree joueur de la table des
+    # joueurs du jeu (8DA180 : mgs4+23EB5160 + (indice+1)*0x80, indice a
+    # mgs4+23EB5150), objet a +8, X/Y/Z (Y = hauteur) a +0x10 - la position
+    # que le jeu utilise lui-meme (lumiere de l'indice de camouflage, 8A5C0).
+    # Ecrire la deplace reellement (valide en jeu). Remplace le pointeur
+    # capture par la DLL (install_coord_tracker_hook, routine de distance
+    # appelee seulement dans certaines situations) qui restait sur l'ancien
+    # Snake apres un changement d'acte (position a 0 au debut de l'acte 2).
+    PLAYER_INDEX_RVA = 0x23EB5150
+    PLAYER_TABLE_RVA = 0x23EB5160
+    PLAYER_ENTRY_SIZE = 0x80
+
+    def _player_transform(self) -> int | None:
+        index = struct.unpack("<i", self.proc.read_bytes(self.base + self.PLAYER_INDEX_RVA, 4))[0]
+        entry = self.base + self.PLAYER_TABLE_RVA + (index + 1) * self.PLAYER_ENTRY_SIZE
+        transform = struct.unpack("<Q", self.proc.read_bytes(entry + 8, 8))[0]
+        return transform or None
+
     def player_position(self) -> tuple[float, float, float] | None:
-        """Position (X, Y, Z, floats) de l'acteur suivi par coord_actor -
-        confirme etre Snake par teleportation reelle en jeu (2026-09-27,
-        voir notes.md) : pointeur stable pendant le deplacement, ecriture
-        de +0x10/+0x14/+0x18 deplace bien le joueur. Y semble etre la
-        hauteur (le jeu annule une position invalide sous le sol), X/Z le
-        plan horizontal en coordonnees absolues (pas relatives a
-        l'orientation du joueur). Injecte la DLL au premier appel
-        (paresseux, comme set_game_speed) - sans ca coord_actor() renvoie
-        toujours None si aucune autre fonctionnalite n'a deja declenche
-        l'injection."""
-        if not (self.connected and self.sane and self.pid):
+        """Position (X, Y, Z, floats) de Snake ; Y = hauteur (le jeu
+        annule une position invalide sous le sol), X/Z le plan horizontal
+        en coordonnees absolues."""
+        if not (self.connected and self.sane):
             return None
-        if not self.speed.ensure_injected(self.pid):
-            return None
-        addr = self.coord_actor()
+        addr = self._player_transform()
         if not addr:
             return None
         return struct.unpack("<fff", self.proc.read_bytes(addr + 0x10, 12))
 
     def set_player_position(self, x: float, y: float, z: float) -> bool:
-        if not (self.connected and self.sane and self.pid):
+        if not (self.connected and self.sane):
             return False
-        if not self.speed.ensure_injected(self.pid):
-            return False
-        addr = self.coord_actor()
+        addr = self._player_transform()
         if not addr:
             return False
         self.proc.write_bytes(addr + 0x10, struct.pack("<fff", x, y, z))
+        return True
+
+    # Jauge de grip (2026-10-04) : composant du joueur (acteur joueur = 6
+    # octets bas de [entree joueur], cf. _player_transform ; composant a
+    # acteur+0x110, type reconnu a sa table de fonctions mgs4+18AF720).
+    # Jauge = int32 a +0x1E8, valable si le bit 0 de +0x1F8 est actif
+    # (suspendu) - c'est ce que renvoie au HUD le gestionnaire du message
+    # 0x2D0011 (9776DC). Le HUD n'en garde qu'une copie (tache joueur
+    # +0x86C) : l'ecrire n'avait aucun effet. Ecrire +0x1E8 tient la barre
+    # pleine (valide en jeu). Elle part de 2000 et baisse plus ou moins
+    # vite selon le stress.
+    # Le meme composant porte l'oxygene (2026-10-04) : int32 a +0x1EC,
+    # active par le bit 0x4 de +0x1F8 (message 0x2D0012, celui que le HUD
+    # consulte en premier) ; baisse d'environ 90/s sous l'eau. Troisieme
+    # jauge du meme modele (+0x1F0, bit 0x10, message 0x2D0013) non
+    # identifiee.
+    GRIP_COMPONENT_OFFSET = 0x110
+    GRIP_COMPONENT_VTABLE_RVA = 0x18AF720
+    PLAYER_GAUGE_STATE_OFFSET = 0x1F8
+    PLAYER_GAUGES = {"grip": (0x1E8, 0x1), "oxygen": (0x1EC, 0x4)}
+
+    def _grip_component(self) -> int | None:
+        index = struct.unpack("<i", self.proc.read_bytes(self.base + self.PLAYER_INDEX_RVA, 4))[0]
+        entry = self.base + self.PLAYER_TABLE_RVA + (index + 1) * self.PLAYER_ENTRY_SIZE
+        actor = struct.unpack("<Q", self.proc.read_bytes(entry, 8))[0] & 0xFFFFFFFFFFFF
+        if not actor:
+            return None
+        component = struct.unpack("<Q", self.proc.read_bytes(actor + self.GRIP_COMPONENT_OFFSET, 8))[0]
+        if not component:
+            return None
+        vtable = struct.unpack("<Q", self.proc.read_bytes(component, 8))[0]
+        return component if vtable == self.base + self.GRIP_COMPONENT_VTABLE_RVA else None
+
+    def read_player_gauge(self, gauge: str) -> int | None:
+        """Jauge du joueur (PLAYER_GAUGES) quand elle est active (suspendu,
+        sous l'eau) ; -1 sinon, None si introuvable."""
+        if not (self.connected and self.sane):
+            return None
+        component = self._grip_component()
+        if component is None:
+            return None
+        offset, bit = self.PLAYER_GAUGES[gauge]
+        value, = struct.unpack("<i", self.proc.read_bytes(component + offset, 4))
+        state, = struct.unpack("<I", self.proc.read_bytes(component + self.PLAYER_GAUGE_STATE_OFFSET, 4))
+        return value if state & bit else -1
+
+    def write_player_gauge(self, gauge: str, value: int) -> bool:
+        if not (self.connected and self.sane):
+            return False
+        component = self._grip_component()
+        if component is None:
+            return False
+        self.proc.write_bytes(component + self.PLAYER_GAUGES[gauge][0], struct.pack("<i", value))
         return True
 
     def raven_hp(self) -> int | None:
@@ -1991,6 +2073,186 @@ class MGS4Live:
         if rva is None:
             return None
         return struct.unpack("<H", self.proc.read_bytes(self.base + rva + MODULE_PATCH_SHIFT, 2))[0]
+
+    # Munitions infinies "d'origine" (2026-10-04) : chaque arme de la
+    # table du jeu (mgs4+1D82580 + ID*0x50, comme set_weapon) a des
+    # drapeaux a +0x40 ; bit 0 = la reserve ne baisse jamais (la fonction
+    # de tir 6E1BE le teste a cote du test du Bandana), bit 1 = chargeur
+    # infini. D'origine : Pistolet solaire = 1, Patriot = 3, le reste 0.
+    # Activer le bit 0 donne la reserve infinie ET le symbole infini du
+    # HUD, sans toucher a l'objet special equipe (valide en jeu sur
+    # l'Operator ; faire pointer l'objet equipe sur le Bandana coupait le
+    # Solid Eye et n'affichait pas le symbole).
+    WEAPON_FLAGS_OFFSET = 0x40
+    WEAPON_FLAG_INFINITE_RESERVE = 0x1
+    # Pistolet solaire : pas de vraie reserve, sa "jauge" est le chargeur
+    # (200, recharge au soleil). Bit 1 (chargeur infini, comme le Patriot)
+    # le fige... a sa valeur du moment, recharge solaire comprise : on le
+    # remplit donc au maximum en meme temps (+0x30 courant, +0x32 max).
+    SOLAR_GUN_ID = 0x0D
+    WEAPON_FLAG_INFINITE_MAGAZINE = 0x2
+    WEAPON_MAGAZINE_ENTRY_OFFSET = 0x30
+    NATIVE_INFINITE_WEAPON_IDS = frozenset({0x0D, 0x16})
+    INFINITE_AMMO_WEAPON_IDS = tuple(sorted(set(CONFIRMED_WEAPON_AMMO_RVAS) - {0x0D, 0x16}))
+
+    # Patchs de code ecrits directement (pas de DLL) : RVA -> (octets
+    # d'origine, octets du patch). Signature complete verifiee avant
+    # toute ecriture (rien n'est ecrit sur une autre version du jeu).
+    #  - Intouchable (2026-10-04) : 96C0B0 traite la liste des coups recus
+    #    par Snake pendant l'image (degats vie/endurance, reaction,
+    #    projection ; seul appelant 975232, retour ignore). "ret" a son
+    #    entree : insensible a tout impact, letal ou non - valide en jeu
+    #    (balles, explosions, mines, corps a corps).
+    #  - Invisible (2026-10-04) : 89360 renvoie l'exposition de Snake
+    #    (0 = invisible, 1 = bien visible) a partir de l'indice de
+    #    camouflage ; le Camouflage furtif (etat joueur 0xA9) la force a 0.
+    #    Utilisee par le code des soldats et par le HUD (F4D770). La faire
+    #    renvoyer 0 ("xorps xmm0,xmm0 ; ret") : les soldats ne voient plus
+    #    Snake, meme debout devant eux, sans le rendre transparent - valide
+    #    en jeu. Le HUD affiche 99 % (plafond hors Camouflage furtif).
+    #    89410 = meme calcul sans le test du Camouflage furtif (autres
+    #    ennemis). Certains soldats (Millennium Park) testent en plus
+    #    directement l'etat 0xA9 via 8DA980 ("un joueur a-t-il cet etat ?") :
+    #    les 14 appels "mov ecx,0xA9 ; call 8DA980" deviennent "mov eax,1".
+    #    Snake ne devient pas transparent pour autant - valide en jeu.
+    _STEALTH_CHECK_CALLS = {
+        0xB25504: "e87754dbff", 0xB25B26: "e8554edbff", 0xB264F3: "e88844dbff",
+        0xB29D9C: "e8df0bdbff", 0xB3554B: "e83054daff", 0xB355C0: "e8bb53daff",
+        0xB3AA9F: "e8dcfed9ff", 0xB3AC14: "e867fdd9ff", 0xB3ADE5: "e896fbd9ff",
+        0xB46F20: "e85b3ad9ff", 0xB4E48A: "e8f1c4d8ff", 0x1002017: "e864898dff",
+        0x1012AC1: "e8ba7e8cff", 0x134B1C2: "e8b9f758ff",
+    }
+    #  - Mini Gekko (2026-10-04, valide en jeu) : 11FBE10 traite leurs
+    #    coups (vie +0x12DC, 2 balles), puis appelle 11DB320 (destruction)
+    #    si elle est <= 0. Le "jg" (11FBF86) est neutralise : chaque coup
+    #    recu declenche la destruction par le jeu.
+    #  - Un coup, un mort sur les vehicules (2026-10-04, valide en jeu) :
+    #    102D9C0 = rappel de collision d'un vehicule (Millennium Park) avec
+    #    liste blanche M82A2/Rail Gun : le "jne" de rejet (102DAF3) est
+    #    neutralise. Helicopteres : vie a objet+0x1068 (max +0x106C), mise
+    #    a jour 1352770 ; 13532A0 filtre les types d'attaque (lance-
+    #    roquettes, explosifs, M82A2, Rail Gun seulement) -> accepte tout ;
+    #    le bit 12 du coup ("mise a mort" = degats = vie max, test a
+    #    13528F1) est considere toujours present.
+    #  - Un coup, un mort sur Laughing Octopus (2026-10-04, valide en jeu) :
+    #    1434701 applique un coup a sa vie (objet 18BC1B0, +0x314) ; un
+    #    degat de 0x7FFFFFFF y vaut "mise a mort" (degat = vie actuelle).
+    #    Neutraliser le "jne" (1434D26) traite chaque coup ainsi ; la vie
+    #    est ensuite corrigee par le jeu (1435110) aux seuils de phase :
+    #    un tir par phase, transitions et fin geres par le jeu.
+    #    Forme Beauty (1173BB1) : un coup ordinaire ne peut pas descendre
+    #    sous 2 % de la vie max (seul un coup marque, r15b, passe outre) ;
+    #    "sub r8d,ebx" (1173D8D) -> "xor r8d,r8d" : vie a 0 au premier coup
+    #    (valide en jeu sur Laughing Beauty, elle meurt).
+    #    Raging Raven (13F8A6C, vraie vie = objet 18BC1B0 [acteur+0x42E8] ;
+    #    acteur+0xB0 n'est que la jauge du HUD recopiee par E3B740) : meme
+    #    sentinelle 0x7FFFFFFF ; "cmovne eax,esi" (13F8C0D) neutralise ->
+    #    chaque coup = mise a mort (valide en jeu, morte en un tir).
+    #    Crying Wolf (FE7D80, vraie vie = objet de type mgs4+18EA598 a
+    #    [acteur+0xE20], +0x314 ; jauge HUD recopiee a F6E311) : six
+    #    branches "vie - degat" selon le type d'attaque ; chaque "sub
+    #    ecx,eax" -> "xor ecx,ecx" (vie a 0). Endurance (+0x31C) non
+    #    touchee. Valide en jeu.
+    #    Vamp (1123110, vie objet +0x314, 15000) : "sub eax,edi" (1123568)
+    #    -> "xor eax,eax" : a terre au premier tir ; la seringue reste
+    #    necessaire pour le vaincre (mecanique du combat, non contournee).
+    #    Metal Gear RAY (138D270, vie objet 18BC1B0 +0x314, 60000, juste
+    #    avant sa liste de coups) : meme sentinelle 0x7FFFFFFF ; "jne"
+    #    (138D493) neutralise -> mort au premier coup (valide en jeu).
+    #    Screaming Mantis, forme bete (F08CF0, vie objet [acteur+0x42B8]) :
+    #    sentinelle 0x7FFFFFFF (jne F08FC2 neutralise) ; mais la vie est
+    #    plancher a 50 (F09018) : seule l'endurance (+0x31C) a 0 lance la
+    #    defaite. Le "jg" (F09038) qui la saute tant que l'endurance est
+    #    positive est neutralise : le jeu met lui-meme l'endurance a 0 et
+    #    lance la sequence de defaite a chaque coup (vie + endurance
+    #    videes ensemble, demande utilisateur). Non encore teste en jeu
+    #    (patch de vie seul valide).
+    #    Liquid Ocelot, combat final (11270E0, vie objet +0x314, 1000) :
+    #    vie = max(vie - degat, plancher de la phase) ; "sub edx,edi"
+    #    (112717A) -> "xor edx,edx" : chaque coup amene au plancher, le
+    #    suivant lance la phase suivante (transitions par le jeu, valide).
+    #  - Objets destructibles (portails a deux portes detruits au canon de
+    #    tank, 2026-10-04, valide en jeu) : 12637B0 applique un impact a
+    #    l'objet (vie +0x34, 80000 par porte ; degat de l'impact +0x40) puis
+    #    la borne au minimum du niveau ([rsi+0x248], verrou de scenario
+    #    eventuel, conserve). "mov eax,[rdi+40] ; sub [rdi+34],eax"
+    #    (126385F) -> "xor eax,eax ; mov [rdi+34],eax" : detruit au premier
+    #    impact. Pas un objet de vie 18BC1B0 ni la liste de coups D41940.
+    CODE_PATCHES = {
+        "destructibles_one_shot_kill": [(0x126385F, bytes.fromhex("8b47402947348b4734"), bytes.fromhex("31c089473490"))],
+        "boss_one_shot_kill": [
+            (0x1434D26, bytes.fromhex("7503448bc0412bc0"), bytes.fromhex("9090")),
+            (0x1173D8D, bytes.fromhex("442bc34963c048f7"), bytes.fromhex("4531c0")),
+            (0x13F8C0D, bytes.fromhex("0f45c62bc84863c1"), bytes.fromhex("909090")),
+            (0xFE823C, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE835B, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE8654, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE87A7, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE88F3, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE896A, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0x1123568, bytes.fromhex("2bc74863c848f7d9"), bytes.fromhex("31c0")),
+            (0x138D493, bytes.fromhex("750c448b85140300"), bytes.fromhex("9090")),
+            (0xF08FC2, bytes.fromhex("75028bd82bc34898"), bytes.fromhex("9090")),
+            (0xF09038, bytes.fromhex("0f8f42010000f30f"), bytes.fromhex("909090909090")),
+            (0x112717A, bytes.fromhex("2bd74963c84863c2"), bytes.fromhex("31d2")),
+        ],
+        "vehicles_one_shot_kill": [
+            (0x11FBF86, bytes.fromhex("7f08488bcbe890f3"), bytes.fromhex("9090")),
+            (0x102DAF3, bytes.fromhex("755e488d4c2430"), bytes.fromhex("9090")),
+            (0x13532A0, bytes.fromhex("f7c10000050075"), bytes.fromhex("b801000000c3")),
+            (0x13528F5, bytes.fromhex("730b660f6e83"), bytes.fromhex("9090")),
+        ],
+        "untouchable": [(0x96C0B0, bytes.fromhex("488bc455535657488d68a1"), bytes.fromhex("c3"))],
+        "invisible": [
+            (0x89360, bytes.fromhex("48895c2408488974"), bytes.fromhex("0f57c0c3")),
+            (0x89410, bytes.fromhex("4883ec28e8a71100"), bytes.fromhex("0f57c0c3")),
+        ] + [(rva, bytes.fromhex(original), bytes.fromhex("b801000000"))
+             for rva, original in _STEALTH_CHECK_CALLS.items()],
+    }
+
+    def set_code_patch(self, name: str, enabled: bool) -> bool:
+        """Applique ou retire tous les sites d'un patch ; rien n'est ecrit
+        si un seul site ne correspond ni a l'original ni au patch."""
+        if not (self.connected and self.sane):
+            return False
+        sites = []
+        for rva, original, patch in self.CODE_PATCHES[name]:
+            address = self.base + rva
+            current = self.proc.read_bytes(address, len(original))
+            patched = patch + original[len(patch):]
+            if current not in (original, patched):
+                return False
+            sites.append((address, current, patched if enabled else original, len(patch)))
+        for address, current, wanted, size in sites:
+            if current != wanted:
+                self.proc.write_bytes(address, wanted[:size])
+        return True
+
+    def set_infinite_ammo(self, enabled: bool) -> bool:
+        """Pose (ou retire) le bit 0 sur toutes les armes a munitions ; une
+        lecture de la table, une ecriture par arme seulement si besoin -
+        rappele a chaque cycle, le jeu peut reconstruire la table (chargement)."""
+        if not (self.connected and self.sane):
+            return False
+        table = self.base + self.WEAPON_TABLE_RVA
+        last = self.INFINITE_AMMO_WEAPON_IDS[-1]
+        block = self.proc.read_bytes(table, (last + 1) * self.WEAPON_TABLE_STRIDE)
+        for weapon_id in self.INFINITE_AMMO_WEAPON_IDS:
+            offset = weapon_id * self.WEAPON_TABLE_STRIDE + self.WEAPON_FLAGS_OFFSET
+            flags = struct.unpack_from("<I", block, offset)[0]
+            wanted = (flags | self.WEAPON_FLAG_INFINITE_RESERVE) if enabled                 else (flags & ~self.WEAPON_FLAG_INFINITE_RESERVE)
+            if wanted != flags:
+                self.proc.write_bytes(table + offset, struct.pack("<I", wanted))
+        solar = table + self.SOLAR_GUN_ID * self.WEAPON_TABLE_STRIDE
+        flags = struct.unpack("<I", self.proc.read_bytes(solar + self.WEAPON_FLAGS_OFFSET, 4))[0]
+        wanted = (flags | self.WEAPON_FLAG_INFINITE_MAGAZINE) if enabled             else (flags & ~self.WEAPON_FLAG_INFINITE_MAGAZINE)
+        if enabled:
+            current, maximum = struct.unpack("<hh", self.proc.read_bytes(solar + self.WEAPON_MAGAZINE_ENTRY_OFFSET, 4))
+            if 0 < maximum != current:
+                self.proc.write_bytes(solar + self.WEAPON_MAGAZINE_ENTRY_OFFSET, struct.pack("<h", maximum))
+        if wanted != flags:
+            self.proc.write_bytes(solar + self.WEAPON_FLAGS_OFFSET, struct.pack("<I", wanted))
+        return True
 
     def write_weapon_ammo(self, weapon_id: int, value: int) -> bool:
         """Retourne False sans rien ecrire si l'adresse munitions de cette
@@ -2189,6 +2451,36 @@ class MGS4Live:
         self.proc.write_bytes(self.linkvarbuf + self.VEST_EQUIP_OFFSET, bytes([item_id - self.VEST_FIRST_ID]))
         return True
 
+    # Difficulte (2026-10-04) : linkvarbuf+0x6 = score s16 (20/30/35/40/50,
+    # meme valeur que METADATA.SAV 0x30, voir mgs4save.DIFFICULTY_NAMES).
+    # Trouve via la sauvegarde : 4B1730 recopie [lv+6] dans la structure
+    # ecrite sur disque. Ecrire 35 puis sauvegarder donne SOLID NORMAL.
+    DIFFICULTY_OFFSET = 0x6
+
+    # Lieu actuel (2026-10-04) : linkvarbuf reprend la disposition de
+    # MGS4.SAV (mgs4save.read_progress_info) - code de stage ASCII a +0x34
+    # (ex. "s01a50l"), progression u32 a +0x54 (-> acte, ACT_RANGES).
+    STAGE_CODE_OFFSET = 0x34
+    PROGRESS_OFFSET = 0x54
+
+    def read_location(self) -> tuple[str, int] | None:
+        """(code de stage, progression), None si illisible."""
+        raw = self.proc.read_bytes(self.linkvarbuf + self.STAGE_CODE_OFFSET, 8)
+        code = raw.split(b"\0")[0].decode("ascii", errors="replace")
+        if not re.fullmatch(r"s\d\da\d\d\w", code):
+            return None
+        progress = struct.unpack("<I", self.proc.read_bytes(self.linkvarbuf + self.PROGRESS_OFFSET, 4))[0]
+        return code, progress
+
+    def read_difficulty(self) -> int:
+        return struct.unpack("<h", self.proc.read_bytes(self.linkvarbuf + self.DIFFICULTY_OFFSET, 2))[0]
+
+    def write_difficulty(self, score: int) -> bool:
+        if not (self.connected and self.sane) or score not in mgs4save.DIFFICULTY_NAMES:
+            return False
+        self.proc.write_bytes(self.linkvarbuf + self.DIFFICULTY_OFFSET, struct.pack("<h", score))
+        return True
+
     # Arme en main (2026-10-03) : linkvarbuf+0xAC4 = ID de l'arme equipee
     # (u16), +0xACC = la precedente. set_weapon (6D2D0, rcx = entree de
     # l'arme dans la table du jeu, mgs4+1D82580 + ID*0x50 - meme table que
@@ -2365,6 +2657,10 @@ class MGS4Live:
         manager = struct.unpack("<Q", self.proc.read_bytes(self.base + self.MODEL_MANAGER_PTR_RVA, 8))[0]
         if funcs is None or not manager:
             return False
+        # Pas de controleur de jeu = cinematique : recharger le modele du
+        # Snake de cinematique fait planter le jeu (constate le 2026-10-03).
+        if not self._octocamo_controller():
+            return False
         current_outfit, current_face = self.proc.read_bytes(self.linkvarbuf + self.OUTFIT_EQUIP_OFFSET, 2)
         outfit = current_outfit if outfit is None else outfit
         face = current_face if face is None else face
@@ -2423,7 +2719,24 @@ class MGS4Live:
         "build": (0x9FC10, "4055574881ecb80100008bea488bf9"),
         "memcpy": (0xD25800, "ff25"),
         "memset": (0x7513C0, "4c8bc233d2e9"),
+        "apply_pattern": (0xA0E70, "48895c2408574883ec20498bf9"),
+        "apply_fade": (0xA0ED0, "40534883ec300f297424200f28f3"),
+        "cutscene_update": (0xE80960, "40564883ec50f30f1081b8000000"),
     }
+    # En cinematique (2026-10-04), le controleur de jeu n'existe pas
+    # (pointeur nul) : le Snake de cinematique a sa propre tache de
+    # camouflage, creee au debut de la sequence a partir de B28. Taches
+    # chainees dans une liste circulaire (sentinelle mgs4+3B49340 ; noeud :
+    # +0 suivant, +8 fonction de mise a jour, +0x20 precedent) ; la notre
+    # se reconnait a sa fonction de mise a jour (E80960). Objet : +0xA0
+    # modele du corps, +0xA8 modele du visage, +0xF4 fondu, +0xF8 minuteur
+    # de fondu (le clic du stick gauche le lance vers 0, motifs auto
+    # seulement), enregistrement de motif a +0x100 (meme format que le
+    # controleur). Le rendu ne relit pas l'enregistrement : il faut
+    # appliquer le motif aux modeles (apply_pattern, A0E70) puis le fondu
+    # (apply_fade, A0ED0, flottant en 4e argument - xmm3).
+    CUTSCENE_TASK_LIST_RVA = 0x3B49340
+    CUTSCENE_TASK_MAX = 2000
     OCTOCAMO_RECORD_SIZE = 0x12D0
     OCTOCAMO_TINT_OFFSETS = (0x1248, 0x124C, 0x1250, 0x1258, 0x125C, 0x1260)
     OCTOCAMO_FLAG_FORCED = 0x1000
@@ -2456,9 +2769,11 @@ class MGS4Live:
             if not self._equip_model_live(0, None):
                 return False
         funcs = self._live_funcs(self.OCTOCAMO_LIVE_FUNCS)
-        ctrl = struct.unpack("<Q", self.proc.read_bytes(self.base + self.OCTOCAMO_CONTROLLER_PTR_RVA, 8))[0]
-        if funcs is None or not ctrl:
+        if funcs is None:
             return False
+        ctrl = self._octocamo_controller()
+        if not ctrl:
+            return self._equip_octocamo_cutscene(funcs, code)
         call = self.speed.game_call
         current, pending = ctrl + 0xA0, ctrl + 0x1370
         if code == 0:
@@ -2467,6 +2782,69 @@ class MGS4Live:
                 return False
             self._octocamo_show(ctrl, forced=True, fade_value=0.0, state=0)
             return True
+        if not self._octocamo_build(funcs, pending, code):
+            return False
+        call(funcs["memcpy"], current, pending, self.OCTOCAMO_RECORD_SIZE)
+        call(funcs["memset"], pending, self.OCTOCAMO_RECORD_SIZE)
+        flags = struct.unpack("<I", self.proc.read_bytes(current + 0x10D8, 4))[0]
+        if flags & self.OCTOCAMO_FLAG_FORCED:
+            self._octocamo_show(ctrl, forced=True, fade_value=1.0, state=2)
+        else:
+            self._octocamo_show(ctrl, forced=False, fade_value=0.0, state=1)
+        return True
+
+    def _octocamo_controller(self) -> int:
+        """Controleur d'auto-camouflage du jeu, 0 en cinematique."""
+        return struct.unpack("<Q", self.proc.read_bytes(self.base + self.OCTOCAMO_CONTROLLER_PTR_RVA, 8))[0]
+
+    def _cutscene_camo_task(self, update_fn: int) -> int:
+        """Tache de camouflage du Snake de cinematique, 0 si absente."""
+        sentinel = self.base + self.CUTSCENE_TASK_LIST_RVA
+        node = struct.unpack("<Q", self.proc.read_bytes(sentinel, 8))[0]
+        for _ in range(self.CUTSCENE_TASK_MAX):
+            if not node or node == sentinel:
+                return 0
+            head = self.proc.read_bytes(node, 16)
+            if struct.unpack_from("<Q", head, 8)[0] == update_fn:
+                return node
+            node = struct.unpack_from("<Q", head, 0)[0]
+        return 0
+
+    def _equip_octocamo_cutscene(self, funcs: dict[str, int], code: int) -> bool:
+        task = self._cutscene_camo_task(funcs["cutscene_update"])
+        if not task:
+            return False
+        call = self.speed.game_call
+        record = task + 0x100
+        body, face = struct.unpack("<QQ", self.proc.read_bytes(task + 0xA0, 16))
+        if code == 0:
+            if call(funcs["memset"], record, self.OCTOCAMO_RECORD_SIZE) is None:
+                return False
+            fade = 0.0
+        else:
+            if not self._octocamo_build(funcs, record, code):
+                return False
+            if call(funcs["apply_pattern"], body, face, 0, record) is None:
+                return False
+            fade = 1.0
+        self.proc.write_bytes(task + 0xF4, struct.pack("<f", fade))
+        self.proc.write_bytes(task + 0xF8, struct.pack("<f", 0.0))
+        fade_bits = struct.unpack("<I", struct.pack("<f", fade))[0]
+        if call(funcs["apply_fade"], body, face, 0, fade_bits) is None:
+            return False
+        # Meme motif dans la partie : repris par la cinematique suivante et
+        # par le controleur de jeu au retour en jeu (8FACA0 lit B28).
+        tints = [round(struct.unpack("<f", self.proc.read_bytes(record + o, 4))[0] * 1000)
+                 for o in self.OCTOCAMO_TINT_OFFSETS]
+        flags = struct.unpack("<I", self.proc.read_bytes(record + 0x10D8, 4))[0]
+        self.proc.write_bytes(self.linkvarbuf + mgs4save.OCTOCAMO_EQUIPPED_OFFSET,
+                              struct.pack("<I6HI", code, *[max(0, min(t, 0xFFFF)) for t in tints], flags))
+        return True
+
+    def _octocamo_build(self, funcs: dict[str, int], record: int, code: int) -> bool:
+        """Charge la texture du motif et construit l'enregistrement (teintes
+        comprises) a l'adresse record."""
+        call = self.speed.game_call
         if call(funcs["load"], code) is None:
             return False
         deadline = time.monotonic() + 5.0
@@ -2475,17 +2853,10 @@ class MGS4Live:
                 return False
             time.sleep(0.05)
         call(funcs["flip"], code)
-        if (call(funcs["build"], pending, code) or 0) & 0xFFFFFFFF != 1:
+        if (call(funcs["build"], record, code) or 0) & 0xFFFFFFFF != 1:
             return False
         for offset, tint in zip(self.OCTOCAMO_TINT_OFFSETS, self._octocamo_tints(code)):
-            self.proc.write_bytes(pending + offset, struct.pack("<f", tint / 1000))
-        call(funcs["memcpy"], current, pending, self.OCTOCAMO_RECORD_SIZE)
-        call(funcs["memset"], pending, self.OCTOCAMO_RECORD_SIZE)
-        flags = struct.unpack("<I", self.proc.read_bytes(current + 0x10D8, 4))[0]
-        if flags & self.OCTOCAMO_FLAG_FORCED:
-            self._octocamo_show(ctrl, forced=True, fade_value=1.0, state=2)
-        else:
-            self._octocamo_show(ctrl, forced=False, fade_value=0.0, state=1)
+            self.proc.write_bytes(record + offset, struct.pack("<f", tint / 1000))
         return True
 
     def _octocamo_show(self, ctrl: int, forced: bool, fade_value: float, state: int) -> None:
@@ -3726,20 +4097,12 @@ class VitalsTab(QWidget):
         self.sliders: dict[str, QSlider] = {}
         self.lock_checks: dict[str, QCheckBox] = {}
         self.locked_percents: dict[str, float] = {}
-        # weapon_id -> vraie reserve au moment ou "Munitions infinies" a
-        # ete cochee, reecrite en continu tant qu'elle reste cochee (pas
-        # de valeur fixe artificielle - demande explicite de l'utilisateur
-        # 2026-09-26, apres l'echec de deux pistes plus "authentiques"
-        # mais trop fragiles, voir notes.md : mecanisme du Bandana limite
-        # a l'objet reellement possede et en conflit avec un autre objet
-        # special equipe ; sentinel 65535 du Patriot specifique a cette
-        # arme, casse l'affichage sur les autres). "Pas de rechargement"
-        # n'a pas besoin de cet instantane : la capacite max du chargeur
-        # (WEAPON_MAGAZINE_MAX_OFFSET) est une constante par arme, relue
-        # et reecrite en direct a chaque cycle dans refresh() pour TOUTES
-        # les armes plutot que figee au moment du clic - fonctionne donc
-        # automatiquement quelle que soit l'arme equipee/changee ensuite.
-        self.ammo_snapshot: dict[int, int] = {}
+        # Maximum de chaque jauge du joueur (grip, oxygene), voir
+        # PLAYER_GAUGE_ROWS.
+        self._gauge_max = {name: self.PLAYER_GAUGE_MAX for name in self.PLAYER_GAUGE_ROWS}
+        # "Munitions infinies" : drapeau d'arme du jeu (MGS4Live.
+        # set_infinite_ammo) depuis le 2026-10-04, plus de reecriture des
+        # reserves (l'ancienne boucle faisait ramer le trainer).
 
         # Degats en paliers pour "Un coup, un mort" sur les boss (voir
         # _reassert_boss_staged_damage) : contrairement aux ennemis
@@ -3759,6 +4122,7 @@ class VitalsTab(QWidget):
         # transition/baisse detectee, jamais en continu.
         self._raven_last_hp: int | None = None
         self._raven_last_stamina: int | None = None
+        self._boss_kill_patched = False
 
         layout = QVBoxLayout(self)
 
@@ -3782,6 +4146,17 @@ class VitalsTab(QWidget):
         self.pause_check.toggled.connect(self._on_pause_toggled)
         speed_row.addWidget(self.pause_check)
         speed_layout.addLayout(speed_row)
+
+        difficulty_row = QHBoxLayout()
+        difficulty_row.addWidget(QLabel(tr("vitals.difficulty")))
+        self.difficulty_combo = QComboBox()
+        for score in sorted(mgs4save.DIFFICULTY_NAMES):
+            self.difficulty_combo.addItem(tr(f"difficulty.{score}"), score)
+        self.difficulty_combo.setToolTip(tr("vitals.difficulty_tooltip"))
+        self.difficulty_combo.activated.connect(self._on_difficulty_changed)
+        difficulty_row.addWidget(self.difficulty_combo)
+        difficulty_row.addStretch(1)
+        speed_layout.addLayout(difficulty_row)
         layout.addWidget(speed_group)
 
         alert_group = QGroupBox(tr("vitals.alert_group"))
@@ -3846,7 +4221,24 @@ class VitalsTab(QWidget):
         weapons_layout.addWidget(self.railgun_charge_check)
         layout.addWidget(weapons_group)
 
+        snake_group = QGroupBox(tr("vitals.snake_group"))
+        snake_layout = QHBoxLayout(snake_group)
+        self.untouchable_check = QCheckBox(tr("vitals.untouchable"))
+        self.untouchable_check.setToolTip(tr("vitals.untouchable_tooltip"))
+        self.untouchable_check.toggled.connect(self._on_untouchable_toggled)
+        snake_layout.addWidget(self.untouchable_check)
+        self.invisible_check = QCheckBox(tr("vitals.invisible"))
+        self.invisible_check.setToolTip(tr("vitals.invisible_tooltip"))
+        self.invisible_check.toggled.connect(self._on_invisible_toggled)
+        snake_layout.addWidget(self.invisible_check)
+
+        snake_layout.addStretch(1)
+        layout.addWidget(snake_group)
+
+        # Grip, Oxygene : pas dans linkvarbuf (composant du joueur, voir
+        # MGS4Live.read_player_gauge), meme presentation que les autres jauges.
         names = list(VITALS)
+        names[names.index("Stamina") + 1:names.index("Stamina") + 1] = list(self.PLAYER_GAUGE_ROWS)
         self.table = QTableWidget(len(names), 3)
         self.table.setHorizontalHeaderLabels([tr("table.field"), tr("table.live_value"), tr("table.lock")])
         self.table.verticalHeader().setVisible(False)
@@ -3940,6 +4332,12 @@ class VitalsTab(QWidget):
         self.table.setCellWidget(row, 2, lock_wrap)
         self.lock_checks[name] = lock
 
+    # Lignes du tableau -> jauge MGS4Live.PLAYER_GAUGES (actives seulement
+    # suspendu / sous l'eau). Maximum : 2000 (valeur de depart constatee,
+    # et des champs voisins), ou la plus haute valeur vue si plus grande.
+    PLAYER_GAUGE_ROWS = {"Grip": "grip", "Oxygene": "oxygen"}
+    PLAYER_GAUGE_MAX = 2000
+
     def _on_lock_toggled(self, name: str, checked: bool):
         if checked:
             self.locked_percents[name] = self.sliders[name].value()
@@ -3948,6 +4346,18 @@ class VitalsTab(QWidget):
 
     def _on_slider_changed(self, name: str, value: int):
         if not (self.live.connected and self.live.sane):
+            return
+        if name in self.PLAYER_GAUGE_ROWS:
+            # Sans effet quand la jauge n'est pas active (pas suspendu, hors de l'eau).
+            gauge = self.PLAYER_GAUGE_ROWS[name]
+            try:
+                current = self.live.read_player_gauge(gauge)
+                if current is not None and current >= 0:
+                    self.live.write_player_gauge(gauge, round(value / 100 * self._gauge_max[name]))
+            except OSError:
+                pass
+            if name in self.locked_percents:
+                self.locked_percents[name] = value
             return
         try:
             self.live.write_vital_percent(name, value)
@@ -3969,6 +4379,24 @@ class VitalsTab(QWidget):
             return
         self.live.set_paused(checked)
 
+    def sync_to_game(self):
+        """La DLL reste dans le jeu apres la fermeture du trainer, avec ses
+        drapeaux (constate 2026-10-04 : "Pas de rechargement" encore actif
+        au lancement suivant, case decochee). A chaque accrochage, on lui
+        renvoie l'etat reel des cases."""
+        if not (self.live.connected and self.live.sane):
+            return
+        self._on_speed_changed(self.speed_slider.value())
+        self._on_pause_toggled(self.pause_check.isChecked())
+        self._on_no_reload_toggled(self.no_reload_check.isChecked())
+        self._on_infinite_ammo_toggled(self.infinite_ammo_check.isChecked())
+        self._on_no_alerts_toggled(self.no_alerts_check.isChecked())
+        self._on_railgun_charge_toggled(self.railgun_charge_check.isChecked())
+        self._on_untouchable_toggled(self.untouchable_check.isChecked())
+        self._on_invisible_toggled(self.invisible_check.isChecked())
+        self._on_alert_force_changed(self.alert_force_combo.currentIndex())
+        self._apply_instant_kill_mode()
+
     def _apply_instant_kill_mode(self):
         """Appele par la case a cocher maitresse ET par le bouton pilule
         Letal/Non letal (les deux doivent se recalculer ensemble) - un
@@ -3979,6 +4407,12 @@ class VitalsTab(QWidget):
         lethal = self.lethal_btn.isChecked()
         self.live.set_one_shot_kill(active and lethal)
         self.live.set_non_lethal(active and not lethal)
+        try:
+            self.live.set_code_patch("vehicles_one_shot_kill", active and lethal)
+            self.live.set_code_patch("destructibles_one_shot_kill", active and lethal)
+            self._boss_kill_patched = self.live.set_code_patch("boss_one_shot_kill", active and lethal)                 and active and lethal
+        except OSError:
+            self._boss_kill_patched = False
         # Repart d'une reference 100% fraiche a chaque (re)activation du
         # mode, voir _reassert_boss_staged_damage.
         self._boss_damage_addr = None
@@ -3988,14 +4422,10 @@ class VitalsTab(QWidget):
         self._raven_last_stamina = None
 
     def _on_infinite_ammo_toggled(self, checked: bool):
-        self.ammo_snapshot.clear()
-        if not checked or not (self.live.connected and self.live.sane):
-            return
-        for weapon_id in CONFIRMED_WEAPON_AMMO_RVAS:
-            try:
-                self.ammo_snapshot[weapon_id] = self.live.read_weapon_ammo(weapon_id)
-            except OSError:
-                pass
+        try:
+            self.live.set_infinite_ammo(checked)
+        except OSError:
+            pass
 
     def _on_no_reload_toggled(self, checked: bool):
         if not (self.live.connected and self.live.sane):
@@ -4007,10 +4437,52 @@ class VitalsTab(QWidget):
             return
         self.live.set_no_alerts(checked)
 
+    def _reassert_player_gauges(self):
+        for name, gauge in self.PLAYER_GAUGE_ROWS.items():
+            label = self.value_labels[name]
+            slider = self.sliders[name]
+            value = self.live.read_player_gauge(gauge)
+            if value is None:
+                label.setText("?")
+                continue
+            if value < 0:
+                label.setText(tr(f"vitals.{gauge}_inactive"))
+                continue
+            maxi = self._gauge_max[name] = max(self._gauge_max[name], value)
+            if name in self.locked_percents:
+                target = round(self.locked_percents[name] / 100 * maxi)
+                if value < target:
+                    self.live.write_player_gauge(gauge, target)
+                    value = target
+            percent = value / maxi * 100
+            label.setText(f"{value} / {maxi} ({percent:.1f}%)")
+            if not slider.isSliderDown():
+                slider.blockSignals(True)
+                slider.setValue(round(percent))
+                slider.blockSignals(False)
+
+    def _on_untouchable_toggled(self, checked: bool):
+        try:
+            self.live.set_code_patch("untouchable", checked)
+        except OSError:
+            pass
+
+    def _on_invisible_toggled(self, checked: bool):
+        try:
+            self.live.set_code_patch("invisible", checked)
+        except OSError:
+            pass
+
     def _on_railgun_charge_toggled(self, checked: bool):
         if not (self.live.connected and self.live.sane):
             return
         self.live.set_railgun_force_charge(checked)
+
+    def _on_difficulty_changed(self, index: int):
+        try:
+            self.live.write_difficulty(self.difficulty_combo.itemData(index))
+        except OSError:
+            pass
 
     def _on_alert_force_changed(self, index: int):
         if not (self.live.connected and self.live.sane):
@@ -4029,11 +4501,16 @@ class VitalsTab(QWidget):
         if not (self.live.connected and self.live.sane):
             return
         if self.infinite_ammo_check.isChecked():
-            for weapon_id, value in self.ammo_snapshot.items():
-                try:
-                    self.live.write_weapon_ammo(weapon_id, value)
-                except OSError:
-                    pass
+            # Le jeu peut reconstruire la table des armes (chargement de
+            # zone) : on reverifie le drapeau (une lecture, ecriture rare).
+            try:
+                self.live.set_infinite_ammo(True)
+            except OSError:
+                pass
+        try:
+            self._reassert_player_gauges()
+        except OSError:
+            pass
         # "Pas de rechargement" : patch de code (install_no_reload_hook),
         # plus besoin de reassertion ici depuis le 2026-09-29 - voir
         # _on_no_reload_toggled.
@@ -4071,6 +4548,14 @@ class VitalsTab(QWidget):
         addr = self.live.active_boss_addr()
         if not addr:
             self._boss_damage_addr = None
+            return
+
+        if self._boss_kill_patched:
+            # Mise a mort geree par le jeu lui-meme (CODE_PATCHES
+            # "boss_one_shot_kill" : Laughing Octopus et sa Beauty, Raging
+            # Raven) : rien a ecrire par-dessus. Evite aussi de se fier a
+            # active_boss_kind, trompe par un pointeur boss_actor2 perime
+            # (encore l'armure d'Octopus pendant le combat contre Raven).
             return
 
         if self.live.active_boss_kind() == "raven":
@@ -4194,17 +4679,29 @@ class VitalsTab(QWidget):
             self.no_reload_check.setEnabled(False)
             self.no_alerts_check.setEnabled(False)
             self.railgun_charge_check.setEnabled(False)
+            self.untouchable_check.setEnabled(False)
+            self.invisible_check.setEnabled(False)
             self.alert_force_combo.setEnabled(False)
+            self.difficulty_combo.setEnabled(False)
             self.instant_kill_check.setEnabled(False)
             self.lethal_btn.setEnabled(False)
             self.non_lethal_btn.setEnabled(False)
             return
+        self.difficulty_combo.setEnabled(True)
+        if not self.difficulty_combo.view().isVisible():
+            try:
+                index = self.difficulty_combo.findData(self.live.read_difficulty())
+            except OSError:
+                index = -1
+            self.difficulty_combo.setCurrentIndex(index)
         self.speed_slider.setEnabled(True)
         self.pause_check.setEnabled(True)
         self.infinite_ammo_check.setEnabled(True)
         self.no_reload_check.setEnabled(True)
         self.no_alerts_check.setEnabled(True)
         self.railgun_charge_check.setEnabled(True)
+        self.untouchable_check.setEnabled(True)
+        self.invisible_check.setEnabled(True)
         self.alert_force_combo.setEnabled(True)
         self.instant_kill_check.setEnabled(True)
         self.lethal_btn.setEnabled(True)
@@ -4238,7 +4735,7 @@ class VitalsTab(QWidget):
             self.alert_label.setText("?")
 
 
-TRAINER_VERSION = "V2.2"
+TRAINER_VERSION = "V2.3"
 
 TRAINER_HELP_TEXT = tr("help.text")
 
@@ -4322,12 +4819,31 @@ class TeleportTab(QWidget):
         super().__init__()
         self.live = live
         self.points: list[dict] = self._load_points()
+        # Code de stage actuel (MGS4Live.read_location) : les coordonnees
+        # n'ont de sens que dans leur stage, chaque point garde donc le
+        # sien ("stage") et la liste n'affiche que ceux du stage actuel
+        # (plus les anciens points sans stage, tant qu'ils ne sont pas
+        # rattaches).
+        self.current_stage: str | None = None
+        self.current_act: int | None = None
+        self.row_points: list[int] = []
 
         layout = QVBoxLayout(self)
 
         warning = QLabel(tr("teleport.warning"))
         warning.setWordWrap(True)
         layout.addWidget(warning)
+
+        location_row = QHBoxLayout()
+        location_row.addWidget(QLabel(tr("teleport.location")))
+        self.location_label = QLabel(tr("teleport.location_unknown"))
+        self.location_label.setStyleSheet("font-weight: bold;")
+        location_row.addWidget(self.location_label)
+        location_row.addStretch(1)
+        self.show_all_check = QCheckBox(tr("teleport.show_all_zones"))
+        self.show_all_check.toggled.connect(self._rebuild_table)
+        location_row.addWidget(self.show_all_check)
+        layout.addLayout(location_row)
 
         pos_row = QHBoxLayout()
         pos_row.addWidget(QLabel(tr("teleport.current_position")))
@@ -4372,10 +4888,12 @@ class TeleportTab(QWidget):
         file_row.addStretch(1)
         layout.addLayout(file_row)
 
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels([tr("table.name"), "X", "Y", "Z"])
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels([tr("table.name"), tr("teleport.zone_column"), "X", "Y", "Z"])
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        # Zone : toujours assez large pour le nom complet (jamais coupe).
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.doubleClicked.connect(self._teleport_selected)
@@ -4388,33 +4906,116 @@ class TeleportTab(QWidget):
         delete_btn = QPushButton(tr("teleport.delete_selected"))
         delete_btn.clicked.connect(self._delete_selected)
         action_row.addWidget(delete_btn)
+        assign_btn = QPushButton(tr("teleport.assign_zone"))
+        assign_btn.setToolTip(tr("teleport.assign_zone_tooltip"))
+        assign_btn.clicked.connect(self._assign_selected_to_current_stage)
+        action_row.addWidget(assign_btn)
         action_row.addStretch(1)
         layout.addLayout(action_row)
 
         self._rebuild_table()
 
+    # Fichier de points, format 2 (2026-10-04) : range par acte puis par
+    # code de stage, uniquement des valeurs du jeu (aucun nom traduit, le
+    # meme fichier sert en francais et en anglais) :
+    #   {"format": 2,
+    #    "acts": {"1": {"s01a40l": [{"name", "x", "y", "z"}, ...]}},
+    #    "unassigned": [{"name", "x", "y", "z"}, ...]}
+    # En memoire : liste plate, chaque point portant "act"/"stage" s'il est
+    # rattache. L'ancien format (liste plate de {name, x, y, z}) se lit
+    # toujours, ses points arrivent dans "unassigned".
+    POINTS_FORMAT = 2
+
     @staticmethod
-    def _load_points() -> list[dict]:
-        try:
-            with open(TELEPORT_POINTS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError, OSError):
-            return []
+    def _valid_point(p) -> bool:
+        return isinstance(p, dict) and isinstance(p.get("name"), str) and all(
+            isinstance(p.get(k), (int, float)) for k in ("x", "y", "z"))
+
+    @classmethod
+    def _points_from_json(cls, data) -> list[dict]:
+        """Format 2 ou ancienne liste plate -> liste plate ; ValueError si
+        le contenu ne ressemble a aucun des deux."""
+        def clean(p, act=None, stage=None):
+            point = {"name": p["name"], "x": float(p["x"]), "y": float(p["y"]), "z": float(p["z"])}
+            if stage:
+                point["act"], point["stage"] = act, stage
+            return point
+
+        if isinstance(data, list):
+            if not all(cls._valid_point(p) for p in data):
+                raise ValueError(tr("teleport.unexpected_format"))
+            return [clean(p, p.get("act"), p.get("stage")) for p in data]
+        if not isinstance(data, dict) or data.get("format") != cls.POINTS_FORMAT:
+            raise ValueError(tr("teleport.unexpected_format"))
+        points = []
+        for act_key, stages in (data.get("acts") or {}).items():
+            act = int(act_key) if str(act_key).isdigit() else None
+            if not isinstance(stages, dict):
+                raise ValueError(tr("teleport.unexpected_format"))
+            for stage, stage_points in stages.items():
+                if not isinstance(stage_points, list) or not all(cls._valid_point(p) for p in stage_points):
+                    raise ValueError(tr("teleport.unexpected_format"))
+                points += [clean(p, act, stage) for p in stage_points]
+        unassigned = data.get("unassigned") or []
+        if not isinstance(unassigned, list) or not all(cls._valid_point(p) for p in unassigned):
+            raise ValueError(tr("teleport.unexpected_format"))
+        points += [clean(p) for p in unassigned]
+        return points
+
+    @classmethod
+    def _points_to_json(cls, points: list[dict]) -> dict:
+        acts: dict[str, dict[str, list]] = {}
+        unassigned = []
+        for p in points:
+            entry = {"name": p["name"], "x": p["x"], "y": p["y"], "z": p["z"]}
+            if p.get("stage"):
+                act_key = str(p["act"]) if p.get("act") else "?"
+                acts.setdefault(act_key, {}).setdefault(p["stage"], []).append(entry)
+            else:
+                unassigned.append(entry)
+        ordered = {k: dict(sorted(acts[k].items())) for k in sorted(acts)}
+        return {"format": cls.POINTS_FORMAT, "acts": ordered, "unassigned": unassigned}
+
+    @classmethod
+    def _load_points(cls) -> list[dict]:
+        """Fichier personnel (a cote de l'exe) ; a defaut, les points
+        fournis avec le trainer (assets/default_teleport_points.json,
+        embarque dans l'exe). Le fichier personnel est cree au premier
+        enregistrement et prend ensuite le relais."""
+        for path in (TELEPORT_POINTS_FILE, DEFAULT_TELEPORT_POINTS_FILE):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    return cls._points_from_json(json.load(f))
+            except FileNotFoundError:
+                continue
+            except (json.JSONDecodeError, OSError, ValueError):
+                return []
+        return []
 
     def _save_points(self):
         try:
             with open(TELEPORT_POINTS_FILE, "w", encoding="utf-8") as f:
-                json.dump(self.points, f, indent=2, ensure_ascii=False)
+                json.dump(self._points_to_json(self.points), f, indent=2, ensure_ascii=False)
         except OSError:
             pass
 
+    def _point_visible(self, point: dict) -> bool:
+        stage = point.get("stage")
+        return self.show_all_check.isChecked() or not stage or stage == self.current_stage
+
     def _rebuild_table(self):
-        self.table.setRowCount(len(self.points))
-        for row, point in enumerate(self.points):
+        self.row_points = [i for i, point in enumerate(self.points) if self._point_visible(point)]
+        self.table.setRowCount(len(self.row_points))
+        for row, index in enumerate(self.row_points):
+            point = self.points[index]
+            stage = point.get("stage")
             self.table.setItem(row, 0, QTableWidgetItem(point["name"]))
-            self.table.setItem(row, 1, QTableWidgetItem(f"{point['x']:.1f}"))
-            self.table.setItem(row, 2, QTableWidgetItem(f"{point['y']:.1f}"))
-            self.table.setItem(row, 3, QTableWidgetItem(f"{point['z']:.1f}"))
+            zone = (f"{act_display_name(point.get('act'))} - {stage_display_name(stage)}"
+                    if stage else tr("teleport.no_zone"))
+            for column, text in enumerate((zone, f"{point['x']:.1f}", f"{point['y']:.1f}", f"{point['z']:.1f}"), start=1):
+                item = QTableWidgetItem(text)
+                item.setTextAlignment(Qt.AlignCenter)
+                self.table.setItem(row, column, item)
 
     def _save_current_position(self):
         pos = self.live.player_position()
@@ -4426,7 +5027,10 @@ class TeleportTab(QWidget):
         if not ok or not name.strip():
             return
         x, y, z = pos
-        self.points.append({"name": name.strip(), "x": x, "y": y, "z": z})
+        point = {"name": name.strip(), "x": x, "y": y, "z": z}
+        if self.current_stage:
+            point["act"], point["stage"] = self.current_act, self.current_stage
+        self.points.append(point)
         self._save_points()
         self._rebuild_table()
 
@@ -4457,7 +5061,7 @@ class TeleportTab(QWidget):
             path += ".json"
         try:
             with open(path, "w", encoding="utf-8") as f:
-                json.dump(self.points, f, indent=2, ensure_ascii=False)
+                json.dump(self._points_to_json(self.points), f, indent=2, ensure_ascii=False)
         except OSError as exc:
             warn_dialog(self, tr("teleport.export_failed_title"), str(exc))
 
@@ -4468,11 +5072,7 @@ class TeleportTab(QWidget):
             return
         try:
             with open(path, "r", encoding="utf-8") as f:
-                imported = json.load(f)
-            if not isinstance(imported, list) or not all(
-                isinstance(p, dict) and {"name", "x", "y", "z"} <= p.keys() for p in imported
-            ):
-                raise ValueError(tr("teleport.unexpected_format"))
+                imported = self._points_from_json(json.load(f))
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             warn_dialog(self, tr("teleport.import_failed_title"), str(exc))
             return
@@ -4490,10 +5090,21 @@ class TeleportTab(QWidget):
         self._rebuild_table()
 
     def _selected_row(self) -> int | None:
+        """Indice dans self.points (pas la ligne affichee, la liste est
+        filtree par stage)."""
         rows = self.table.selectionModel().selectedRows()
-        if not rows:
+        if not rows or rows[0].row() >= len(self.row_points):
             return None
-        return rows[0].row()
+        return self.row_points[rows[0].row()]
+
+    def _assign_selected_to_current_stage(self):
+        row = self._selected_row()
+        if row is None or not self.current_stage:
+            return
+        self.points[row]["act"] = self.current_act
+        self.points[row]["stage"] = self.current_stage
+        self._save_points()
+        self._rebuild_table()
 
     def _teleport_selected(self):
         row = self._selected_row()
@@ -4517,9 +5128,24 @@ class TeleportTab(QWidget):
     def refresh(self):
         if not (self.live.connected and self.live.sane):
             self.current_pos_label.setText("?")
+            self.location_label.setText(tr("teleport.location_unknown"))
             self.setEnabled(False)
             return
         self.setEnabled(True)
+        try:
+            location = self.live.read_location()
+        except OSError:
+            location = None
+        if location is None:
+            self.location_label.setText(tr("teleport.location_unknown"))
+            stage = None
+        else:
+            stage, progress = location
+            self.current_act = act_number(progress)
+            self.location_label.setText(f"{act_display_name(self.current_act)} - {stage_display_name(stage)} ({stage})")
+        if stage != self.current_stage:
+            self.current_stage = stage
+            self._rebuild_table()
         pos = self.live.player_position()
         if pos is None:
             self.current_pos_label.setText(tr("teleport.not_captured_yet"))
@@ -4616,6 +5242,7 @@ class TrainerWindow(QMainWindow):
         self.item_tabs.append(stats_tab)
 
         vitals_tab = VitalsTab(self.live)
+        self.vitals_tab = vitals_tab
         self.tabs.addTab(vitals_tab, tr("tab.game_state"))
         self.item_tabs.append(vitals_tab)
 
@@ -4731,7 +5358,8 @@ class TrainerWindow(QMainWindow):
         # effet tant qu'aucun reglage n'est active) : les boutons "Equiper"
         # et les hooks sont prets sans avoir a toucher un reglage avant.
         if self.live.connected and self.live.sane and self.live.pid:
-            self.live.speed.ensure_injected(self.live.pid)
+            if self.live.speed.ensure_injected(self.live.pid):
+                self.vitals_tab.sync_to_game()
         self._apply_connection_state()
 
     def _apply_connection_state(self):

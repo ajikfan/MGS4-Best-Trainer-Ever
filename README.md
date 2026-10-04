@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.2
+# MGS4 Trainer — V2.3
 
 Trainer de recherche/édition mémoire live pour Metal Gear Solid 4
 (portage PC Steam) : lit et **écrit** en direct la mémoire du process
@@ -8,7 +8,9 @@ Eye...) sans passer par le fichier de sauvegarde, et sert aussi d'outil
 de recherche pour identifier les ID encore inconnus. Contrôle aussi la
 vitesse du jeu (ralenti/accéléré) et la pause, et permet de changer
 d'arme, de tenue, de visage, de gilet ou de motif OctoCamo en direct,
-sans passer par les menus du jeu (voir plus bas).
+sans passer par les menus du jeu, de rendre Snake intouchable ou
+invisible, et de faire tomber n'importe quel ennemi ou boss en un coup
+(voir plus bas).
 
 Projet frère de [MGS4-SaveStats](https://github.com/ajikfan/MGS4-SaveStats)
 (lecture seule des fichiers de sauvegarde) — deux outils distincts et
@@ -43,7 +45,139 @@ toujours à 0 sur toute sauvegarde connue) s'exécute avant d'autoriser la
 moindre écriture — si le jeu ne répond pas comme attendu, le trainer
 refuse d'écrire plutôt que de risquer de corrompre la mémoire du jeu.
 
-## Contrôle de la vitesse du jeu
+## Guide des onglets
+
+### Barre du haut (toujours visible)
+
+- **Statut** : connecté au jeu ou non (le trainer s'accroche tout seul
+  à `mgs4.exe` dès qu'une partie est chargée).
+- **Mode avancé (valeurs brutes)** : affiche les colonnes "Valeur brute"
+  et "Définir (brut)" dans les tableaux, et les objets internes masqués
+  par défaut (certains font planter le jeu : à n'utiliser qu'en
+  connaissance de cause).
+- **Rafraîchir maintenant** / **(Re)connecter** : relit tout tout de
+  suite / se raccroche au jeu (après un redémarrage du jeu par exemple).
+- **Aide** : résumé, version compatible et historique des versions.
+- **Langue** : français ou anglais (le trainer redémarre).
+- **Points Drebin** : solde actuel et total des ventes, avec un champ
+  et un bouton OK pour chacun.
+
+### Stats
+
+Les statistiques de la partie, telles qu'enregistrées dans la
+sauvegarde, rangées par thème : **Combat** (ennemis tués, tirs dans la
+tête...), **Infiltration** (alertes, ennemis endormis...),
+**Mouvement**, **Objets**, **Flashbacks**, **Temps** (en heures,
+minutes, secondes). Chaque valeur se modifie directement.
+
+### État de jeu
+
+L'onglet des réglages en direct, en plusieurs groupes :
+
+- **Vitesse du jeu** : curseur de 10 % à 300 % (100 % au centre), case
+  **Pause** (gel complet du jeu), liste **Difficulté** (Liquid à The
+  Boss ; change la difficulté enregistrée à la prochaine sauvegarde).
+- **Alerte** :
+  - **État réel** : l'état d'alerte en cours (Normal, Alerte, Évasion,
+    Prudence) ;
+  - **Forcer** : impose un état d'alerte au choix, ou "Automatique" pour
+    laisser le jeu décider ;
+  - **Pas d'alerte** : l'alerte générale ne se déclenche jamais, quelle
+    qu'en soit la cause (vue, bruit, corps trouvé, lasers des mini
+    Gekko...). Les ennemis peuvent encore réagir individuellement.
+- **Armes et combat** :
+  - **Munitions infinies** : munitions infinies d'origine du jeu sur
+    toutes les armes (symbole infini au HUD) ;
+  - **Pas de rechargement** : le chargeur ne se vide plus ;
+  - **Un coup, un mort**, avec le choix **Létal / Non létal** : en
+    Létal, tout ennemi touché tombe en un coup (soldats, Gekko, mini
+    Gekko, tanks, hélicoptères, véhicules, objets destructibles, et
+    tous les boss, voir plus bas) ; en Non létal, les dégâts normaux ne
+    sont plus appliqués ;
+  - **Rail Gun / Solar Gun toujours chargés** : tir chargé à fond dès
+    l'appui sur la gâchette.
+- **Snake** :
+  - **Intouchable** : aucun impact n'a d'effet sur Snake (ni dégâts, ni
+    projection, ni assommage) ;
+  - **Invisible** : les soldats et les Gekko ne le voient plus, même
+    debout devant eux (à combiner avec "Pas d'alerte" pour les lasers
+    des mini Gekko).
+- **Jauges** : Santé, Stamina, **Grip** (suspendu à un rebord),
+  **Oxygène** (sous l'eau), Stress, batterie du Solid Eye, Santé de
+  Metal Gear REX. Pour chacune : un curseur en pourcentage pour la
+  régler, et une case **Verrouiller** qui la maintient à ce niveau
+  (Santé verrouillée à 100 % = vie infinie, Grip à 100 % = grip
+  infini...).
+
+### Armes
+
+Toutes les armes du jeu, rangées par catégorie (pistolets, fusils
+d'assaut, fusils de précision, explosifs, accessoires...). Pour chaque
+arme :
+
+- **État** : Non possédée / Verrouillée / Utilisable ;
+- **Munitions** : la réserve, modifiable ;
+- **Équiper** : met l'arme en main immédiatement, sans menu (voir
+  "Équiper en direct" plus bas). Actif seulement pour les armes
+  possédées.
+
+Un filtre par nom permet de retrouver une arme vite.
+
+### Objets
+
+Les objets (rations, médicaments, Solid Eye, iPod, objets spéciaux...),
+avec leur état (Verrouillé / Obtenu) et, pour les consommables, la
+quantité. La batterie du Solid Eye s'affiche sur sa ligne.
+
+### OctoCamo
+
+- **Équipé** : le motif OctoCamo porté en ce moment.
+- **FaceCamo** : les visages, avec leur état et un bouton **Équiper**.
+- **Gilet** : les gilets, avec un bouton **Équiper**.
+- **Octocamo** : les 21 motifs du menu camouflage, avec un bouton
+  **Équiper** (y compris les motifs spéciaux). Les motifs donnés
+  d'office peuvent être masqués du menu du jeu.
+- **Motifs mémorisés** : les 10 emplacements de motifs capturés sur une
+  surface puis enregistrés, avec leur nom quand il est connu (Béton,
+  Tuile, Main...), un bouton **Équiper**, et la possibilité d'oublier
+  un motif.
+
+Équiper un motif marche aussi en pleine cinématique.
+
+### Tenues
+
+Les tenues et déguisements (Moyen-Orient, Amérique du Sud, Europe de
+l'Est, costume de Snake, Altaïr...), avec leur état et un bouton
+**Équiper**. Les déguisements d'un acte fonctionnent dans les autres
+actes.
+
+### Statuettes, Chansons, Non classés
+
+Les statuettes et les chansons de l'iPod à débloquer ou à retirer, et
+les objets encore non identifiés (onglet de recherche).
+
+### Téléportation
+
+- **Lieu actuel** : l'acte et la zone en cours (noms officiels du jeu).
+- **Position actuelle** de Snake, et **Enregistrer ici...** pour la
+  garder sous un nom.
+- **X / Y / Z** : saisie manuelle, **Actualiser depuis le jeu**, et
+  **Téléporter ici**.
+- **Liste des points** de la zone actuelle (nom, zone, coordonnées) :
+  double-clic ou **Téléporter vers le point sélectionné**, **Supprimer
+  le point sélectionné**, **Rattacher à la zone actuelle** (pour un
+  point sans zone).
+- **Afficher les points de toutes les zones**.
+- **Exporter** / **Importer** les points en fichier JSON.
+
+Des points sont fournis par défaut au premier lancement.
+
+## Détails techniques
+
+Les sections suivantes expliquent comment chaque fonction marche, ses
+limites, et ce qui a été vérifié en jeu.
+
+### Contrôle de la vitesse du jeu
 
 Onglet "État de jeu" : curseur centré sur la vitesse normale (100%),
 glissable vers la gauche pour ralentir (jusqu'à 10%) ou vers la droite
@@ -62,23 +196,39 @@ pour accélérer (jusqu'à 300%), plus une case "Pause" indépendante.
   effet tant qu'aucun réglage n'est activé) : les boutons "Équiper" et
   les autres patchs sont prêts sans avoir à toucher un réglage avant.
 
-## Munitions infinies / Pas de rechargement
+La DLL reste dans le jeu quand on ferme le trainer, avec ses réglages.
+Depuis la V2.3, à chaque accrochage, le trainer lui renvoie l'état réel
+des cases de l'onglet "État de jeu" : un réglage resté actif d'une
+session précédente est coupé si sa case est décochée.
+
+### Difficulté
+
+Onglet "État de jeu" : liste "Difficulté" (Liquid, Naked, Solid, Big
+Boss, The Boss), lue et écrite en direct. Effet vérifié : c'est cette
+difficulté qui est enregistrée à la prochaine sauvegarde (rang et écran
+de fin compris). Aucun changement constaté en jeu : une balle retire la
+même vie en Liquid et en The Boss (mesuré), et les ennemis ne semblent
+pas plus vigilants.
+
+### Munitions infinies / Pas de rechargement
 
 Onglet "État de jeu" : deux cases indépendantes.
 
-- **Munitions infinies** : fige la vraie réserve actuelle de chaque
-  arme au moment où tu coches (pas un nombre fixe artificiel) et la
-  réécrit en continu.
-- **Pas de rechargement** : garde le chargeur de chaque arme à sa vraie
-  capacité max en continu (distinct de la réserve) — suit
-  automatiquement l'arme équipée, pas besoin de recocher en changeant
-  d'arme.
+- **Munitions infinies (V2.3)** : active les munitions infinies
+  **d'origine du jeu**. Chaque arme a un drapeau "réserve infinie", que
+  le jeu utilise déjà pour le Pistolet solaire et le Patriot ; le trainer
+  le pose sur toutes les armes à munitions (69, grenades et explosifs
+  compris). La réserve ne baisse plus et le HUD affiche le symbole
+  infini, sans toucher à l'objet équipé (le Solid Eye reste actif). Le
+  Pistolet solaire, dont la "réserve" est le chargeur rechargé au
+  soleil, passe en chargeur infini et reste plein. Décocher remet les
+  armes à la normale. (Avant la V2.3 : réécriture des réserves en boucle,
+  qui faisait ramer le trainer.)
+- **Pas de rechargement** : patch de code qui supprime l'écriture du
+  nouveau nombre de munitions du chargeur après un tir, quelle que soit
+  l'arme.
 
-Les deux utilisent un cycle de réassertion dédié à 50ms (plus rapide
-que le rafraîchissement général de l'appli) pour suivre les armes qui
-tirent vite sans dépletion visible.
-
-## Un coup, un mort / Non létal
+### Un coup, un mort / Non létal
 
 Onglet "État de jeu" : case "Un coup, un mort" + sélecteur Létal/Non
 létal. **Technique différente de tout le reste du trainer** : un vrai
@@ -96,18 +246,29 @@ Confirmé fonctionnel en jeu sur les ennemis standards (2026-09-26). Peut
 ne pas fonctionner si le motif attendu n'est pas trouvé dans cette
 version du jeu (aucun crash dans ce cas, juste sans effet).
 
-**Boss : mécanisme différent.** Les boss ne passent pas par l'instruction
-de dégâts patchée ci-dessus (confirmé par diagnostic en jeu) - le
-trainer détecte automatiquement le boss actif (Laughing Octopus/Beauty,
-Raging Raven, Crying Wolf confirmés à ce jour, chacun avec ses propres
-offsets mémoire) et force sa vie/stamina à 0 dès qu'un vrai coup est
-détecté, sans configuration manuelle. Ce forçage est délibérément
-**synchronisé sur un vrai coup** (jamais en continu) : le jeu peut
-ignorer une valeur forcée hors contexte et recalculer la sienne, et un
-forçage en boucle sans coup réel a déjà fait planter le jeu (2026-09-27).
-Metal Gear RAY (mécha, mécanisme non trouvé) et une phase précise de
-Laughing Octopus (nécessite des tirs létaux pour la déloger d'une
-cachette) restent des cas non fonctionnels connus.
+**Boss (V2.3) : la mise à mort du jeu lui-même.** Chaque boss a sa
+propre fonction de dégâts, trouvée au débogueur en partant de sa jauge
+du HUD. Quand c'est possible, le patch fait passer chaque coup par la
+"mise à mort" prévue par le jeu (dégât spécial qui retire toute la vie
+restante) : transitions de phase et séquences de fin restent gérées par
+le jeu. Confirmé en jeu (2026-10-04) :
+
+- **Laughing Octopus** : un tir par phase (le jeu recale la vie au seuil
+  de la phase) ;
+- **Raging Raven**, **Crying Wolf**, **Metal Gear RAY** : un tir ;
+- **les quatre formes Beauty** : un tir ;
+- **Vamp** : à terre en un tir, la seringue reste nécessaire (mécanique
+  du combat, non contournée) ;
+- **Liquid Ocelot** (combat final) : deux coups par phase (la vie tombe
+  au plancher de la phase, puis la phase suivante). La dernière phase
+  de 7 coups scénarisés n'est pas couverte ;
+- **Screaming Mantis**, forme bête : sa vie ne peut pas descendre sous
+  50, seule son endurance déclenche la défaite ; le patch vide les deux
+  d'un coup. **Pas encore testé en jeu** (seule la baisse de vie l'a
+  été). Seule la poupée Mantis l'atteint, comme dans le jeu.
+
+L'ancien système (forçage de la vie par paliers, synchronisé sur un vrai
+coup) n'est plus utilisé dès que ces patchs sont posés.
 
 **Gecko (robots) et tanks : hook séparé.** Les Gecko ne passent ni par
 l'instruction des ennemis humains ni par celle des boss - un troisième
@@ -128,6 +289,18 @@ une simple balle de fusil détruit alors un tank (confirmé en jeu,
 2026-10-03). Seul le fusil a été testé à ce jour ; une arme
 particulière pourrait encore être filtrée plus loin dans la chaîne.
 
+**Hélicoptères, véhicules, mini Gekko, portails (V2.3).** Mêmes
+principes, chacun avec ses patchs (confirmés en jeu, 2026-10-04) :
+
+- **hélicoptères** : d'origine, seuls les lance-roquettes, les
+  explosifs, le M82A2 et le Rail Gun les touchent ; toutes les armes
+  comptent et chaque coup retire toute leur vie ;
+- **véhicule de Millennium Park** : son filtre d'armes est levé ;
+- **mini Gekko** : détruits au premier impact ;
+- **objets destructibles** (portails à abattre au canon de tank...) :
+  cèdent au premier impact. Le minimum imposé par le niveau (verrou de
+  scénario éventuel) est conservé.
+
 Modifier `native/speedhack.c` nécessite un compilateur C ciblant Windows
 (testé avec `x86_64-w64-mingw32-gcc` via [MSYS2](https://www.msys2.org/),
 mingw64) :
@@ -139,7 +312,7 @@ x86_64-w64-mingw32-gcc -shared -O2 -municode -o native/speedhack_x64.dll native/
 `mingw64/bin` doit être dans le PATH (sinon `cc1.exe` échoue silencieusement,
 sans aucun message).
 
-## Rail Gun / Solar Gun toujours chargés
+### Rail Gun / Solar Gun toujours chargés
 
 Onglet "État de jeu", groupe "Armes et combat". Patch de code : la
 charge du Rail Gun et du Solar Gun est pleine dès l'appui sur la
@@ -153,7 +326,27 @@ dans les drapeaux du coup reçu (soldats et tanks), pour que les dégâts
 d'un tir chargé à fond s'appliquent partout. Confirmé en jeu
 (2026-10-03), y compris un tank détruit d'un seul tir rapide de Rail Gun.
 
-## Équiper en direct, sans menu (V2.2)
+### Snake : Intouchable, Invisible, jauges (V2.3)
+
+Onglet "État de jeu", groupe "Snake" et tableau des jauges.
+
+- **Intouchable** : patch de code qui fait ignorer à Snake tous les
+  impacts (balles, explosions, mines, coups, attaques non létales) : ni
+  dégâts, ni projection, ni assommage.
+- **Invisible** : les soldats et les Gekko ne voient plus Snake, même
+  debout devant eux, comme avec le Camouflage furtif mais sans la
+  transparence (l'indice de camouflage affiche 99 %). Il couvre la
+  vision seulement : les lasers des mini Gekko (détection par contact en
+  mouvement, à laquelle le vrai Camouflage furtif n'échappe pas non plus)
+  et les autres sources d'alerte restent actifs. Cocher aussi
+  **"Pas d'alerte"** pour que rien ne déclenche l'alerte générale :
+  les deux réglages sont complémentaires.
+- **Grip** et **Oxygène** : nouvelles lignes du tableau des jauges, avec
+  curseur et case "Verrouiller" comme les autres. Elles n'existent que
+  suspendu à un rebord ou sous l'eau ("pas suspendu" / "hors de l'eau"
+  sinon). Verrouillées à 100 % : grip ou oxygène infinis.
+
+### Équiper en direct, sans menu (V2.2)
 
 Un bouton "Équiper" par ligne dans les onglets OctoCamo, Tenues et
 Armes : le changement s'applique en jeu immédiatement, menu fermé,
@@ -189,23 +382,20 @@ version du jeu, il refuse plutôt que d'appeler n'importe quoi).
   range d'abord une fraction de seconde. Seules les armes possédées ont
   un bouton actif.
 
+**En cinématique (V2.3)** : le motif OctoCamo change en pleine
+cinématique (le Snake de cinématique a sa propre tâche de camouflage,
+pilotée directement), et le gilet aussi. Changer de tenue ou de visage
+en cinématique faisait planter le jeu : ces boutons sont refusés tant
+qu'une cinématique est en cours. Une arme équipée pendant une
+cinématique n'est pas mise en main, mais placée dans le sous-menu
+rapide.
+
 Limites connues : le nombre de places du sous-menu des armes ne peut
 pas être augmenté (le menu plante à l'affichage au-delà de 5) ; forcer
 dans la main une arme dont le modèle n'est pas chargé fait planter le
 jeu, d'où le passage par la 5e place.
 
-## Onglet OctoCamo
-
-Visages (FaceCamo), gilets et les 21 motifs OctoCamo connus, plus les
-10 motifs mémorisés de la partie (motifs capturés sur une surface puis
-enregistrés, avec leur nom quand il est connu). Les motifs donnés
-d'office par le jeu peuvent être masqués du menu camouflage (case
-Verrouillé, par un patch du menu, effet pour la session) ; les motifs
-stockés dans la partie (Olive, Tigré, Forêt, 3 couleurs désert, Marpat,
-Cadavre) se débloquent ou se retirent pour de bon. "Équipé :" indique
-le motif porté.
-
-## Téléportation
+### Téléportation
 
 Onglet "Téléportation" : enregistre la position actuelle de Snake
 (X/Y/Z) sous un nom, puis téléporte instantanément vers un point
@@ -213,19 +403,30 @@ enregistré (double-clic ou bouton dédié). Les 3 axes sont aussi
 éditables manuellement (saisie directe + bouton "Téléporter ici"), et
 la liste de points peut être exportée/importée en fichier JSON.
 
-Repose sur un hook de lecture seule capturant le pointeur de Snake via
-une routine générique de calcul de distance entre deux acteurs (motif
-"aob Coordinates" du CE table communautaire) - **confirmé fonctionnel
-par téléportation réelle en jeu** (2026-09-27). Coordonnées absolues du
-niveau (pas relatives à l'orientation du joueur) : l'axe Y semble être
-la hauteur (le jeu peut annuler une position invalide, ex. sous le
-sol), X/Z le plan horizontal.
+**Depuis la V2.3 :**
 
-⚠️ Expérimental : rien ne garantit qu'un point enregistré dans un acte
-reste une position valide dans un autre acte/niveau (jamais testé) -
-risque de tomber hors du niveau chargé. Les points sont sauvegardés
-dans `teleport_points.json` (à côté de l'exe/du script, pas versionné
-dans ce dépôt - propre à chaque partie).
+- **Acte et zone** affichés en direct ("Acte 2 - Village Vallée de
+  Cove"), avec les noms officiels du jeu en français et en anglais
+  (relevés dans ses fichiers de textes).
+- **Points rangés par zone** : chaque point retient sa zone, et la liste
+  n'affiche que ceux de la zone actuelle (case "Afficher les points de
+  toutes les zones" pour tout voir). Le bouton "Rattacher à la zone
+  actuelle" range les anciens points.
+- **Fichier par acte et zone** : `teleport_points.json` ne contient que
+  des valeurs du jeu (numéro d'acte, code de zone), le même fichier sert
+  donc en français et en anglais. L'ancien format se lit toujours.
+- **Points fournis** : sans fichier personnel, le trainer charge des
+  points par défaut embarqués (`assets/default_teleport_points.json`).
+  Le fichier personnel est créé au premier enregistrement.
+- **Position fiable** : elle est lue dans la table des joueurs du jeu,
+  qui suit toujours le Snake actuel. L'ancien pointeur (capturé au
+  passage dans une routine de distance) restait sur l'ancien Snake après
+  un changement d'acte (position à 0).
+
+Coordonnées absolues du niveau : l'axe Y est la hauteur (le jeu peut
+annuler une position invalide, ex. sous le sol), X/Z le plan
+horizontal. Les points sont sauvegardés dans `teleport_points.json` (à
+côté de l'exe/du script, pas versionné dans ce dépôt).
 
 ## Compatibilité / mises à jour du jeu
 
@@ -266,8 +467,8 @@ propres recherches :
     L'offset de stamina qu'elle documente (`+31C+4`) s'est révélé décalé
     de 4 octets en test : le bon champ est `+0x31C`, corrigé par nos
     propres scans ;
-  - Téléportation : script "aob Coordinates" (position X/Y/Z à
-    `+0x10`/`+0x14`/`+0x18`) ;
+  - Téléportation (jusqu'à la V2.2) : script "aob Coordinates" (position
+    X/Y/Z à `+0x10`/`+0x14`/`+0x18`) ;
   - plusieurs formules d'adresses (table des objets, statistiques, état
     d'alerte) ont été repérées en lisant ses scripts (détail dans les
     commentaires du code), puis **vérifiées en jeu par nos propres
@@ -289,8 +490,10 @@ souhaites une correction ou un retrait, ouvre une issue.
 - "Un coup, un mort"/"Non létal" va encore plus loin : ce n'est plus
   une redirection de fonction mais un **vrai patch d'instructions** du
   jeu. Protégé contre une application au joueur lui-même, mais reste la
-  technique la plus invasive du trainer — expérimental, effet réel pas
-  encore confirmé visuellement en jeu.
+  technique la plus invasive du trainer. Ses effets sont confirmés en
+  jeu cas par cas (voir plus haut), mais un ennemi non testé pourrait
+  réagir autrement. Intouchable et Invisible sont aussi des patchs
+  d'instructions.
 - Les boutons "Équiper" appellent des fonctions internes du jeu en
   dehors de leur contexte normal (menus). Chaque cas a été testé en jeu,
   mais une situation particulière (cinématique, chargement, séquence
