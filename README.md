@@ -477,6 +477,13 @@ propres recherches :
 Merci à leurs auteurs. Si tu es l'auteur d'une de ces sources et que tu
 souhaites une correction ou un retrait, ouvre une issue.
 
+## Licence
+
+Le code de ce dépôt est publié sous licence MIT (voir le fichier
+[LICENSE](LICENSE)). Elle ne couvre pas les éléments repris d'autres
+sources citées plus haut, ni le jeu lui-même (Metal Gear Solid 4,
+Konami).
+
 ## ⚠️ Avertissements
 
 - **Usage solo uniquement, à tes risques.** Ce n'est pas un outil
