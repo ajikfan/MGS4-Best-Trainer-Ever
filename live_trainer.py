@@ -62,6 +62,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFrame,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -1619,6 +1620,7 @@ class MGS4Live:
         self.status = tr("status.not_connected")
         self.speed = SpeedController()
         self._equip_lock = threading.Lock()  # un equipement en direct a la fois
+        self._custom_menu_refresh_pending = False
 
     def attach(self) -> bool:
         self.detach()
@@ -2064,6 +2066,58 @@ class MGS4Live:
 
     def write_weapon(self, weapon_id: int, value: int) -> None:
         self.proc.write_bytes(self.base + weapon_state_rva(weapon_id), struct.pack("<H", value & 0xFFFF))
+        self.refresh_weapon_custom_menu()
+
+    # Menu de personnalisation d'arme (2026-10-09) : il lit les etats des
+    # accessoires une seule fois a l'ouverture (getter 6EA40) et garde sa
+    # copie. C'est une tache de la liste circulaire de tete mgs4+23CF9EE0
+    # (+0 suivant, +8 fonction de mise a jour = 51E720 pour ce menu). Quand
+    # on (des)equipe un accessoire dans le menu, le jeu (521330) appelle
+    # build_list (51F7A0, reconstruit les listes +0x278 + n*0xE8) puis
+    # redraw (522F10, categorie affichee = +0x7EC) : on fait pareil.
+    CUSTOM_MENU_TASK_LIST_RVA = 0x23CF9EE0
+    CUSTOM_MENU_FUNCS = {
+        "update": (0x51E720, "48895c24084889742410574883ec"),
+        "build_list": (0x51F7A0, "48894c2408535556574154415541"),
+        "redraw": (0x522F10, "4c8bdc55415441554881ece00000"),
+    }
+
+    def _weapon_custom_menu(self, update_fn: int) -> int:
+        """Tache du menu de personnalisation d'arme, 0 s'il est ferme."""
+        head = self.base + self.CUSTOM_MENU_TASK_LIST_RVA
+        node = struct.unpack("<Q", self.proc.read_bytes(head, 8))[0]
+        for _ in range(self.CUTSCENE_TASK_MAX):
+            if not node or node == head:
+                return 0
+            entry = self.proc.read_bytes(node, 16)
+            if struct.unpack_from("<Q", entry, 8)[0] == update_fn:
+                return node
+            node = struct.unpack_from("<Q", entry, 0)[0]
+        return 0
+
+    def refresh_weapon_custom_menu(self) -> None:
+        """Si le menu de personnalisation est ouvert, lui fait relire les
+        etats (fil separe : l'appel attend l'image suivante du jeu)."""
+        if self._custom_menu_refresh_pending or not self.speed.main_loop_hook_installed():
+            return
+        try:
+            funcs = self._live_funcs(self.CUSTOM_MENU_FUNCS)
+            if funcs is None or not self._weapon_custom_menu(funcs["update"]):
+                return
+        except Exception:
+            return
+        self._custom_menu_refresh_pending = True
+        threading.Thread(target=self._refresh_weapon_custom_menu, args=(funcs,), daemon=True).start()
+
+    def _refresh_weapon_custom_menu(self, funcs: dict[str, int]) -> None:
+        try:
+            time.sleep(0.05)  # regroupe les changements faits d'affilee
+            self._custom_menu_refresh_pending = False
+            menu = self._weapon_custom_menu(funcs["update"])
+            if menu and self.speed.game_call(funcs["build_list"], menu) is not None:
+                self.speed.game_call(funcs["redraw"], menu)
+        except Exception:
+            self._custom_menu_refresh_pending = False
 
     def read_weapon_ammo(self, weapon_id: int) -> int | None:
         """None = adresse munitions pas encore trouvee pour cette arme
@@ -2178,7 +2232,15 @@ class MGS4Live:
     #    eventuel, conserve). "mov eax,[rdi+40] ; sub [rdi+34],eax"
     #    (126385F) -> "xor eax,eax ; mov [rdi+34],eax" : detruit au premier
     #    impact. Pas un objet de vie 18BC1B0 ni la liste de coups D41940.
+    #  - Silencieux illimites (2026-10-09) : la fonction de tir 6E1BE,
+    #    si un silencieux est monte (bit 0 de [arme+0x2C]), retire 1 a son
+    #    compteur courant (dec [silencieux+0x30], 6E2AA) et 1 a sa reserve
+    #    (dec [table munitions+idx*0x18+0x10], 6E2B2) : les deux en NOP.
     CODE_PATCHES = {
+        "infinite_silencer": [
+            (0x6E2AA, bytes.fromhex("66ff4830488d1449"), bytes.fromhex("90909090")),
+            (0x6E2B2, bytes.fromhex("66ff8cd7a0000000"), bytes.fromhex("9090909090909090")),
+        ],
         "destructibles_one_shot_kill": [(0x126385F, bytes.fromhex("8b47402947348b4734"), bytes.fromhex("31c089473490"))],
         "boss_one_shot_kill": [
             (0x1434D26, bytes.fromhex("7503448bc0412bc0"), bytes.fromhex("9090")),
@@ -2262,6 +2324,120 @@ class MGS4Live:
             return False
         self.proc.write_bytes(self.base + rva + MODULE_PATCH_SHIFT, struct.pack("<H", value & 0xFFFF))
         return True
+
+    # Silencieux (2026-10-09, valide en jeu) : pas un nombre mais une
+    # reserve d'usure en tirs, dans la table des munitions du jeu
+    # (mgs4+1D81F20 + index*0x18 : +0x10 reserve, +0x12 maximum, u16).
+    # Index = 6A3B0(ID) ; nombre affiche = reserve / tirs par silencieux,
+    # arrondi au-dessus (414 tirs a 30 = 14) ; maximum = 99 silencieux.
+    AMMO_TABLE_RVA = 0x1D81F20
+    AMMO_ENTRY_SIZE = 0x18
+    SILENCER_AMMO_INDEX = {0x4D: 0x3D, 0x4E: 0x3E, 0x4F: 0x3F, 0x50: 0x40, 0x51: 0x41, 0x52: 0x42, 0x53: 0x43}
+    SILENCER_MAX = 99
+
+    def _silencer_reserve(self, weapon_id: int) -> tuple[int, int, int] | None:
+        """(adresse, reserve, tirs par silencieux), None si pas un silencieux."""
+        index = self.SILENCER_AMMO_INDEX.get(weapon_id)
+        if index is None:
+            return None
+        addr = self.base + self.AMMO_TABLE_RVA + index * self.AMMO_ENTRY_SIZE + 0x10
+        reserve, maximum = struct.unpack("<HH", self.proc.read_bytes(addr, 4))
+        shots = maximum // self.SILENCER_MAX
+        return (addr, reserve, shots) if shots else None
+
+    def read_silencer_count(self, weapon_id: int) -> int | None:
+        entry = self._silencer_reserve(weapon_id)
+        if entry is None:
+            return None
+        _addr, reserve, shots = entry
+        return -(-reserve // shots)
+
+    def write_silencer_count(self, weapon_id: int, count: int) -> bool:
+        """Ecrit `count` silencieux neufs."""
+        entry = self._silencer_reserve(weapon_id)
+        if entry is None:
+            return False
+        addr, _reserve, shots = entry
+        count = max(0, min(count, self.SILENCER_MAX))
+        self.proc.write_bytes(addr, struct.pack("<H", count * shots))
+        self.refresh_weapon_custom_menu()
+        return True
+
+    # Accessoires montes (2026-10-09, valide en jeu, arme rangee ou en
+    # main - le modele suit tout seul) : champ de bits u32 a +0x2C de
+    # l'entree de l'arme (table WEAPON_TABLE_RVA ; getter 6A380, setter
+    # 72A20 ; bit 0 = silencieux, teste par la fonction de tir). Bits
+    # permis par arme : table fixe mgs4+1B00F34 + ID*0x38 (6A390), seuls
+    # les bits 0-9 sont des accessoires. Le menu les range en 5
+    # emplacements (masques mgs4+1848B20), un accessoire par emplacement.
+    # Bit -> accessoire : 6E5F0, reproduit dans accessory_for_bit.
+    WEAPON_ACCESSORIES_OFFSET = 0x2C
+    WEAPON_ALLOWED_ACCESSORIES_RVA = 0x1B00F34
+    WEAPON_ALLOWED_STRIDE = 0x38
+    ACCESSORY_SLOTS = (
+        ("silencer", 0x001), ("light", 0x100), ("laser", 0x200), ("optics", 0x006), ("underbarrel", 0x0F8),
+    )
+    SILENCER_BY_WEAPON = {0x03: 0x4D, 0x04: 0x4E, 0x0B: 0x4F, 0x13: 0x50, 0x14: 0x51, 0x18: 0x52, 0x2A: 0x53}
+    ACCESSORY_BY_BIT = {0x004: 0x54, 0x010: 0x4A, 0x020: 0x5A, 0x040: 0x5B, 0x080: 0x59, 0x100: 0x57, 0x200: 0x58}
+    LAUNCHER_BY_WEAPON = {0x18: 0x4B, 0x1F: 0x4B, 0x19: 0x4C, 0x1B: 0x4C}  # XM320 / GP-30
+    # Armes avec au moins un emplacement (table fixe de l'exe 1.4.1).
+    CUSTOMIZABLE_WEAPON_IDS = {0x03, 0x04, 0x06, 0x07, 0x0B, 0x0F, 0x11, 0x13, 0x14, 0x18, 0x19, 0x1B,
+                               0x1E, 0x1F, 0x20, 0x23, 0x25, 0x2A, 0x2E}
+
+    @classmethod
+    def accessory_for_bit(cls, weapon_id: int, bit: int) -> int:
+        """Accessoire du bit pour cette arme (0 = aucun), comme 6E5F0."""
+        if bit == 0x001:
+            return cls.SILENCER_BY_WEAPON.get(weapon_id, 0)
+        if bit == 0x002:
+            return 0x56 if weapon_id == 0x11 else 0x55  # point rouge MP7 / M4
+        if bit == 0x008:
+            return cls.LAUNCHER_BY_WEAPON.get(weapon_id, 0)
+        return cls.ACCESSORY_BY_BIT.get(bit, 0)
+
+    def _weapon_entry(self, weapon_id: int) -> int:
+        return self.base + self.WEAPON_TABLE_RVA + weapon_id * self.WEAPON_TABLE_STRIDE
+
+    def weapon_accessory_slots(self, weapon_id: int) -> list[tuple[str, int, list[tuple[int, int]]]]:
+        """[(emplacement, masque, [(bit, accessoire), ...]), ...] permis
+        pour cette arme, dans l'ordre du menu du jeu."""
+        allowed = struct.unpack("<I", self.proc.read_bytes(
+            self.base + self.WEAPON_ALLOWED_ACCESSORIES_RVA + weapon_id * self.WEAPON_ALLOWED_STRIDE, 4))[0]
+        slots = []
+        for slot, mask in self.ACCESSORY_SLOTS:
+            choices = [(1 << k, self.accessory_for_bit(weapon_id, 1 << k))
+                       for k in range(10) if mask & allowed & (1 << k)]
+            choices = [(bit, acc) for bit, acc in choices if acc]
+            if choices:
+                slots.append((slot, mask, choices))
+        return slots
+
+    def read_weapon_accessories(self, weapon_id: int) -> int:
+        return struct.unpack("<I", self.proc.read_bytes(
+            self._weapon_entry(weapon_id) + self.WEAPON_ACCESSORIES_OFFSET, 4))[0]
+
+    def set_weapon_accessory(self, weapon_id: int, slot_mask: int, bit: int) -> bool:
+        """Monte l'accessoire `bit` (0 = aucun) dans l'emplacement."""
+        if not (self.connected and self.sane):
+            return False
+        current = self.read_weapon_accessories(weapon_id)
+        wanted = (current & ~slot_mask) | (bit & slot_mask)
+        if wanted != current:
+            self.proc.write_bytes(self._weapon_entry(weapon_id) + self.WEAPON_ACCESSORIES_OFFSET,
+                                  struct.pack("<I", wanted))
+            self.refresh_weapon_custom_menu()
+        return True
+
+    def read_accessory_amount(self, weapon_id: int) -> int | None:
+        """Colonne des accessoires : silencieux = nombre, sinon munitions."""
+        if weapon_id in self.SILENCER_AMMO_INDEX:
+            return self.read_silencer_count(weapon_id)
+        return self.read_weapon_ammo(weapon_id)
+
+    def write_accessory_amount(self, weapon_id: int, value: int) -> bool:
+        if weapon_id in self.SILENCER_AMMO_INDEX:
+            return self.write_silencer_count(weapon_id, value)
+        return self.write_weapon_ammo(weapon_id, value)
 
     def read_weapon_magazine(self, weapon_id: int) -> int:
         """Munitions dans le chargeur (distinct de la reserve ci-dessus -
@@ -3047,9 +3223,21 @@ class TableTab(QWidget):
                  binary_lock_value: int | None = None, battery_link: tuple[int, int] | None = None,
                  confirmed_ids: set[int] | None = None, show_filter: bool = True, fit_height: bool = False,
                  advanced_only_ids: set[int] | None = None, readonly_ids: set[int] | None = None,
-                 equip_action=None, equip_ids: set[int] | None = None, equip_available=None):
+                 equip_action=None, equip_ids: set[int] | None = None, equip_available=None,
+                 ammo_header: str | None = None, ammo_max: int = 0xFFFF,
+                 customize_action=None, customize_ids: set[int] | None = None):
         super().__init__()
         self.live = live
+        # Colonne "Accessoires" (bouton par ligne) pour les ID de
+        # customize_ids : customize_action(item_id, parent) ouvre la
+        # personnalisation de l'arme.
+        self.customize_action = customize_action
+        self.customize_ids = customize_ids or set()
+        self.customize_buttons: dict[int, QPushButton] = {}
+        # Colonne "Munitions" reutilisable pour une autre quantite par
+        # ligne (ex. nombre de silencieux, section Accessoires).
+        self.ammo_header = ammo_header or tr("table.ammo")
+        self.ammo_max = ammo_max
         # Colonne "Equiper" (bouton par ligne) pour les ID de equip_ids :
         # equip_action(item_id) demande l'equipement en direct (voir
         # MGS4Live._start_equip). equip_available() (optionnel) renvoie les
@@ -3142,9 +3330,11 @@ class TableTab(QWidget):
         if self.has_quantity:
             headers.append(tr("table.quantity"))
         if self.has_ammo:
-            headers.append(tr("table.ammo"))
+            headers.append(self.ammo_header)
         if self.equip_action is not None:
             headers.append(tr("table.equip"))
+        if self.customize_action is not None:
+            headers.append(tr("table.customize"))
         self.col_state = 2
         self.col_value = 3
         self.col_control = 4
@@ -3154,6 +3344,8 @@ class TableTab(QWidget):
         self.col_control_ammo = col if self.has_ammo else None
         col += 1 if self.has_ammo else 0
         self.col_equip = col if self.equip_action is not None else None
+        col += 1 if self.equip_action is not None else 0
+        self.col_customize = col if self.customize_action is not None else None
         # Colonnes masquees par defaut (mode simple) - voir set_advanced.
         # Quantite/Munitions restent toujours visibles (edition normale,
         # pas "avancee").
@@ -3177,6 +3369,11 @@ class TableTab(QWidget):
                 equip_btn.clicked.connect(lambda _checked=False, i=item_id: self._on_equip(i))
                 self.table.setCellWidget(row, self.col_equip, equip_btn)
                 self.equip_buttons[item_id] = equip_btn
+            if self.col_customize is not None and item_id in self.customize_ids:
+                custom_btn = QPushButton(tr("customize.button"))
+                custom_btn.clicked.connect(lambda _checked=False, i=item_id: self._on_customize(i))
+                self.table.setCellWidget(row, self.col_customize, custom_btn)
+                self.customize_buttons[item_id] = custom_btn
 
         self.table.resizeColumnToContents(0)
         self.table.resizeColumnToContents(2)
@@ -3207,6 +3404,11 @@ class TableTab(QWidget):
             self.equip_action(item_id)
         except OSError:
             pass
+
+    def _on_customize(self, item_id: int):
+        if not (self.live.connected and self.live.sane):
+            return
+        self.customize_action(item_id, self)
 
     def set_advanced(self, advanced: bool):
         self._advanced = advanced
@@ -3326,7 +3528,7 @@ class TableTab(QWidget):
             ammo_layout.setContentsMargins(2, 0, 2, 0)
             ammo_layout.setSpacing(4)
             ammo_spin = QSpinBox()
-            ammo_spin.setRange(0, 0xFFFF)
+            ammo_spin.setRange(0, self.ammo_max)
             ammo_spin.setMinimumWidth(65)
             ammo_layout.addWidget(ammo_spin)
             ammo_ok = QPushButton(tr("button.ok"))
@@ -3392,6 +3594,8 @@ class TableTab(QWidget):
             qty_spin.blockSignals(False)
 
     def refresh(self):
+        for custom_btn in self.customize_buttons.values():
+            custom_btn.setEnabled(bool(self.live.connected and self.live.sane))
         if not (self.live.connected and self.live.sane):
             for item in self.value_items.values():
                 item.setText("?")
@@ -3529,6 +3733,46 @@ class TableTab(QWidget):
             self.table.setRowHidden(row, text not in id_text and text not in name_text)
 
 
+class WeaponAccessoryDialog(QDialog):
+    """Accessoires montes sur une arme : une liste par emplacement du menu
+    du jeu (Aucun + accessoires permis), ecrite des qu'on choisit. Les
+    accessoires non possedes sont grises, comme dans le jeu."""
+
+    def __init__(self, live: MGS4Live, weapon_id: int, names: dict[int, str], parent=None):
+        super().__init__(parent)
+        self.live = live
+        self.weapon_id = weapon_id
+        self.setWindowTitle(tr("customize.title", weapon=names.get(weapon_id, f"{weapon_id:#04x}")))
+        layout = QVBoxLayout(self)
+        form = QGridLayout()
+        layout.addLayout(form)
+        mounted = live.read_weapon_accessories(weapon_id)
+        for row, (slot, mask, choices) in enumerate(live.weapon_accessory_slots(weapon_id)):
+            form.addWidget(QLabel(tr(f"customize.slot_{slot}")), row, 0)
+            combo = QComboBox()
+            combo.addItem(tr("customize.none"), 0)
+            for bit, accessory in choices:
+                combo.addItem(names.get(accessory, f"{accessory:#04x}"), bit)
+                if live.read_weapon(accessory) == 0:
+                    combo.model().item(combo.count() - 1).setEnabled(False)
+            current = mounted & mask
+            combo.setCurrentIndex(max(combo.findData(current & -current), 0) if current else 0)
+            combo.currentIndexChanged.connect(lambda _i, m=mask, c=combo: self._on_changed(m, c))
+            form.addWidget(combo, row, 1)
+        hint = QLabel(tr("customize.hint"))
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        close_btn = QPushButton(tr("button.close"))
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn)
+
+    def _on_changed(self, mask: int, combo: QComboBox):
+        try:
+            self.live.set_weapon_accessory(self.weapon_id, mask, combo.currentData() or 0)
+        except OSError:
+            pass
+
+
 class GroupedWeaponsTab(QWidget):
     """Un seul onglet "Armes", sections empilees par categorie (meme
     regroupement que WeaponsPanel dans gui_app.py : WEAPON_CATEGORIES/
@@ -3557,6 +3801,8 @@ class GroupedWeaponsTab(QWidget):
                  names: dict[int, str], reader, writer, quick_states: list[tuple[str, int]],
                  ammo_reader, ammo_writer, equip_action=None, equip_available=None):
         super().__init__()
+        self.live = live
+        self.names = names
         self.sub_tabs: list[tuple[QLabel, TableTab]] = []
 
         layout = QVBoxLayout(self)
@@ -3583,7 +3829,11 @@ class GroupedWeaponsTab(QWidget):
             )
             tab = TableTab(
                 live, ids, names, tr("weapon.unclassified_format"), reader, writer, section_quick_states,
-                ammo_reader=ammo_reader, ammo_writer=ammo_writer,
+                # Accessoires : munitions des lance-grenades/Masterkey, et
+                # nombre de silencieux dans la meme colonne.
+                ammo_reader=live.read_accessory_amount if is_binary else ammo_reader,
+                ammo_writer=live.write_accessory_amount if is_binary else ammo_writer,
+                ammo_header=tr("table.ammo_quantity") if is_binary else None,
                 binary_lock_value=0 if is_binary else None,
                 show_filter=False, fit_height=True,
                 advanced_only_ids=self.DANGEROUS_IDS,
@@ -3591,6 +3841,8 @@ class GroupedWeaponsTab(QWidget):
                 equip_action=None if is_binary else equip_action,
                 equip_ids=None if is_binary else set(ids) - self.DANGEROUS_IDS,
                 equip_available=None if is_binary else equip_available,
+                customize_action=None if is_binary else self._open_customize,
+                customize_ids=None if is_binary else set(ids) & live.CUSTOMIZABLE_WEAPON_IDS,
             )
             inner_layout.addWidget(tab)
             self.sub_tabs.append((header, tab))
@@ -3601,6 +3853,13 @@ class GroupedWeaponsTab(QWidget):
     def set_advanced(self, advanced: bool):
         for _header, tab in self.sub_tabs:
             tab.set_advanced(advanced)
+
+    def _open_customize(self, weapon_id: int, parent: QWidget):
+        try:
+            dialog = WeaponAccessoryDialog(self.live, weapon_id, self.names, parent)
+        except OSError:
+            return
+        dialog.exec()
 
     def refresh(self):
         for _header, tab in self.sub_tabs:
@@ -4200,6 +4459,10 @@ class VitalsTab(QWidget):
         self.no_reload_check.setToolTip(tr("vitals.no_reload_tooltip"))
         self.no_reload_check.toggled.connect(self._on_no_reload_toggled)
         weapons_row.addWidget(self.no_reload_check)
+        self.infinite_silencer_check = QCheckBox(tr("vitals.infinite_silencer"))
+        self.infinite_silencer_check.setToolTip(tr("vitals.infinite_silencer_tooltip"))
+        self.infinite_silencer_check.toggled.connect(self._on_infinite_silencer_toggled)
+        weapons_row.addWidget(self.infinite_silencer_check)
         self.instant_kill_check = QCheckBox(tr("vitals.instant_kill"))
         self.instant_kill_check.setToolTip(tr("vitals.instant_kill_tooltip"))
         self.instant_kill_check.toggled.connect(self._apply_instant_kill_mode)
@@ -4390,6 +4653,7 @@ class VitalsTab(QWidget):
         self._on_pause_toggled(self.pause_check.isChecked())
         self._on_no_reload_toggled(self.no_reload_check.isChecked())
         self._on_infinite_ammo_toggled(self.infinite_ammo_check.isChecked())
+        self._on_infinite_silencer_toggled(self.infinite_silencer_check.isChecked())
         self._on_no_alerts_toggled(self.no_alerts_check.isChecked())
         self._on_railgun_charge_toggled(self.railgun_charge_check.isChecked())
         self._on_untouchable_toggled(self.untouchable_check.isChecked())
@@ -4460,6 +4724,12 @@ class VitalsTab(QWidget):
                 slider.blockSignals(True)
                 slider.setValue(round(percent))
                 slider.blockSignals(False)
+
+    def _on_infinite_silencer_toggled(self, checked: bool):
+        try:
+            self.live.set_code_patch("infinite_silencer", checked)
+        except OSError:
+            pass
 
     def _on_untouchable_toggled(self, checked: bool):
         try:
@@ -4677,6 +4947,7 @@ class VitalsTab(QWidget):
             self.pause_check.setEnabled(False)
             self.infinite_ammo_check.setEnabled(False)
             self.no_reload_check.setEnabled(False)
+            self.infinite_silencer_check.setEnabled(False)
             self.no_alerts_check.setEnabled(False)
             self.railgun_charge_check.setEnabled(False)
             self.untouchable_check.setEnabled(False)
@@ -4698,6 +4969,7 @@ class VitalsTab(QWidget):
         self.pause_check.setEnabled(True)
         self.infinite_ammo_check.setEnabled(True)
         self.no_reload_check.setEnabled(True)
+        self.infinite_silencer_check.setEnabled(True)
         self.no_alerts_check.setEnabled(True)
         self.railgun_charge_check.setEnabled(True)
         self.untouchable_check.setEnabled(True)
