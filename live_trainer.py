@@ -2412,6 +2412,11 @@ class MGS4Live:
         "invisible": [
             (0x89360, bytes.fromhex("48895c2408488974"), bytes.fromhex("0f57c0c3")),
             (0x89410, bytes.fromhex("4883ec28e8a71100"), bytes.fromhex("0f57c0c3")),
+            # Lasers des mini Gekko (2026-10-10) : 11FC775 recupere ce que touche
+            # le laser (11D48E0) ; si c'est Snake (je 11FC7A5), "Snake touche"
+            # puis, s'il bouge, "cible reperee" (+0x1308 bit 0x40000) -> alerte.
+            # "je" -> "jmp 11FC7D3" : le laser ne reconnait plus Snake.
+            (0x11FC7A5, bytes.fromhex("740ae874540200"), bytes.fromhex("eb2c")),
         ] + [(rva, bytes.fromhex(original), bytes.fromhex("b801000000"))
              for rva, original in _STEALTH_CHECK_CALLS.items()],
     }
