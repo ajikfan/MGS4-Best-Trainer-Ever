@@ -2360,10 +2360,11 @@ class MGS4Live:
             (0x6E2AA, bytes.fromhex("66ff4830488d1449"), bytes.fromhex("90909090")),
             (0x6E2B2, bytes.fromhex("66ff8cd7a0000000"), bytes.fromhex("9090909090909090")),
         ],
-        # Plancher de scenario ([rsi+0x248]) ignore : "jge" 1263870 -> "jmp".
+        # Le plancher de scenario ([rsi+0x248], 1263870) est conserve : le
+        # contourner detruisait un portail avant son declencheur de script
+        # et bloquait la progression (constate 2026-10-10).
         "destructibles_one_shot_kill": [
             (0x126385F, bytes.fromhex("8b47402947348b4734"), bytes.fromhex("31c089473490")),
-            (0x1263870, bytes.fromhex("7d05894f348bc1"), bytes.fromhex("eb05")),
             # 12632A0 enregistre un coup sur l'objet ; filtres leves pour que
             # toute arme compte : liste noire de types (1263364), et le bit
             # 0x8000 (flechettes du Mk.2, drapeaux 0x10008202) retire du masque
