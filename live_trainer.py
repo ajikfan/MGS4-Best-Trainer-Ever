@@ -2317,7 +2317,25 @@ class MGS4Live:
     #    jeu. Raging Raven : chemin vie redirige vers l'appel d'endurance
     #    (13F8BFF -> jmp 13F8C6D) ; Screaming Mantis bete : ecriture de vie
     #    F08FF0 neutralisee (l'endurance a 0 lance la defaite) - non testes.
+    #  - Mini Gekko (2026-10-10, comme les soldats) : 1216B90 choisit la
+    #    reaction apres un coup ; type 0x37 ou bit 15 (flechette) -> 0x15
+    #    (paralysie), meme si le drapeau "mort" (+0x1308 bit 1, pose par
+    #    11DB320) est la ; sinon 0x11/0x13 (mort) ou 0x10/0x14.
+    #    Letal : destruction au premier coup (jg 11FBF86), flechette
+    #    enregistree comme un coup (11DBFE0 la rangeait en simple contact :
+    #    bts 11DC059 neutralise) et plus de paralysie (jb 1216CC9 neutralise).
+    #    Non letal : aucun degat (sub 11FBF78 neutralise) et toujours la
+    #    paralysie (je 1216CBF -> jmp 1216D74).
     CODE_PATCHES = {
+        "minigekko_lethal": [
+            (0x11FBF86, bytes.fromhex("7f08488bcbe890f3"), bytes.fromhex("9090")),
+            (0x11DC059, bytes.fromhex("410fbaea1841f7c2"), bytes.fromhex("9090909090")),
+            (0x1216CC9, bytes.fromhex("0f82a500000083f868"), bytes.fromhex("909090909090")),
+        ],
+        "minigekko_non_lethal": [
+            (0x11FBF78, bytes.fromhex("29b3dc1200008b83dc"), bytes.fromhex("909090909090")),
+            (0x1216CBF, bytes.fromhex("0f84af0000000fbae1"), bytes.fromhex("e9b000000090")),
+        ],
         "boss_non_lethal_kill": [
             (0xB800CC, bytes.fromhex("756f448b891c030000"), bytes.fromhex("9090")),
             (0x1173CF9, bytes.fromhex("2bcb4863c148f7d8"), bytes.fromhex("31c9")),
@@ -2392,7 +2410,6 @@ class MGS4Live:
             (0x112717A, bytes.fromhex("2bd74963c84863c2"), bytes.fromhex("31d2")),
         ],
         "vehicles_one_shot_kill": [
-            (0x11FBF86, bytes.fromhex("7f08488bcbe890f3"), bytes.fromhex("9090")),
             (0x102DAF3, bytes.fromhex("755e488d4c2430"), bytes.fromhex("9090")),
             (0x13532A0, bytes.fromhex("f7c10000050075"), bytes.fromhex("b801000000c3")),
             (0x13528F5, bytes.fromhex("730b660f6e83"), bytes.fromhex("9090")),
@@ -2417,6 +2434,9 @@ class MGS4Live:
             # puis, s'il bouge, "cible reperee" (+0x1308 bit 0x40000) -> alerte.
             # "je" -> "jmp 11FC7D3" : le laser ne reconnait plus Snake.
             (0x11FC7A5, bytes.fromhex("740ae874540200"), bytes.fromhex("eb2c")),
+            # Meme fonction, autre declencheur ([+0x838] bit 1, contact ou
+            # proximite, Snake immobile au milieu d'eux) : "je" 11FC72E -> "jmp".
+            (0x11FC72E, bytes.fromhex("7424838b10130000"), bytes.fromhex("eb24")),
         ] + [(rva, bytes.fromhex(original), bytes.fromhex("b801000000"))
              for rva, original in _STEALTH_CHECK_CALLS.items()],
     }
@@ -5059,6 +5079,8 @@ class VitalsTab(QWidget):
         self.live.set_machine_kill(active)
         try:
             self.live.set_code_patch("vehicles_one_shot_kill", active)
+            self.live.set_code_patch("minigekko_lethal", active and lethal)
+            self.live.set_code_patch("minigekko_non_lethal", active and not lethal)
             self.live.set_code_patch("destructibles_one_shot_kill", active)
             non_lethal_ok = self.live.set_code_patch("boss_non_lethal_kill", active and not lethal)
             lethal_ok = self.live.set_code_patch("boss_one_shot_kill", active and lethal)
