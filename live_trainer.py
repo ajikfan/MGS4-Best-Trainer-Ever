@@ -2397,6 +2397,44 @@ class MGS4Live:
         "drebin_freeze": [
             (0x10301CE, bytes.fromhex("894f18c7473001000000"), bytes.fromhex("909090")),
         ],
+        # Metal Gear REX (linkvarbuf+0xB70, u32) : degats 136F8F9, regeneration
+        # 136F5A4 et autres ecritures de son code (136F2C3, 136F467, 1374BB2).
+        "rex_freeze": [
+            (0x136F2C3, bytes.fromhex("8988700b0000488d4b"), bytes.fromhex("909090909090")),
+            (0x136F467, bytes.fromhex("8998700b00008d41f6"), bytes.fromhex("909090909090")),
+            (0x136F5A4, bytes.fromhex("8988700b000033d248"), bytes.fromhex("909090909090")),
+            (0x136F8F9, bytes.fromhex("8988700b0000c78780"), bytes.fromhex("909090909090")),
+            (0x1374BB2, bytes.fromhex("8988700b0000b92100"), bytes.fromhex("909090909090")),
+        ],
+        # Mitrailleuse de REX (2026-10-10) : chaleur int32 a objet+0x850
+        # (max 0xFA0, % affiche a +0x854). 138209E la relit, ajoute le tir,
+        # borne a 0xFA0 et l'ecrit (1382167) puis surchauffe si eax = 0xFA0 ;
+        # ecriture en NOP -> la chaleur reste a son niveau (le refroidissement
+        # 138109D la ramene a 0) et le seuil n'est jamais atteint.
+        "rex_gun_no_heat": [
+            (0x1382167, bytes.fromhex("8986500800003da00f0000"), bytes.fromhex("909090909090")),
+        ],
+        # Missiles de REX (2026-10-10) : 15 tubes, minuteur de rechargement
+        # par tube a objet+0x85C..+0x894 (0 = pret) ; +0x858 = tubes prets,
+        # recompte a chaque image (138130E). Un tir decremente +0x858
+        # (138209E) et arme le minuteur du tube (13820C6) : les deux en NOP
+        # -> tubes toujours prets, 15/15.
+        "rex_infinite_missiles": [
+            (0x138209E, bytes.fromhex("ff8e58080000488d1555"), bytes.fromhex("909090909090")),
+            (0x13820C6, bytes.fromhex("428984a65c080000e85d"), bytes.fromhex("9090909090909090")),
+        ],
+        # Laser de REX (2026-10-10) : charge int32 a +0x8C d'un objet de tir,
+        # plafonnee par la reserve +0x84 (le "x/100" du HUD, max +0x88 =
+        # 10000 ; niveaux 1-5 deduits de charge/+0x88). En charge, 137556A
+        # fait charge = min(charge + vitesse*2, reserve) : lea et cmp/cmovle
+        # neutralises, il reste "mov eax,[rsi+0x84]" -> charge pleine des la
+        # premiere image. Au tir, 137582B retire la meme quantite a la charge
+        # et a la reserve : ecriture de la reserve (1375871) en NOP -> elle
+        # reste pleine, le rayon garde sa duree normale.
+        "rex_laser_full_charge": [
+            (0x1375578, bytes.fromhex("8d0c688b86840000003bc80f4ec1"), bytes.fromhex("9090908b86840000009090909090")),
+            (0x1375871, bytes.fromhex("898684000000410f49c9"), bytes.fromhex("909090909090")),
+        ],
         "battery_freeze": [
             (0xA46117, bytes.fromhex("66418988520b0000c3c200"), bytes.fromhex("9090909090909090")),
         ],
@@ -2436,7 +2474,6 @@ class MGS4Live:
             (0x138D493, bytes.fromhex("750c448b85140300"), bytes.fromhex("9090")),
             (0xF08FC2, bytes.fromhex("75028bd82bc34898"), bytes.fromhex("9090")),
             (0xF09038, bytes.fromhex("0f8f42010000f30f"), bytes.fromhex("909090909090")),
-            (0x112717A, bytes.fromhex("2bd74963c84863c2"), bytes.fromhex("31d2")),
             # Toute arme tue (comme les soldats), aussi les coups d'endurance
             # (flechettes...) : Crying Wolf, branches endurance -> 0 et ecriture
             # redirigee vers la vie ; Octopus, chemin vie force avec la valeur
@@ -2489,6 +2526,20 @@ class MGS4Live:
             # du Mk.2) sans degats. Son test (1048188 "jae") devient "jmp" :
             # la flechette va au gestionnaire des balles (1047EF0).
             (0x1048188, bytes.fromhex("0f830d0200008b9388"), bytes.fromhex("e90e02000090")),
+            # Metal Gear RAY (2026-10-10, 60000 de vie, aucune endurance) : sa
+            # propre fonction de degats 138D270 calcule vie - degat puis
+            # l'ecrit (138D4DA) ; "add ecx,edx" (138D4D8) -> "xor ecx,ecx" :
+            # vie a 0 au premier coup, en Letal comme en Non letal.
+            (0x138D4D8, bytes.fromhex("03ca898d14030000"), bytes.fromhex("31c9")),
+        ],
+        # Liquid Ocelot, combat final (2026-10-10) : au corps a corps dans les
+        # deux modes. 11270E0 fait vie = max(vie - coup, plancher de phase)
+        # (112717A) puis endurance = max(endurance - coup, plancher) (1127255) ;
+        # les deux "sub" -> "xor" : vie et endurance au plancher au premier
+        # coup, le suivant lance la phase suivante (transitions par le jeu).
+        "liquid_final_kill": [
+            (0x112717A, bytes.fromhex("2bd74963c84863c2"), bytes.fromhex("31d2")),
+            (0x1127255, bytes.fromhex("2bd74863ce4863c2"), bytes.fromhex("31d2")),
         ],
         "untouchable": [(0x96C0B0, bytes.fromhex("488bc455535657488d68a1"), bytes.fromhex("c3"))],
         "invisible": [
@@ -5033,6 +5084,14 @@ class VitalsTab(QWidget):
 
     def _on_lock_toggled(self, name: str, checked: bool):
         if checked:
+            if name in self.PLAYER_GAUGE_ROWS and self._player_gauge_inactive(name):
+                # Curseur fige sur la derniere valeur vue (il ne suit la jauge
+                # que quand elle est active) : verrouiller a 100 % plutot que
+                # sur ce reste, sinon la jauge baisse jusqu'a lui (2026-10-10).
+                slider = self.sliders[name]
+                slider.blockSignals(True)
+                slider.setValue(100)
+                slider.blockSignals(False)
             self.locked_percents[name] = self.sliders[name].value()
         else:
             self.locked_percents.pop(name, None)
@@ -5046,6 +5105,7 @@ class VitalsTab(QWidget):
         "Sante": "health_freeze", "Stamina": "stamina_freeze",
         "Stress": "stress_freeze", "Batterie Solid Eye": "battery_freeze",
         "Drebin 893": "drebin_freeze", "Van": "drebin_freeze",
+        "Sante Metal Gear REX": "rex_freeze",
     }
 
     def _apply_gauge_freezes(self):
@@ -5153,6 +5213,7 @@ class VitalsTab(QWidget):
         self.live.set_machine_kill(active)
         try:
             self.live.set_code_patch("vehicles_one_shot_kill", active)
+            self.live.set_code_patch("liquid_final_kill", active)
             # Les patchs Letal / Non letal partagent des sites (Crying Wolf) :
             # retirer d'abord ceux du mode inactif, puis poser ceux du mode actif.
             lethal_patches = ("minigekko_lethal", "boss_one_shot_kill")
@@ -5181,6 +5242,7 @@ class VitalsTab(QWidget):
     def _on_infinite_ammo_toggled(self, checked: bool):
         try:
             self.live.set_infinite_ammo(checked)
+            self.live.set_code_patch("rex_infinite_missiles", checked)
         except OSError:
             pass
 
@@ -5188,11 +5250,24 @@ class VitalsTab(QWidget):
         if not (self.live.connected and self.live.sane):
             return
         self.live.set_no_reload(checked)
+        try:
+            self.live.set_code_patch("rex_gun_no_heat", checked)
+        except OSError:
+            pass
 
     def _on_no_alerts_toggled(self, checked: bool):
         if not (self.live.connected and self.live.sane):
             return
         self.live.set_no_alerts(checked)
+
+    def _player_gauge_inactive(self, name: str) -> bool:
+        if not (self.live.connected and self.live.sane):
+            return True
+        try:
+            value = self.live.read_player_gauge(self.PLAYER_GAUGE_ROWS[name])
+        except OSError:
+            return True
+        return value is None or value < 0
 
     def _reassert_player_gauges(self):
         for name, gauge in self.PLAYER_GAUGE_ROWS.items():
@@ -5241,6 +5316,10 @@ class VitalsTab(QWidget):
         if not (self.live.connected and self.live.sane):
             return
         self.live.set_railgun_force_charge(checked)
+        try:
+            self.live.set_code_patch("rex_laser_full_charge", checked)
+        except OSError:
+            pass
 
     # Profils (2026-10-09) : toute la configuration de l'onglet sauf la
     # pause - vitesse, difficulte, alerte, cases, Letal/Non letal, et pour
@@ -5288,6 +5367,10 @@ class VitalsTab(QWidget):
             lock = self.lock_checks[name]
             if gauge.get("locked"):
                 percent = max(0, min(int(gauge.get("percent", 100)), 100))
+                if name in self.PLAYER_GAUGE_ROWS and percent == 0:
+                    # Profil enregistre jauge inactive (curseur a 0) : un verrou
+                    # a 0 % ne remonterait jamais la jauge (2026-10-10).
+                    percent = 100
                 slider.blockSignals(True)
                 slider.setValue(percent)
                 slider.blockSignals(False)
