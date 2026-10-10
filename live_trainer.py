@@ -2399,6 +2399,14 @@ class MGS4Live:
             # Helico : coups au bit 15 (0x8000, flechettes du Mk.2) ignores
             # (13528C1 "bt edi,0xf ; jb") -> acceptes.
             (0x13528C5, bytes.fromhex("727d8bc725004001"), bytes.fromhex("9090")),
+            # Tanks (gestionnaire de coups FF9290) : coups au bit 15 (Mk.2)
+            # ignores (FF9387 "bt edx,0xf ; jb") -> acceptes.
+            (0xFF938B, bytes.fromhex("0f82ba0000000fbae2"), bytes.fromhex("909090909090")),
+            # Gekko : les coups passent par 5 gestionnaires (aiguillage 1046D5F) ;
+            # 1048160 prend tout coup d'etat 0x4000 (tranquillisant, flechettes
+            # du Mk.2) sans degats. Son test (1048188 "jae") devient "jmp" :
+            # la flechette va au gestionnaire des balles (1047EF0).
+            (0x1048188, bytes.fromhex("0f830d0200008b9388"), bytes.fromhex("e90e02000090")),
         ],
         "untouchable": [(0x96C0B0, bytes.fromhex("488bc455535657488d68a1"), bytes.fromhex("c3"))],
         "invisible": [
