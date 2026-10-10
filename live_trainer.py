@@ -52,7 +52,7 @@ import time
 from ctypes import wintypes
 
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -109,6 +109,7 @@ def _writable_data_path(*parts):
 
 TELEPORT_POINTS_FILE = _writable_data_path("teleport_points.json")
 SETTINGS_FILE = _writable_data_path("settings.json")
+PROFILES_FILE = _writable_data_path("profiles.json")
 
 # ---------------------------------------------------------------------------
 # Internationalisation (FR/EN, demande utilisateur 2026-10-01, V2.0) -
@@ -1390,6 +1391,13 @@ class SpeedController:
         addr = ctypes.cast(self.shm_view, ctypes.c_void_p).value + offset
         return ctypes.cast(addr, ctypes.POINTER(ctypes.c_uint64))[0]
 
+    def set_machine_kill(self, enabled: bool) -> bool:
+        """Un coup, un mort sur les Gekko et les tanks (machine_kill, offset
+        392), independant de one_shot_kill pour marcher aussi en Non letal.
+        Sans effet avec une DLL anterieure deja injectee (elle lit encore
+        one_shot_kill, toujours pose en Letal)."""
+        return self._write_u8_at(392, 1 if enabled else 0)
+
     def set_one_shot_kill(self, enabled: bool) -> bool:
         """Active/desactive le patch de code "one shot kill" (voir
         native/speedhack.c) - injecte comme le reste, donc soumis aux
@@ -1721,6 +1729,13 @@ class MGS4Live:
     def one_shot_kill_hook_installed(self) -> bool | None:
         return self.speed.damage_hook_installed()
 
+    def set_machine_kill(self, enabled: bool) -> bool:
+        if not (self.connected and self.sane and self.pid):
+            return False
+        if not self.speed.ensure_injected(self.pid):
+            return False
+        return self.speed.set_machine_kill(enabled)
+
     def set_non_lethal(self, enabled: bool) -> bool:
         if not (self.connected and self.sane and self.pid):
             return False
@@ -1919,11 +1934,40 @@ class MGS4Live:
         vtable = struct.unpack("<Q", self.proc.read_bytes(component, 8))[0]
         return component if vtable == self.base + self.GRIP_COMPONENT_VTABLE_RVA else None
 
+    # Drebin 893 (2026-10-10, valide en jeu) : vehicule du joueur, case
+    # dediee mgs4+23F81090 -> composant (vtable mgs4+18EB690, rappel de
+    # collision 102F250) ; vie int32 a composant+0x128, max +0x12C (6500).
+    # La jauge du HUD n'en est qu'une copie (10302C5 -> 14D4020).
+    VEHICLE_PTR_RVA = 0x23F81090
+    VEHICLE_COMPONENT_VTABLE_RVA = 0x18EB690
+    VEHICLE_HP_OFFSET = 0x128
+
+    def _vehicle_component(self) -> int | None:
+        component = struct.unpack("<Q", self.proc.read_bytes(self.base + self.VEHICLE_PTR_RVA, 8))[0]
+        if not component:
+            return None
+        vtable = struct.unpack("<Q", self.proc.read_bytes(component, 8))[0]
+        return component if vtable == self.base + self.VEHICLE_COMPONENT_VTABLE_RVA else None
+
+    def player_gauge_max(self, gauge: str) -> int | None:
+        """Maximum reel d'une jauge quand le jeu le stocke (Drebin 893)."""
+        if gauge != "drebin" or not (self.connected and self.sane):
+            return None
+        component = self._vehicle_component()
+        if component is None:
+            return None
+        return struct.unpack("<i", self.proc.read_bytes(component + self.VEHICLE_HP_OFFSET + 4, 4))[0] or None
+
     def read_player_gauge(self, gauge: str) -> int | None:
         """Jauge du joueur (PLAYER_GAUGES) quand elle est active (suspendu,
-        sous l'eau) ; -1 sinon, None si introuvable."""
+        sous l'eau, dans le Drebin 893) ; -1 sinon, None si introuvable."""
         if not (self.connected and self.sane):
             return None
+        if gauge == "drebin":
+            component = self._vehicle_component()
+            if component is None:
+                return -1
+            return struct.unpack("<i", self.proc.read_bytes(component + self.VEHICLE_HP_OFFSET, 4))[0]
         component = self._grip_component()
         if component is None:
             return None
@@ -1935,6 +1979,12 @@ class MGS4Live:
     def write_player_gauge(self, gauge: str, value: int) -> bool:
         if not (self.connected and self.sane):
             return False
+        if gauge == "drebin":
+            component = self._vehicle_component()
+            if component is None:
+                return False
+            self.proc.write_bytes(component + self.VEHICLE_HP_OFFSET, struct.pack("<i", value))
+            return True
         component = self._grip_component()
         if component is None:
             return False
@@ -2236,12 +2286,92 @@ class MGS4Live:
     #    si un silencieux est monte (bit 0 de [arme+0x2C]), retire 1 a son
     #    compteur courant (dec [silencieux+0x30], 6E2AA) et 1 a sa reserve
     #    (dec [table munitions+idx*0x18+0x10], 6E2B2) : les deux en NOP.
+    #  - Stress fige (2026-10-09) : la mise a jour du stress (971690) ecrit
+    #    linkvarbuf+0xB50 trois fois par image (gain 1 plafonne 971AC1,
+    #    gain 2 plafonne 971B34, baisse naturelle 971B8F) : les trois en NOP
+    #    quand la ligne Stress est verrouillee (sinon 0 -> 0.1 -> 0 entre deux
+    #    reecritures). Le stress reste a la valeur verrouillee.
+    #  - Vie / endurance / batterie figees (2026-10-10) : meme principe, la
+    #    mise a jour de Snake ecrit chaque jauge a chaque image (vie : 96C53B
+    #    degats dans 96C207, 96D146/96D1B7/96D21F dans 96CF1B ; endurance :
+    #    96C60D, 96D39C ; batterie Solid Eye : A46117), plus les autres
+    #    ecritures de la mise a jour de Snake (96xxxx/97xxxx) trouvees en
+    #    cherchant tous les "mov word [reg+0xB48/0xB4C]" ; les fonctions
+    #    utilitaires (8DAxxx, 14Bxxxx : objets, chargement) restent libres.
+    #  - Un coup, un mort Non letal sur les boss (2026-10-10) : B800B0 retire
+    #    de l'endurance (+0x31C) a un objet de vie ; un degat de 0x7FFFFFFF
+    #    la vide (meme sentinelle que la vie). Le "jne" (B800CC) neutralise
+    #    traite chaque coup non letal ainsi ; les seuils de phase restent
+    #    geres par le jeu (Laughing Octopus : un coup par phase, valide en
+    #    jeu ; Raging Raven et Screaming Mantis bete passent aussi par
+    #    B800B0, comme des fonctions de soldats). Forme Beauty (1173BB1,
+    #    commune aux quatre) : "sub ecx,ebx" (1173CF9) -> "xor ecx,ecx",
+    #    endurance a 0 au premier coup (valide sur Laughing Beauty). Crying
+    #    Wolf (FE7D80) a son propre calcul : pas encore couvert.
+    #    Armes letales en Non letal (comme les soldats : la vie n'est jamais
+    #    touchee, le coup vide l'endurance) : Octopus bete, passage force par
+    #    B800B0 ("jle" 1434BCF) et ecriture de vie 1434D68 neutralisee ;
+    #    Beauty, "je" vers le chemin vie (1173BC7) neutralise - valides en
+    #    jeu. Raging Raven : chemin vie redirige vers l'appel d'endurance
+    #    (13F8BFF -> jmp 13F8C6D) ; Screaming Mantis bete : ecriture de vie
+    #    F08FF0 neutralisee (l'endurance a 0 lance la defaite) - non testes.
     CODE_PATCHES = {
+        "boss_non_lethal_kill": [
+            (0xB800CC, bytes.fromhex("756f448b891c030000"), bytes.fromhex("9090")),
+            (0x1173CF9, bytes.fromhex("2bcb4863c148f7d8"), bytes.fromhex("31c9")),
+            # Armes letales -> endurance, comme les soldats (vie jamais touchee).
+            (0x1434BCF, bytes.fromhex("0f8ef20000008bd049"), bytes.fromhex("909090909090")),
+            (0x1434D68, bytes.fromhex("41899614030000e89c03"), bytes.fromhex("90909090909090")),
+            (0x1173BC7, bytes.fromhex("0f845d010000448b8d"), bytes.fromhex("909090909090")),
+            (0x13F8BFF, bytes.fromhex("81feffffff7f8b8d14"), bytes.fromhex("e96900000090")),
+            (0xF08FF0, bytes.fromhex("41898814030000e884"), bytes.fromhex("90909090909090")),
+        ],
+        "health_freeze": [
+            (0x96C53B, bytes.fromhex("66418989480b00004489a7"), bytes.fromhex("9090909090909090")),
+            (0x96D146, bytes.fromhex("66418989480b0000488b07"), bytes.fromhex("9090909090909090")),
+            (0x96D1B7, bytes.fromhex("66418989480b0000488b07"), bytes.fromhex("9090909090909090")),
+            (0x96D21F, bytes.fromhex("66418989480b0000488bcf"), bytes.fromhex("9090909090909090")),
+            (0x96C933, bytes.fromhex("66418989480b0000f68704"), bytes.fromhex("9090909090909090")),
+            (0x96CA3B, bytes.fromhex("66458982480b0000e818d9"), bytes.fromhex("9090909090909090")),
+            (0x96D469, bytes.fromhex("66458982480b0000e8eace"), bytes.fromhex("9090909090909090")),
+            (0x9763B5, bytes.fromhex("66418988480b0000c3cccc"), bytes.fromhex("9090909090909090")),
+        ],
+        "stamina_freeze": [
+            (0x96C60D, bytes.fromhex("664189884c0b000048c787"), bytes.fromhex("9090909090909090")),
+            (0x96D39C, bytes.fromhex("664189884c0b0000488bcf"), bytes.fromhex("9090909090909090")),
+            (0x96C996, bytes.fromhex("664189894c0b0000488b07"), bytes.fromhex("9090909090909090")),
+            (0x9700AE, bytes.fromhex("6641898a4c0b00004883c4"), bytes.fromhex("9090909090909090")),
+            (0x9764A5, bytes.fromhex("664189884c0b0000c3cccc"), bytes.fromhex("9090909090909090")),
+        ],
+        # Drebin 893 : 1030096 applique un coup (vie = bornee(vie - degat)),
+        # "mov [rdi+0x18],ecx" (10301CE) en NOP quand la ligne est verrouillee.
+        "drebin_freeze": [
+            (0x10301CE, bytes.fromhex("894f18c7473001000000"), bytes.fromhex("909090")),
+        ],
+        "battery_freeze": [
+            (0xA46117, bytes.fromhex("66418988520b0000c3c200"), bytes.fromhex("9090909090909090")),
+        ],
+        "stress_freeze": [
+            (0x971AC1, bytes.fromhex("66418981500b0000488b06"), bytes.fromhex("9090909090909090")),
+            (0x971B34, bytes.fromhex("66418981500b000039ae38"), bytes.fromhex("9090909090909090")),
+            (0x971B8F, bytes.fromhex("66418988500b0000488b05"), bytes.fromhex("9090909090909090")),
+        ],
         "infinite_silencer": [
             (0x6E2AA, bytes.fromhex("66ff4830488d1449"), bytes.fromhex("90909090")),
             (0x6E2B2, bytes.fromhex("66ff8cd7a0000000"), bytes.fromhex("9090909090909090")),
         ],
-        "destructibles_one_shot_kill": [(0x126385F, bytes.fromhex("8b47402947348b4734"), bytes.fromhex("31c089473490"))],
+        # Plancher de scenario ([rsi+0x248]) ignore : "jge" 1263870 -> "jmp".
+        "destructibles_one_shot_kill": [
+            (0x126385F, bytes.fromhex("8b47402947348b4734"), bytes.fromhex("31c089473490")),
+            (0x1263870, bytes.fromhex("7d05894f348bc1"), bytes.fromhex("eb05")),
+            # 12632A0 enregistre un coup sur l'objet ; filtres leves pour que
+            # toute arme compte : liste noire de types (1263364), et le bit
+            # 0x8000 (flechettes du Mk.2, drapeaux 0x10008202) retire du masque
+            # de rejet 0xD8000 (1263342). Le filtre d'impact 0x3200 (126341F)
+            # reste : il ecarte les rayons de visee (drapeaux 0x58).
+            (0x1263342, bytes.fromhex("f7c100800d000f8556"), bytes.fromhex("f7c100000d00")),
+            (0x1263364, bytes.fromhex("0f823a0100000fbae1"), bytes.fromhex("909090909090")),
+        ],
         "boss_one_shot_kill": [
             (0x1434D26, bytes.fromhex("7503448bc0412bc0"), bytes.fromhex("9090")),
             (0x1173D8D, bytes.fromhex("442bc34963c048f7"), bytes.fromhex("4531c0")),
@@ -2427,6 +2557,188 @@ class MGS4Live:
                                   struct.pack("<I", wanted))
             self.refresh_weapon_custom_menu()
         return True
+
+    def read_all_weapon_accessories(self) -> dict[int, int]:
+        """Accessoires montes (bits 0-9) de chaque arme personnalisable."""
+        return {weapon_id: self.read_weapon_accessories(weapon_id) & 0x3FF
+                for weapon_id in sorted(self.CUSTOMIZABLE_WEAPON_IDS)}
+
+    def apply_weapon_accessories(self, wanted: dict[int, int]) -> bool:
+        """Monte les accessoires d'un profil, selon ce que la partie permet :
+        arme non possedee = ignoree ; accessoire du profil non possede = pas
+        monte (l'emplacement garde l'actuel s'il est possede, sinon vide)."""
+        if not (self.connected and self.sane):
+            return False
+        changed = False
+        for weapon_id, wanted_mask in wanted.items():
+            if weapon_id not in self.CUSTOMIZABLE_WEAPON_IDS or self.read_weapon(weapon_id) == 0:
+                continue
+            current = self.read_weapon_accessories(weapon_id)
+            result = current
+            for _slot, mask, choices in self.weapon_accessory_slots(weapon_id):
+                owned = {bit for bit, accessory in choices if self.read_weapon(accessory) != 0}
+                want = wanted_mask & mask
+                want &= -want  # un seul accessoire par emplacement
+                have = current & mask
+                if want in owned:
+                    new = want
+                elif not want:
+                    new = 0
+                else:
+                    new = have if have and (have & -have) in owned else 0
+                result = (result & ~mask) | new
+            if result != current:
+                self.proc.write_bytes(self._weapon_entry(weapon_id) + self.WEAPON_ACCESSORIES_OFFSET,
+                                      struct.pack("<I", result))
+                changed = True
+        if changed:
+            self.refresh_weapon_custom_menu()
+        return True
+
+    # Son du « ! » (repere par un soldat) joue par le jeu lui-meme
+    # (2026-10-09) : FMOD Studio est integre a l'exe. La classe son du jeu
+    # (176C10) fait System::getEvent(systeme, chemin, &description) ->
+    # EventDescription::createInstance -> EventInstance::start -> release ;
+    # systeme FMOD Studio = [mgs4+22A8F90]. Son joue : le « GO » de Snake
+    # quand le Pistolet solaire est charge (voix : dossier selon la langue
+    # des voix), sinon le « ! » de repere (banque commune, 3 canaux joues
+    # ensemble). Noms releves via bplog sur 176C10 : "{ansi@[rcx+28]}".
+    # Chemin et sorties dans un petit tampon alloue dans le jeu
+    # (VirtualAllocEx, un par processus).
+    FMOD_SYSTEM_PTR_RVA = 0x22A8F90
+    FMOD_FUNCS = {
+        "get_event": (0x2C0740, "4053555641564881ec48010000"),
+        "create_instance": (0x2B7050, "48895c24185556574881ec6001"),
+        "start": (0x2CEFA0, "48895c24104889742418574881ec"),
+        "release": (0x2CAD90, "48895c24104889742418574881ec"),
+    }
+    PROFILE_SOUND_CANDIDATES = (
+        ("event:/SPC/ENG/sna_on_unq_vram/E_8906_v_087_snav",),
+        ("event:/SPC/JPN/sna_on_unq_vram/E_8906_v_087_snav",),
+        tuple(f"event:/SSP/ENG/mgs4int/E_0_s_bikkuri_new_1_{channel}" for channel in ("Lf", "Lm", "Rm")),
+    )
+
+    def _sound_buffer(self) -> int:
+        if getattr(self, "_sound_buffer_pid", None) != self.pid:
+            buf = kernel32.VirtualAllocEx(self.proc.handle, None, 0x1000, MEM_COMMIT | 0x2000, PAGE_READWRITE)
+            self._sound_buffer_addr = buf or 0
+            self._sound_buffer_pid = self.pid if buf else None
+        return self._sound_buffer_addr
+
+    def play_alert_sound(self) -> bool:
+        """Joue le « ! » du jeu (fil separe : un appel par image). Faux si
+        impossible (pas accroche, appel generique absent, autre version)."""
+        if not (self.connected and self.sane and self.speed.main_loop_hook_installed()):
+            return False
+        try:
+            funcs = self._live_funcs(self.FMOD_FUNCS)
+            system = struct.unpack("<Q", self.proc.read_bytes(self.base + self.FMOD_SYSTEM_PTR_RVA, 8))[0]
+            buf = self._sound_buffer()
+        except OSError:
+            return False
+        if funcs is None or not system or not buf:
+            return False
+        threading.Thread(target=self._play_alert_sound, args=(funcs, system, buf), daemon=True).start()
+        return True
+
+    def _play_alert_sound(self, funcs: dict[str, int], system: int, buf: int) -> None:
+        call = self.speed.game_call
+        try:
+            for events in self.PROFILE_SOUND_CANDIDATES:
+                instances = []
+                for index, path in enumerate(events):
+                    path_addr = buf + 0x100 + index * 0x100
+                    out = buf + index * 0x10
+                    self.proc.write_bytes(path_addr, path.encode() + b"\0")
+                    self.proc.write_bytes(out, bytes(16))
+                    # FMOD_RESULT (int) : 0 = FMOD_OK ; None = appel non execute.
+                    result = call(funcs["get_event"], system, path_addr, out)
+                    if result is None:
+                        raise OSError("jeu fige")
+                    if result & 0xFFFFFFFF:
+                        continue  # evenement absent (banque non chargee, autre langue)
+                    description = struct.unpack("<Q", self.proc.read_bytes(out, 8))[0]
+                    result = call(funcs["create_instance"], description, out + 8)
+                    if result is None or result & 0xFFFFFFFF:
+                        continue
+                    instances.append(struct.unpack("<Q", self.proc.read_bytes(out + 8, 8))[0])
+                if instances:
+                    for instance in instances:
+                        call(funcs["start"], instance)
+                    for instance in instances:
+                        call(funcs["release"], instance)  # libere a la fin du son
+                    return
+            raise OSError("aucun son trouve")
+        except OSError:
+            _beep()
+
+    # Vraie alerte (2026-10-09, validee en jeu) : forcer l'etat seul (court-
+    # circuit de B5FA90) laissait le compte a rebours a 0.00 et rien a
+    # reprendre pour le jeu. Le compte a rebours = gestionnaire d'alerte
+    # ([mgs4+23F0B5B0]) +0x78 (frames, x900 -> mgs4+1D77ABC, 6000 = 99.99),
+    # recopie a chaque image du max des minuteries des soldats (soldat
+    # +0x461C, +0x4618 = 10800000), que leur IA decompte. On fait donc
+    # donner l'alerte par un soldat : B43750(soldat, index cible) = le soldat
+    # qui repere Snake (position transmise a son unite [soldat+0x4578],
+    # signalement, minuteries). Soldats : gestionnaire +0x30 nombre, +0x38
+    # tableau (pas 0x10, pointeur a +8).
+    ALERT_MANAGER_PTR_RVA = 0x23F0B5B0
+    SOLDIER_REPORT_FUNC = {"report": (0xB43750, "48895c2408574883ec40488bb9784500")}
+    ALERT_FULL_FRAMES = 6000
+    ALERT_SECOND_TIMER = 10800000
+
+    def _alert_manager(self) -> int:
+        return struct.unpack("<Q", self.proc.read_bytes(self.base + self.ALERT_MANAGER_PTR_RVA, 8))[0]
+
+    def _alert_soldier(self, manager: int) -> int:
+        """Un soldat actif de la zone (unite presente), 0 si aucun."""
+        count = struct.unpack("<i", self.proc.read_bytes(manager + 0x30, 4))[0]
+        table = struct.unpack("<Q", self.proc.read_bytes(manager + 0x38, 8))[0]
+        if not table or not 0 < count < 512:
+            return 0
+        block = self.proc.read_bytes(table, count * 0x10)
+        for index in range(count):
+            soldier = struct.unpack_from("<Q", block, index * 0x10 + 8)[0]
+            if not soldier:
+                continue
+            # Present dans la zone : unite, +0x4624 = 1 et +0x45AC = 0 (8 =
+            # soldat d'une autre partie de la zone, que le jeu ne met pas a
+            # jour - son alerte ne prend pas).
+            unit = struct.unpack("<Q", self.proc.read_bytes(soldier + 0x4578, 8))[0]
+            active = struct.unpack("<i", self.proc.read_bytes(soldier + 0x4624, 4))[0]
+            absent = struct.unpack("<i", self.proc.read_bytes(soldier + 0x45AC, 4))[0]
+            if unit and active == 1 and absent == 0:
+                return soldier
+        return 0
+
+    def trigger_real_alert(self) -> bool:
+        """Fait donner l'alerte par un soldat (fil separe). Faux si aucun
+        soldat ou appel impossible ; le maintien de l'affichage marche quand meme."""
+        if not (self.connected and self.sane and self.speed.main_loop_hook_installed()):
+            return False
+        try:
+            funcs = self._live_funcs(self.SOLDIER_REPORT_FUNC)
+            manager = self._alert_manager()
+            soldier = self._alert_soldier(manager) if manager else 0
+            target = struct.unpack("<i", self.proc.read_bytes(self.base + self.PLAYER_INDEX_RVA, 4))[0]
+        except OSError:
+            return False
+        self._alert_holder = soldier
+        if funcs is None or not soldier:
+            return False
+        threading.Thread(target=self.speed.game_call, args=(funcs["report"], soldier, target), daemon=True).start()
+        return True
+
+    def hold_alert_timer(self) -> None:
+        """Alerte forcee : compte a rebours maintenu a 99.99 (gestionnaire +
+        soldat qui a donne l'alerte), le jeu reprend la main quand on arrete."""
+        manager = self._alert_manager()
+        if not manager:
+            return
+        self.proc.write_bytes(manager + 0x74, struct.pack("<ii", self.ALERT_SECOND_TIMER, self.ALERT_FULL_FRAMES))
+        soldier = getattr(self, "_alert_holder", 0)
+        if soldier:
+            self.proc.write_bytes(soldier + 0x4618, struct.pack("<ii", self.ALERT_SECOND_TIMER, self.ALERT_FULL_FRAMES))
 
     def read_accessory_amount(self, weapon_id: int) -> int | None:
         """Colonne des accessoires : silencieux = nombre, sinon munitions."""
@@ -4382,6 +4694,9 @@ class VitalsTab(QWidget):
         self._raven_last_hp: int | None = None
         self._raven_last_stamina: int | None = None
         self._boss_kill_patched = False
+        # Difficulte d'un profil choisi avant l'accrochage, ecrite par
+        # sync_to_game (la liste se recale sur le jeu a chaque rafraichissement).
+        self._pending_difficulty: int | None = None
 
         layout = QVBoxLayout(self)
 
@@ -4501,7 +4816,8 @@ class VitalsTab(QWidget):
         # Grip, Oxygene : pas dans linkvarbuf (composant du joueur, voir
         # MGS4Live.read_player_gauge), meme presentation que les autres jauges.
         names = list(VITALS)
-        names[names.index("Stamina") + 1:names.index("Stamina") + 1] = list(self.PLAYER_GAUGE_ROWS)
+        names[names.index("Stamina") + 1:names.index("Stamina") + 1] = ["Grip", "Oxygene"]
+        names.insert(names.index("Sante Metal Gear REX"), "Drebin 893")
         self.table = QTableWidget(len(names), 3)
         self.table.setHorizontalHeaderLabels([tr("table.field"), tr("table.live_value"), tr("table.lock")])
         self.table.verticalHeader().setVisible(False)
@@ -4598,7 +4914,7 @@ class VitalsTab(QWidget):
     # Lignes du tableau -> jauge MGS4Live.PLAYER_GAUGES (actives seulement
     # suspendu / sous l'eau). Maximum : 2000 (valeur de depart constatee,
     # et des champs voisins), ou la plus haute valeur vue si plus grande.
-    PLAYER_GAUGE_ROWS = {"Grip": "grip", "Oxygene": "oxygen"}
+    PLAYER_GAUGE_ROWS = {"Grip": "grip", "Oxygene": "oxygen", "Drebin 893": "drebin"}
     PLAYER_GAUGE_MAX = 2000
 
     def _on_lock_toggled(self, name: str, checked: bool):
@@ -4606,6 +4922,25 @@ class VitalsTab(QWidget):
             self.locked_percents[name] = self.sliders[name].value()
         else:
             self.locked_percents.pop(name, None)
+        if name in self.GAUGE_FREEZE_PATCHES:
+            self._apply_gauge_freezes()
+
+    # Jauge verrouillee : le jeu ne l'ecrit plus du tout (patch de code, voir
+    # MGS4Live.CODE_PATCHES), le trainer y ecrit la valeur verrouillee - plus
+    # de petites variations entre deux reecritures.
+    GAUGE_FREEZE_PATCHES = {
+        "Sante": "health_freeze", "Stamina": "stamina_freeze",
+        "Stress": "stress_freeze", "Batterie Solid Eye": "battery_freeze",
+        "Drebin 893": "drebin_freeze",
+    }
+
+    def _apply_gauge_freezes(self):
+        for name, patch in self.GAUGE_FREEZE_PATCHES.items():
+            if name in self.lock_checks:
+                try:
+                    self.live.set_code_patch(patch, self.lock_checks[name].isChecked())
+                except OSError:
+                    pass
 
     def _on_slider_changed(self, name: str, value: int):
         if not (self.live.connected and self.live.sane):
@@ -4649,6 +4984,12 @@ class VitalsTab(QWidget):
         renvoie l'etat reel des cases."""
         if not (self.live.connected and self.live.sane):
             return
+        if self._pending_difficulty is not None:
+            try:
+                if self.live.write_difficulty(self._pending_difficulty):
+                    self._pending_difficulty = None
+            except OSError:
+                pass
         self._on_speed_changed(self.speed_slider.value())
         self._on_pause_toggled(self.pause_check.isChecked())
         self._on_no_reload_toggled(self.no_reload_check.isChecked())
@@ -4658,6 +4999,7 @@ class VitalsTab(QWidget):
         self._on_railgun_charge_toggled(self.railgun_charge_check.isChecked())
         self._on_untouchable_toggled(self.untouchable_check.isChecked())
         self._on_invisible_toggled(self.invisible_check.isChecked())
+        self._apply_gauge_freezes()
         self._on_alert_force_changed(self.alert_force_combo.currentIndex())
         self._apply_instant_kill_mode()
 
@@ -4671,10 +5013,17 @@ class VitalsTab(QWidget):
         lethal = self.lethal_btn.isChecked()
         self.live.set_one_shot_kill(active and lethal)
         self.live.set_non_lethal(active and not lethal)
+        # Ce qui n'a pas d'endurance (Gekko, tanks, vehicules, helicopteres,
+        # mini Gekko, objets destructibles) est detruit dans les deux modes.
+        self.live.set_machine_kill(active)
         try:
-            self.live.set_code_patch("vehicles_one_shot_kill", active and lethal)
-            self.live.set_code_patch("destructibles_one_shot_kill", active and lethal)
-            self._boss_kill_patched = self.live.set_code_patch("boss_one_shot_kill", active and lethal)                 and active and lethal
+            self.live.set_code_patch("vehicles_one_shot_kill", active)
+            self.live.set_code_patch("destructibles_one_shot_kill", active)
+            non_lethal_ok = self.live.set_code_patch("boss_non_lethal_kill", active and not lethal)
+            lethal_ok = self.live.set_code_patch("boss_one_shot_kill", active and lethal)
+            # Coups des boss geres par le jeu lui-meme (patchs de code) : pas
+            # de degats par paliers ecrits par-dessus (_reassert_boss_staged_damage).
+            self._boss_kill_patched = active and (lethal_ok if lethal else non_lethal_ok)
         except OSError:
             self._boss_kill_patched = False
         # Repart d'une reference 100% fraiche a chaque (re)activation du
@@ -4712,7 +5061,8 @@ class VitalsTab(QWidget):
             if value < 0:
                 label.setText(tr(f"vitals.{gauge}_inactive"))
                 continue
-            maxi = self._gauge_max[name] = max(self._gauge_max[name], value)
+            real_max = self.live.player_gauge_max(gauge)
+            maxi = self._gauge_max[name] = real_max or max(self._gauge_max[name], value)
             if name in self.locked_percents:
                 target = round(self.locked_percents[name] / 100 * maxi)
                 if value < target:
@@ -4748,15 +5098,84 @@ class VitalsTab(QWidget):
             return
         self.live.set_railgun_force_charge(checked)
 
+    # Profils (2026-10-09) : toute la configuration de l'onglet sauf la
+    # pause - vitesse, difficulte, alerte, cases, Letal/Non letal, et pour
+    # chaque jauge son verrou et le niveau verrouille.
+    PROFILE_CHECKS = (
+        "no_alerts", "infinite_ammo", "no_reload", "infinite_silencer", "instant_kill",
+        "railgun_charge", "untouchable", "invisible",
+    )
+
+    def profile_settings(self) -> dict:
+        settings = {
+            "speed": self.speed_slider.value(),
+            "difficulty": self.difficulty_combo.currentData(),
+            "alert_force": self.alert_force_combo.currentIndex(),
+            "lethal": self.lethal_btn.isChecked(),
+            "gauges": {name: {"locked": self.lock_checks[name].isChecked(),
+                              "percent": round(self.locked_percents.get(name, self.sliders[name].value()))}
+                       for name in self.sliders},
+        }
+        for key in self.PROFILE_CHECKS:
+            settings[key] = getattr(self, f"{key}_check").isChecked()
+        return settings
+
+    def apply_profile(self, settings: dict):
+        """Remplit l'onglet avec le profil puis le renvoie au jeu (tout de
+        suite si accroche, sinon a l'accrochage via sync_to_game). Une cle
+        absente vaut desactive."""
+        widgets = [self.speed_slider, self.alert_force_combo, self.lethal_btn, self.non_lethal_btn]
+        widgets += [getattr(self, f"{key}_check") for key in self.PROFILE_CHECKS]
+        for widget in widgets:
+            widget.blockSignals(True)
+        self.speed_slider.setValue(int(settings.get("speed", 0)))
+        self.speed_value_label.setText(f"{round(self._speed_from_slider(self.speed_slider.value()) * 100)} %")
+        self.alert_force_combo.setCurrentIndex(max(0, min(int(settings.get("alert_force", 0)),
+                                                          self.alert_force_combo.count() - 1)))
+        (self.lethal_btn if settings.get("lethal", True) else self.non_lethal_btn).setChecked(True)
+        for key in self.PROFILE_CHECKS:
+            getattr(self, f"{key}_check").setChecked(bool(settings.get(key, False)))
+        for widget in widgets:
+            widget.blockSignals(False)
+
+        gauges = settings.get("gauges", {})
+        for name, slider in self.sliders.items():
+            gauge = gauges.get(name, {})
+            lock = self.lock_checks[name]
+            if gauge.get("locked"):
+                percent = max(0, min(int(gauge.get("percent", 100)), 100))
+                slider.blockSignals(True)
+                slider.setValue(percent)
+                slider.blockSignals(False)
+                lock.setChecked(True)
+                self.locked_percents[name] = percent  # reecrit au prochain rafraichissement
+            else:
+                lock.setChecked(False)
+
+        difficulty = settings.get("difficulty")
+        self._pending_difficulty = difficulty if difficulty in mgs4save.DIFFICULTY_NAMES else None
+        if self._pending_difficulty is not None:
+            self.difficulty_combo.setCurrentIndex(self.difficulty_combo.findData(self._pending_difficulty))
+        self.sync_to_game()
+
     def _on_difficulty_changed(self, index: int):
         try:
             self.live.write_difficulty(self.difficulty_combo.itemData(index))
         except OSError:
             pass
 
+    ALERT_FORCE_ALERT_INDEX = 2  # Automatique, Normal, Alerte, Evasion, Prudence
+
     def _on_alert_force_changed(self, index: int):
         if not (self.live.connected and self.live.sane):
             return
+        if index == self.ALERT_FORCE_ALERT_INDEX:
+            # Vraie alerte donnee par un soldat (musique, recherche, compte a
+            # rebours que le jeu reprend au retour en Automatique).
+            try:
+                self.live.trigger_real_alert()
+            except OSError:
+                pass
         if index == 0:
             self.live.set_alert_mode_override(None)
         else:
@@ -4781,6 +5200,11 @@ class VitalsTab(QWidget):
             self._reassert_player_gauges()
         except OSError:
             pass
+        if self.alert_force_combo.currentIndex() == self.ALERT_FORCE_ALERT_INDEX:
+            try:
+                self.live.hold_alert_timer()
+            except OSError:
+                pass
         # "Pas de rechargement" : patch de code (install_no_reload_hook),
         # plus besoin de reassertion ici depuis le 2026-09-29 - voir
         # _on_no_reload_toggled.
@@ -5426,6 +5850,219 @@ class TeleportTab(QWidget):
             self.current_pos_label.setText(f"X={x:.1f}  Y={y:.1f}  Z={z:.1f}")
 
 
+PROFILE_KEYS = [f"F{n}" for n in range(1, 12)]  # F12 = capture d'ecran Steam
+
+
+def _beep() -> None:
+    try:
+        import winsound
+        winsound.MessageBeep(winsound.MB_OK)
+    except (ImportError, RuntimeError):
+        pass
+
+
+def load_profiles() -> dict[str, dict]:
+    """{"F1": {"name": ..., "settings": {...}}, ...} - vide si absent/illisible."""
+    try:
+        with open(PROFILES_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    profiles = data.get("profiles", {}) if isinstance(data, dict) else {}
+    return {k: v for k, v in profiles.items()
+            if k in PROFILE_KEYS and isinstance(v, dict) and isinstance(v.get("settings"), dict)}
+
+
+def save_profiles(profiles: dict[str, dict]) -> bool:
+    ordered = {k: profiles[k] for k in PROFILE_KEYS if k in profiles}
+    try:
+        with open(PROFILES_FILE, "w", encoding="utf-8") as f:
+            json.dump({"format": 1, "profiles": ordered}, f, ensure_ascii=False, indent=2)
+    except OSError:
+        return False
+    return True
+
+
+def profile_label(key: str, profile: dict) -> str:
+    return f"{key} - {profile.get('name') or key}"
+
+
+class ProfileChooserDialog(QDialog):
+    """Choix du profil au lancement : un bouton par profil + Aucun."""
+
+    def __init__(self, profiles: dict[str, dict], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(tr("profile.choose_title"))
+        self.chosen: str | None = None
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(tr("profile.choose_body")))
+        for key in PROFILE_KEYS:
+            if key in profiles:
+                btn = QPushButton(profile_label(key, profiles[key]))
+                btn.clicked.connect(lambda _checked=False, k=key: self._choose(k))
+                layout.addWidget(btn)
+        none_btn = QPushButton(tr("profile.none"))
+        none_btn.clicked.connect(self.reject)
+        layout.addWidget(none_btn)
+
+    def _choose(self, key: str):
+        self.chosen = key
+        self.accept()
+
+
+class ProfileSaveDialog(QDialog):
+    """Enregistre la configuration actuelle sous une touche F1-F11 (ou
+    supprime le profil de cette touche)."""
+
+    def __init__(self, profiles: dict[str, dict], current: str | None, parent=None):
+        super().__init__(parent)
+        self.profiles = profiles
+        self.action: str | None = None  # "save" / "delete"
+        self.setWindowTitle(tr("profile.save_title"))
+        layout = QVBoxLayout(self)
+        form = QGridLayout()
+        form.addWidget(QLabel(tr("profile.key")), 0, 0)
+        self.key_combo = QComboBox()
+        for key in PROFILE_KEYS:
+            label = profile_label(key, profiles[key]) if key in profiles else f"{key} - {tr('profile.empty')}"
+            self.key_combo.addItem(label, key)
+        if current in PROFILE_KEYS:
+            self.key_combo.setCurrentIndex(PROFILE_KEYS.index(current))
+        else:
+            free = [k for k in PROFILE_KEYS if k not in profiles]
+            self.key_combo.setCurrentIndex(PROFILE_KEYS.index(free[0]) if free else 0)
+        form.addWidget(self.key_combo, 0, 1)
+        form.addWidget(QLabel(tr("profile.name")), 1, 0)
+        self.name_edit = QLineEdit()
+        form.addWidget(self.name_edit, 1, 1)
+        layout.addLayout(form)
+        hint = QLabel(tr("profile.save_hint"))
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        buttons = QHBoxLayout()
+        save_btn = QPushButton(tr("profile.save"))
+        save_btn.setDefault(True)
+        save_btn.clicked.connect(self._save)
+        buttons.addWidget(save_btn)
+        self.delete_btn = QPushButton(tr("profile.delete"))
+        self.delete_btn.clicked.connect(self._delete)
+        buttons.addWidget(self.delete_btn)
+        cancel_btn = QPushButton(tr("button.cancel"))
+        cancel_btn.clicked.connect(self.reject)
+        buttons.addWidget(cancel_btn)
+        layout.addLayout(buttons)
+        self.key_combo.currentIndexChanged.connect(self._on_key_changed)
+        self._on_key_changed()
+
+    @property
+    def key(self) -> str:
+        return self.key_combo.currentData()
+
+    @property
+    def name(self) -> str:
+        return self.name_edit.text().strip() or self.key
+
+    def _on_key_changed(self, _index: int = 0):
+        existing = self.profiles.get(self.key)
+        self.name_edit.setText(existing.get("name", "") if existing else "")
+        self.delete_btn.setEnabled(existing is not None)
+
+    def _confirm(self, text: str) -> bool:
+        box = QMessageBox(self)
+        box.setWindowTitle(tr("profile.save_title"))
+        box.setText(text)
+        yes_btn = box.addButton(tr("button.yes"), QMessageBox.YesRole)
+        box.addButton(tr("button.no"), QMessageBox.NoRole)
+        box.exec()
+        return box.clickedButton() == yes_btn
+
+    def _save(self):
+        existing = self.profiles.get(self.key)
+        if existing and not self._confirm(tr("profile.overwrite", profile=profile_label(self.key, existing))):
+            return
+        self.action = "save"
+        self.accept()
+
+    def _delete(self):
+        existing = self.profiles.get(self.key)
+        if existing and self._confirm(tr("profile.delete_confirm", profile=profile_label(self.key, existing))):
+            self.action = "delete"
+            self.accept()
+
+
+def _game_window_rect(pid: int | None) -> tuple[int, int, int, int] | None:
+    """Rectangle (pixels physiques) de la plus grande fenetre visible du jeu."""
+    if not pid:
+        return None
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    found: list[tuple[int, tuple[int, int, int, int]]] = []
+    enum_proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    def callback(hwnd, _lparam):
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        if owner.value == pid and user32.IsWindowVisible(hwnd):
+            rect = wintypes.RECT()
+            if user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                area = (rect.right - rect.left) * (rect.bottom - rect.top)
+                found.append((area, (rect.left, rect.top, rect.right, rect.bottom)))
+        return True
+
+    user32.EnumWindows(enum_proc(callback), 0)
+    return max(found)[1] if found else None
+
+
+class ProfileOverlay(QWidget):
+    """Bandeau affiche ~2 s par-dessus le jeu quand un raccourci F1-F11
+    (de)active un profil : fenetre transparente, toujours au premier plan,
+    sans focus ni clics (le jeu garde le clavier). Visible en fenetre / plein
+    ecran fenetre ; un plein ecran exclusif peut la masquer."""
+
+    DURATION_MS = 2200
+
+    def __init__(self):
+        super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
+                         | Qt.WindowTransparentForInput | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.label = QLabel()
+        self.label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.label)
+        self.hide_timer = QTimer(self)
+        self.hide_timer.setSingleShot(True)
+        self.hide_timer.timeout.connect(self.hide)
+
+    STYLE = ("QLabel {{ background: rgba(10, 14, 12, 215); color: #e8f5e9; border: 2px solid {color};"
+             " border-radius: 10px; padding: 10px 26px; font-size: 22px; font-weight: bold; }}")
+
+    def show_message(self, text: str, active: bool, pid: int | None):
+        self.label.setStyleSheet(self.STYLE.format(color="#6fbf73" if active else "#c97b63"))
+        self.label.setText(text)
+        self.adjustSize()
+        # Centre en haut de la fenetre du jeu (pixels physiques -> logiques),
+        # sinon de l'ecran principal.
+        screen = QGuiApplication.primaryScreen()
+        rect = _game_window_rect(pid)
+        if rect is not None:
+            left, top, right, _bottom = rect
+            ratio = screen.devicePixelRatio() or 1.0
+            x = round((left + right) / 2 / ratio - self.width() / 2)
+            y = round(top / ratio) + 60
+        else:
+            area = screen.geometry()
+            x = area.center().x() - self.width() // 2
+            y = area.top() + 60
+        self.move(x, y)
+        self.show()
+        # Au-dessus du jeu meme s'il est lui-meme "topmost", sans l'activer.
+        HWND_TOPMOST, SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE, SWP_SHOWWINDOW = -1, 0x1, 0x2, 0x10, 0x40
+        ctypes.WinDLL("user32").SetWindowPos(wintypes.HWND(int(self.winId())), wintypes.HWND(HWND_TOPMOST),
+                                              0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW)
+        self.hide_timer.start(self.DURATION_MS)
+
+
 class TrainerWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -5455,6 +6092,23 @@ class TrainerWindow(QMainWindow):
         help_btn = QPushButton(tr("window.help"))
         help_btn.clicked.connect(lambda: HelpDialog(self).exec())
         top_row.addWidget(help_btn)
+
+        # Profils (F1-F11, raccourcis globaux : voir register_profile_hotkeys).
+        self.profiles = load_profiles()
+        self.current_profile: str | None = None
+        # Configuration d'avant le premier profil active, remise quand on
+        # desactive (meme touche F une 2e fois) ; None si rien a remettre.
+        self._saved_state: dict | None = None
+        self._pending_accessories: dict[int, int] | None = None
+        self.overlay = ProfileOverlay()
+        self._hotkeys: list[int] = []
+        self.profile_label = QLabel()
+        self.profile_label.setToolTip(tr("profile.label_tooltip"))
+        top_row.addWidget(self.profile_label)
+        profile_btn = QPushButton(tr("profile.save_button"))
+        profile_btn.clicked.connect(self._open_profile_save)
+        top_row.addWidget(profile_btn)
+        self._update_profile_label()
 
         self.language_combo = QComboBox()
         self._language_codes = list(SUPPORTED_LANGUAGES)
@@ -5632,6 +6286,7 @@ class TrainerWindow(QMainWindow):
         if self.live.connected and self.live.sane and self.live.pid:
             if self.live.speed.ensure_injected(self.live.pid):
                 self.vitals_tab.sync_to_game()
+            self._apply_pending_accessories()
         self._apply_connection_state()
 
     def _apply_connection_state(self):
@@ -5721,7 +6376,142 @@ class TrainerWindow(QMainWindow):
         if not ok:
             self.drebin_ventes_label.setText("invalide (actuel < 0)")
 
+    # Raccourcis globaux F1-F11 (RegisterHotKey) : seulement les touches
+    # qui ont un profil, pour laisser les autres au jeu. WM_HOTKEY arrive
+    # dans nativeEvent meme quand le jeu a le focus.
+    WM_HOTKEY = 0x0312
+    MOD_NOREPEAT = 0x4000
+    VK_F1 = 0x70
+    HOTKEY_ID_BASE = 0xB000
+    # Touche Pause du clavier : coche/decoche la case Pause (toujours prise).
+    VK_PAUSE = 0x13
+    HOTKEY_ID_PAUSE = 0xB100
+
+    def register_profile_hotkeys(self):
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        hwnd = wintypes.HWND(int(self.winId()))
+        for hotkey_id in self._hotkeys:
+            user32.UnregisterHotKey(hwnd, hotkey_id)
+        self._hotkeys = []
+        for index, key in enumerate(PROFILE_KEYS):
+            if key in self.profiles:
+                hotkey_id = self.HOTKEY_ID_BASE + index
+                if user32.RegisterHotKey(hwnd, hotkey_id, self.MOD_NOREPEAT, self.VK_F1 + index):
+                    self._hotkeys.append(hotkey_id)
+        if user32.RegisterHotKey(hwnd, self.HOTKEY_ID_PAUSE, self.MOD_NOREPEAT, self.VK_PAUSE):
+            self._hotkeys.append(self.HOTKEY_ID_PAUSE)
+
+    def nativeEvent(self, event_type, message):
+        if event_type == b"windows_generic_MSG" or event_type == "windows_generic_MSG":
+            msg = wintypes.MSG.from_address(int(message))
+            if msg.message == self.WM_HOTKEY:
+                if msg.wParam == self.HOTKEY_ID_PAUSE:
+                    pause = self.vitals_tab.pause_check
+                    if pause.isEnabled():
+                        pause.setChecked(not pause.isChecked())
+                    return True, 0
+                index = msg.wParam - self.HOTKEY_ID_BASE
+                if 0 <= index < len(PROFILE_KEYS):
+                    self.apply_profile(PROFILE_KEYS[index], from_hotkey=True)
+                    return True, 0
+        return super().nativeEvent(event_type, message)
+
+    def _capture_state(self) -> dict:
+        """Configuration actuelle au format d'un profil (accessoires si accroche)."""
+        settings = self.vitals_tab.profile_settings()
+        if self.live.connected and self.live.sane:
+            try:
+                settings["weapon_accessories"] = {
+                    f"{weapon_id:#04x}": mask for weapon_id, mask in self.live.read_all_weapon_accessories().items()}
+            except OSError:
+                pass
+        return settings
+
+    def _apply_settings(self, settings: dict):
+        self.vitals_tab.apply_profile(settings)
+        # Accessoires des armes : tout de suite si accroche, sinon a l'accrochage.
+        self._pending_accessories = {int(k, 16): int(v) for k, v in
+                                     settings.get("weapon_accessories", {}).items()} or None
+        self._apply_pending_accessories()
+
+    def apply_profile(self, key: str, from_hotkey: bool = False):
+        """Active le profil ; la touche du profil deja actif le desactive
+        (retour a la configuration d'avant le premier profil active)."""
+        profile = self.profiles.get(key)
+        if profile is None:
+            return
+        if key == self.current_profile:
+            if self._saved_state is not None:
+                self._apply_settings(self._saved_state)
+            self._saved_state = None
+            self.current_profile = None
+            message, active = tr("overlay.off", fkey=key, name=profile.get("name") or key), False
+        else:
+            if self.current_profile is None:
+                self._saved_state = self._capture_state()
+            self._apply_settings(profile["settings"])
+            self.current_profile = key
+            message, active = tr("overlay.on", fkey=key, name=profile.get("name") or key), True
+        self._update_profile_label()
+        if from_hotkey:
+            if not self.live.play_alert_sound():
+                _beep()  # jeu pas accroche ou appel generique absent
+            self.overlay.show_message(message, active, self.live.pid)
+
+    def _apply_pending_accessories(self):
+        if self._pending_accessories is None:
+            return
+        try:
+            if self.live.apply_weapon_accessories(self._pending_accessories):
+                self._pending_accessories = None
+        except OSError:
+            pass
+
+    def choose_startup_profile(self):
+        if not self.profiles:
+            return
+        dialog = ProfileChooserDialog(self.profiles, self)
+        if dialog.exec() and dialog.chosen:
+            self.apply_profile(dialog.chosen)
+
+    def _update_profile_label(self):
+        if self.current_profile in self.profiles:
+            text = profile_label(self.current_profile, self.profiles[self.current_profile])
+        else:
+            text = tr("profile.none")
+        self.profile_label.setText(tr("profile.current", profile=text))
+
+    def _open_profile_save(self):
+        dialog = ProfileSaveDialog(self.profiles, self.current_profile, self)
+        if not dialog.exec():
+            return
+        key = dialog.key
+        if dialog.action == "delete":
+            self.profiles.pop(key, None)
+            if self.current_profile == key:
+                self.current_profile = None
+                self._saved_state = None
+        elif dialog.action == "save":
+            settings = self.vitals_tab.profile_settings()
+            if self.live.connected and self.live.sane:
+                try:
+                    settings["weapon_accessories"] = {
+                        f"{weapon_id:#04x}": mask for weapon_id, mask in self.live.read_all_weapon_accessories().items()}
+                except OSError:
+                    pass
+            elif key in self.profiles and "weapon_accessories" in self.profiles[key]["settings"]:
+                settings["weapon_accessories"] = self.profiles[key]["settings"]["weapon_accessories"]
+            self.profiles[key] = {"name": dialog.name, "settings": settings}
+        if not save_profiles(self.profiles):
+            QMessageBox.warning(self, tr("profile.save_title"), tr("profile.write_error", path=PROFILES_FILE))
+        self.register_profile_hotkeys()
+        self._update_profile_label()
+
     def closeEvent(self, event):
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        for hotkey_id in self._hotkeys:
+            user32.UnregisterHotKey(wintypes.HWND(int(self.winId())), hotkey_id)
+        self.overlay.close()
         self.live.detach()
         super().closeEvent(event)
 
@@ -5732,6 +6522,8 @@ def main():
     window = TrainerWindow()
     window.setWindowIcon(QIcon(TRAINER_ICON))
     window.show()
+    window.register_profile_hotkeys()
+    window.choose_startup_profile()
     sys.exit(app.exec())
 
 

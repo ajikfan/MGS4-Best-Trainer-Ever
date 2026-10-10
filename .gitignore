@@ -5,3 +5,4 @@ dist/
 *.zip
 teleport_points.json
 settings.json
+profiles.json

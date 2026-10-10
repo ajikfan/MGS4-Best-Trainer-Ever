@@ -215,8 +215,15 @@ typedef struct {
     UINT64 rpc_fn;
     UINT64 rpc_args[4];
     UINT64 rpc_result;
+    /* [392] Un coup, un mort sur ce qui n'a pas d'endurance (Gekko, tanks :
+     * install_gecko_one_shot_kill_hook, install_tank_whitelist_hook,
+     * install_tank_flags_hook), separe de one_shot_kill (humains) pour
+     * rester actif en mode Non letal (2026-10-10). */
+    UINT8 machine_kill;
 } SharedState;
 #pragma pack(pop)
+_Static_assert(offsetof(SharedState, rpc_result) == 384 && offsetof(SharedState, machine_kill) == 392,
+               "offsets lus par live_trainer.py");
 
 #define HOOK_QPC 0x1
 #define HOOK_TIMEGETTIME 0x2
@@ -1348,7 +1355,7 @@ static BOOL install_gecko_one_shot_kill_hook(void) {
         return FALSE;
     }
 
-    UINT64 oneShotAddr = (UINT64)&g_shared->one_shot_kill;
+    UINT64 oneShotAddr = (UINT64)&g_shared->machine_kill; /* Gekko/tanks, voir machine_kill */
     BYTE code[33];
     SIZE_T p = 0;
 
@@ -1510,7 +1517,7 @@ static BOOL install_tank_whitelist_hook(void) {
         return FALSE;
     }
 
-    UINT64 oneShotAddr = (UINT64)&g_shared->one_shot_kill;
+    UINT64 oneShotAddr = (UINT64)&g_shared->machine_kill; /* Gekko/tanks, voir machine_kill */
     UINT64 forceChargeAddr = (UINT64)&g_shared->railgun_force_charge;
     BYTE code[128];
     SIZE_T p = 0;
@@ -1934,7 +1941,7 @@ static BOOL install_tank_flags_hook(void) {
         return FALSE;
     }
 
-    UINT64 oneShotAddr = (UINT64)&g_shared->one_shot_kill;
+    UINT64 oneShotAddr = (UINT64)&g_shared->machine_kill; /* Gekko/tanks, voir machine_kill */
     BYTE code[64];
     SIZE_T p = 0;
 
