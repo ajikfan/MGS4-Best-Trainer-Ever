@@ -2437,6 +2437,15 @@ class MGS4Live:
             # Meme fonction, autre declencheur ([+0x838] bit 1, contact ou
             # proximite, Snake immobile au milieu d'eux) : "je" 11FC72E -> "jmp".
             (0x11FC72E, bytes.fromhex("7424838b10130000"), bytes.fromhex("eb24")),
+            # Autres declencheurs de la meme fonction (le "!" quand Snake reste
+            # immobile au milieu d'eux) : proximite (11FC2AE, 11FC2CE), contact
+            # laser avec d'autres cibles du joueur (11FC7E3, 11FC807), drapeau de
+            # contact 0x2000 (11FC857) -> tous sautes.
+            (0x11FC2AE, bytes.fromhex("7212838b10130000"), bytes.fromhex("eb12")),
+            (0x11FC2CE, bytes.fromhex("7712838b10130000"), bytes.fromhex("eb12")),
+            (0x11FC7E3, bytes.fromhex("7512838b10130000"), bytes.fromhex("eb12")),
+            (0x11FC807, bytes.fromhex("7512838b10130000"), bytes.fromhex("eb12")),
+            (0x11FC857, bytes.fromhex("7307838b10130000"), bytes.fromhex("eb07")),
         ] + [(rva, bytes.fromhex(original), bytes.fromhex("b801000000"))
              for rva, original in _STEALTH_CHECK_CALLS.items()],
     }
