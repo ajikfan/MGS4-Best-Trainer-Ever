@@ -2394,6 +2394,9 @@ class MGS4Live:
             (0x102DAF3, bytes.fromhex("755e488d4c2430"), bytes.fromhex("9090")),
             (0x13532A0, bytes.fromhex("f7c10000050075"), bytes.fromhex("b801000000c3")),
             (0x13528F5, bytes.fromhex("730b660f6e83"), bytes.fromhex("9090")),
+            # Helico : coups au bit 15 (0x8000, flechettes du Mk.2) ignores
+            # (13528C1 "bt edi,0xf ; jb") -> acceptes.
+            (0x13528C5, bytes.fromhex("727d8bc725004001"), bytes.fromhex("9090")),
         ],
         "untouchable": [(0x96C0B0, bytes.fromhex("488bc455535657488d68a1"), bytes.fromhex("c3"))],
         "invisible": [
