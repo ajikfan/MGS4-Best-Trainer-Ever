@@ -1934,26 +1934,28 @@ class MGS4Live:
         vtable = struct.unpack("<Q", self.proc.read_bytes(component, 8))[0]
         return component if vtable == self.base + self.GRIP_COMPONENT_VTABLE_RVA else None
 
-    # Drebin 893 (2026-10-10, valide en jeu) : vehicule du joueur, case
-    # dediee mgs4+23F81090 -> composant (vtable mgs4+18EB690, rappel de
-    # collision 102F250) ; vie int32 a composant+0x128, max +0x12C (6500).
-    # La jauge du HUD n'en est qu'une copie (10302C5 -> 14D4020).
+    # Vehicule du joueur (2026-10-10, valide en jeu) : case dediee
+    # mgs4+23F81090 -> composant ; vie int32 a composant+0x128, max +0x12C.
+    # Drebin 893 (acte 2, vtable mgs4+18EB690, 6500, rappel de collision
+    # 102F250) et van de l'acte 3 (vtable mgs4+18EB748, 6000). La jauge du
+    # HUD n'en est qu'une copie (10302C5 -> 14D4020).
     VEHICLE_PTR_RVA = 0x23F81090
-    VEHICLE_COMPONENT_VTABLE_RVA = 0x18EB690
+    VEHICLE_COMPONENT_VTABLE_RVAS = {"drebin": 0x18EB690, "van": 0x18EB748}
     VEHICLE_HP_OFFSET = 0x128
 
-    def _vehicle_component(self) -> int | None:
+    def _vehicle_component(self, gauge: str) -> int | None:
+        """Composant du vehicule `gauge` ("drebin", "van") s'il est actif."""
         component = struct.unpack("<Q", self.proc.read_bytes(self.base + self.VEHICLE_PTR_RVA, 8))[0]
         if not component:
             return None
         vtable = struct.unpack("<Q", self.proc.read_bytes(component, 8))[0]
-        return component if vtable == self.base + self.VEHICLE_COMPONENT_VTABLE_RVA else None
+        return component if vtable == self.base + self.VEHICLE_COMPONENT_VTABLE_RVAS[gauge] else None
 
     def player_gauge_max(self, gauge: str) -> int | None:
         """Maximum reel d'une jauge quand le jeu le stocke (Drebin 893)."""
-        if gauge != "drebin" or not (self.connected and self.sane):
+        if gauge not in self.VEHICLE_COMPONENT_VTABLE_RVAS or not (self.connected and self.sane):
             return None
-        component = self._vehicle_component()
+        component = self._vehicle_component(gauge)
         if component is None:
             return None
         return struct.unpack("<i", self.proc.read_bytes(component + self.VEHICLE_HP_OFFSET + 4, 4))[0] or None
@@ -1963,8 +1965,8 @@ class MGS4Live:
         sous l'eau, dans le Drebin 893) ; -1 sinon, None si introuvable."""
         if not (self.connected and self.sane):
             return None
-        if gauge == "drebin":
-            component = self._vehicle_component()
+        if gauge in self.VEHICLE_COMPONENT_VTABLE_RVAS:
+            component = self._vehicle_component(gauge)
             if component is None:
                 return -1
             return struct.unpack("<i", self.proc.read_bytes(component + self.VEHICLE_HP_OFFSET, 4))[0]
@@ -1979,8 +1981,8 @@ class MGS4Live:
     def write_player_gauge(self, gauge: str, value: int) -> bool:
         if not (self.connected and self.sane):
             return False
-        if gauge == "drebin":
-            component = self._vehicle_component()
+        if gauge in self.VEHICLE_COMPONENT_VTABLE_RVAS:
+            component = self._vehicle_component(gauge)
             if component is None:
                 return False
             self.proc.write_bytes(component + self.VEHICLE_HP_OFFSET, struct.pack("<i", value))
@@ -4821,7 +4823,8 @@ class VitalsTab(QWidget):
         # MGS4Live.read_player_gauge), meme presentation que les autres jauges.
         names = list(VITALS)
         names[names.index("Stamina") + 1:names.index("Stamina") + 1] = ["Grip", "Oxygene"]
-        names.insert(names.index("Sante Metal Gear REX"), "Drebin 893")
+        rex = names.index("Sante Metal Gear REX")
+        names[rex:rex] = ["Drebin 893", "Van"]
         self.table = QTableWidget(len(names), 3)
         self.table.setHorizontalHeaderLabels([tr("table.field"), tr("table.live_value"), tr("table.lock")])
         self.table.verticalHeader().setVisible(False)
@@ -4918,7 +4921,7 @@ class VitalsTab(QWidget):
     # Lignes du tableau -> jauge MGS4Live.PLAYER_GAUGES (actives seulement
     # suspendu / sous l'eau). Maximum : 2000 (valeur de depart constatee,
     # et des champs voisins), ou la plus haute valeur vue si plus grande.
-    PLAYER_GAUGE_ROWS = {"Grip": "grip", "Oxygene": "oxygen", "Drebin 893": "drebin"}
+    PLAYER_GAUGE_ROWS = {"Grip": "grip", "Oxygene": "oxygen", "Drebin 893": "drebin", "Van": "van"}
     PLAYER_GAUGE_MAX = 2000
 
     def _on_lock_toggled(self, name: str, checked: bool):
@@ -4935,16 +4938,21 @@ class VitalsTab(QWidget):
     GAUGE_FREEZE_PATCHES = {
         "Sante": "health_freeze", "Stamina": "stamina_freeze",
         "Stress": "stress_freeze", "Batterie Solid Eye": "battery_freeze",
-        "Drebin 893": "drebin_freeze",
+        "Drebin 893": "drebin_freeze", "Van": "drebin_freeze",
     }
 
     def _apply_gauge_freezes(self):
+        # Un patch peut servir a plusieurs lignes (Drebin 893 et Van) : pose
+        # si au moins une de ses lignes est verrouillee.
+        wanted: dict[str, bool] = {}
         for name, patch in self.GAUGE_FREEZE_PATCHES.items():
             if name in self.lock_checks:
-                try:
-                    self.live.set_code_patch(patch, self.lock_checks[name].isChecked())
-                except OSError:
-                    pass
+                wanted[patch] = wanted.get(patch, False) or self.lock_checks[name].isChecked()
+        for patch, enabled in wanted.items():
+            try:
+                self.live.set_code_patch(patch, enabled)
+            except OSError:
+                pass
 
     def _on_slider_changed(self, name: str, value: int):
         if not (self.live.connected and self.live.sane):
