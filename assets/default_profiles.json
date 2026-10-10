@@ -1,0 +1,113 @@
+{
+  "format": 1,
+  "profiles": {
+    "F1": {
+      "name": "Normal",
+      "settings": {
+        "speed": 0,
+        "alert_force": 0,
+        "lethal": true,
+        "gauges": {
+          "Sante": {
+            "locked": false,
+            "percent": 100
+          },
+          "Stamina": {
+            "locked": false,
+            "percent": 100
+          },
+          "Grip": {
+            "locked": false,
+            "percent": 100
+          },
+          "Oxygene": {
+            "locked": false,
+            "percent": 100
+          },
+          "Stress": {
+            "locked": false,
+            "percent": 100
+          },
+          "Batterie Solid Eye": {
+            "locked": false,
+            "percent": 100
+          },
+          "Drebin 893": {
+            "locked": false,
+            "percent": 100
+          },
+          "Van": {
+            "locked": false,
+            "percent": 100
+          },
+          "Sante Metal Gear REX": {
+            "locked": false,
+            "percent": 100
+          }
+        },
+        "no_alerts": false,
+        "infinite_ammo": false,
+        "no_reload": false,
+        "infinite_silencer": false,
+        "instant_kill": false,
+        "railgun_charge": false,
+        "untouchable": false,
+        "invisible": false
+      }
+    },
+    "F2": {
+      "name": "God mode",
+      "settings": {
+        "speed": 0,
+        "alert_force": 0,
+        "lethal": false,
+        "gauges": {
+          "Sante": {
+            "locked": true,
+            "percent": 100
+          },
+          "Stamina": {
+            "locked": true,
+            "percent": 100
+          },
+          "Grip": {
+            "locked": true,
+            "percent": 100
+          },
+          "Oxygene": {
+            "locked": true,
+            "percent": 100
+          },
+          "Stress": {
+            "locked": true,
+            "percent": 0
+          },
+          "Batterie Solid Eye": {
+            "locked": true,
+            "percent": 100
+          },
+          "Drebin 893": {
+            "locked": true,
+            "percent": 100
+          },
+          "Van": {
+            "locked": true,
+            "percent": 100
+          },
+          "Sante Metal Gear REX": {
+            "locked": true,
+            "percent": 100
+          }
+        },
+        "no_alerts": true,
+        "infinite_ammo": true,
+        "no_reload": true,
+        "infinite_silencer": true,
+        "instant_kill": true,
+        "railgun_charge": true,
+        "untouchable": true,
+        "invisible": true
+      }
+    }
+  }
+}

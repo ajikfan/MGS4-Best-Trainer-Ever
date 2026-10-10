@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.3
+# MGS4 Trainer — V2.4
 
 Trainer de recherche/édition mémoire live pour Metal Gear Solid 4
 (portage PC Steam) : lit et **écrit** en direct la mémoire du process
@@ -9,8 +9,9 @@ de recherche pour identifier les ID encore inconnus. Contrôle aussi la
 vitesse du jeu (ralenti/accéléré) et la pause, et permet de changer
 d'arme, de tenue, de visage, de gilet ou de motif OctoCamo en direct,
 sans passer par les menus du jeu, de rendre Snake intouchable ou
-invisible, et de faire tomber n'importe quel ennemi ou boss en un coup
-(voir plus bas).
+invisible, de faire tomber n'importe quel ennemi ou boss en un coup, et
+de rappeler toute une configuration d'une touche (profils F1 à F11, voir
+plus bas).
 
 Projet frère de [MGS4-SaveStats](https://github.com/ajikfan/MGS4-SaveStats)
 (lecture seule des fichiers de sauvegarde) — deux outils distincts et
@@ -45,6 +46,185 @@ toujours à 0 sur toute sauvegarde connue) s'exécute avant d'autoriser la
 moindre écriture — si le jeu ne répond pas comme attendu, le trainer
 refuse d'écrire plutôt que de risquer de corrompre la mémoire du jeu.
 
+## Nouveautés de la V2.4
+
+### Profils F1 à F11 : toute une configuration sur une touche
+
+Un profil, c'est une photo de l'onglet "État de jeu" rangée sous une
+touche du clavier, de F1 à F11.
+
+**Créer un profil**
+
+1. Règle l'onglet "État de jeu" comme tu le veux (cases cochées, Létal
+   ou Non létal, jauges verrouillées et leur niveau, vitesse, difficulté,
+   alerte forcée…) et monte les accessoires voulus sur tes armes.
+2. Clique sur **Enregistrer sous Fx** dans la barre du haut.
+3. Choisis la touche (F1 à F11), donne un nom ("godmod", "vanilla"…),
+   puis **Enregistrer**. Une touche déjà prise peut être remplacée (le
+   trainer demande confirmation) ou libérée avec **Supprimer**.
+
+Ce qui est enregistré : la vitesse, la difficulté, l'alerte forcée,
+toutes les cases (Pas d'alerte, Munitions infinies, Pas de rechargement,
+Silencieux illimités, Un coup un mort, Rail Gun / Solar Gun toujours
+chargés, Intouchable, Invisible), le choix Létal / Non létal, le verrou
+et le niveau de chaque jauge, et les accessoires montés sur chaque arme.
+Ce qui ne l'est pas : la pause, les objets et les armes elles-mêmes (un
+profil ne te donne pas d'arme ; à l'application, seuls les accessoires
+que ta partie possède sont montés).
+
+**Utiliser un profil**
+
+- **Au lancement** du trainer, une fenêtre propose de choisir le profil
+  de la session (ou aucun).
+- **En jeu**, appuie sur la touche du profil : il s'applique tout de
+  suite, même si c'est le jeu qui est au premier plan. Seules les
+  touches qui ont un profil sont prises au jeu ; les autres touches F
+  restent au jeu, et F12 reste libre pour la capture d'écran Steam.
+- **La même touche une deuxième fois** désactive le profil et remet la
+  configuration que tu avais avant d'en activer un. Appuyer sur une
+  autre touche passe directement à l'autre profil (et sa touche le
+  désactive à son tour, retour à la configuration de départ).
+- **Confirmation** : à chaque touche, le jeu joue lui-même son son "GO"
+  (celui du tir chargé du Solar Gun, au volume du jeu), et un bandeau
+  s'affiche 2 secondes en haut de la fenêtre du jeu : "F2 · godmod —
+  activé" (bord vert) ou "— désactivé" (bord rouge). Le bandeau ne prend
+  ni le clavier ni la souris. Il s'affiche en fenêtre et en plein écran
+  fenêtré ; un plein écran exclusif peut le masquer (non testé).
+- La barre du haut indique le profil appliqué en dernier.
+
+**Deux profils sont fournis** tant que tu n'as pas enregistré les tiens :
+**F1 « Normal »** (tout désactivé, aucune jauge verrouillée : le jeu
+d'origine) et **F2 « God mode »** (toutes les cases cochées, Non létal,
+toutes les jauges verrouillées pleines, stress à 0). Ils ne touchent ni à
+la difficulté ni aux accessoires. Tu peux les remplacer ou les supprimer
+comme les autres.
+
+Les profils sont dans `profiles.json`, à côté de l'exe (ou du script),
+créé au premier enregistrement.
+
+### Raccourcis clavier, même jeu au premier plan
+
+- **Pause** (la touche du clavier) : coche ou décoche la case Pause (gel
+  complet du jeu).
+- **Pavé numérique +** / **−** : vitesse du jeu +10 % / −10 % (de 10 % à
+  300 % ; touche maintenue = répétée). **Pavé numérique 0** : retour à
+  100 %. Le même bandeau affiche "Vitesse : x %" par-dessus le jeu.
+
+### Armes : personnaliser les accessoires
+
+- Nouvelle colonne **Accessoires** dans l'onglet Armes, avec un bouton
+  **Personnaliser** sur chaque arme qui a des emplacements. Il ouvre une
+  fenêtre avec une liste par emplacement, comme le menu du jeu :
+  Silencieux, Lumière, Laser, Visée, Sous le canon (avec "Aucun"). Le
+  choix s'applique tout de suite, même sur l'arme que Snake a en main,
+  et le menu de personnalisation du jeu se met à jour s'il est ouvert.
+  Les accessoires que ta partie ne possède pas sont grisés.
+- Dans la section **Accessoires**, la colonne **Munitions / Quantité**
+  affiche et modifie le nombre de silencieux que tu possèdes et les
+  munitions des lance-grenades montés (Masterkey, XM320, GP-30).
+- Nouvelle case **Silencieux illimités** (onglet "État de jeu") : le
+  silencieux monté ne s'use plus à chaque tir, quelle que soit l'arme.
+
+### Alerte forcée : une vraie alerte
+
+Forcer **Alerte** fait maintenant donner l'alerte par un vrai soldat de
+la zone : musique, renforts, recherche, comme si Snake avait été repéré,
+et le compte à rebours reste à 99.99 tant que l'alerte est forcée (avant,
+il affichait 0.00). De retour en **Automatique**, le jeu reprend la main
+et enchaîne normalement Évasion, Prudence puis Normal. Dans une zone sans
+aucun soldat, le jeu ne gère pas d'alerte : la forcer n'a aucun effet.
+
+### Jauges : verrouillées pour de bon, et deux nouvelles
+
+- **Plus aucune variation** : avant, une jauge verrouillée était
+  réécrite par le trainer à chaque rafraîchissement, et le jeu avait le
+  temps de la faire bouger entre deux (stress qui passe de 0 à 0,1, vie
+  qui baisse et remonte quand Snake est touché). Maintenant, verrouiller
+  la vie, l'endurance, le stress, la batterie du Solid Eye, le Drebin
+  893, le Van ou Metal Gear REX empêche le jeu lui-même d'écrire dans la
+  jauge : elle ne bouge plus du tout.
+- **Drebin 893** : la vie du véhicule de l'acte 2. **Van** : la vie du
+  van à protéger à l'acte 3. Deux nouvelles lignes, verrouillables, qui
+  affichent "absent" en dehors de leur séquence.
+- **Grip et oxygène** : un verrou ne peut plus rester bloqué à 0 % (ce
+  qui arrivait avec un profil enregistré alors que la jauge n'était pas
+  active, et laissait la barre descendre). Verrouiller une de ces jauges
+  quand elle n'est pas active la verrouille à 100 %.
+
+### Un coup, un mort : quelle que soit l'arme, dans les deux modes
+
+La règle est maintenant la même partout, comme pour les soldats :
+
+- **Létal** : tout coup tue, avec n'importe quelle arme, y compris le
+  pistolet tranquillisant Mk.2 ;
+- **Non létal** : tout coup met K.O. en vidant l'endurance, sans jamais
+  toucher à la vie, y compris avec une arme létale.
+
+Ce qui n'a pas d'endurance est **détruit dans les deux modes** : Gekko,
+tanks, hélicoptères, véhicules de Millennium Park, Metal Gear RAY et
+objets destructibles. Le Mk.2 les touche aussi maintenant (hélicoptères,
+Gekko, portails confirmés ; tanks préparés mais pas testés faute de
+tank).
+
+**Mini Gekko** : détruits net au premier coup en Létal (Mk.2 compris,
+sans passer par la paralysie) ; **paralysés** en Non létal, avec
+n'importe quelle arme (avant, une balle de Mk.23 les détruisait).
+
+**Portails et objets destructibles** : ils tombent en un coup, mais
+seulement quand le jeu l'autorise. Certains portails sont protégés par
+le scénario tant que la séquence prévue n'est pas arrivée ; les forcer
+plus tôt bloquait la progression (déclencheur de script jamais atteint).
+Le trainer respecte donc ce verrou : le portail résiste tant que le jeu
+le protège, puis cède au premier tir dès que le moment est venu.
+
+**Boss**, toujours via la mise à mort prévue par le jeu (transitions de
+phase et fins de combat gérées par le jeu) :
+
+| Boss | Létal | Non létal |
+|---|---|---|
+| Laughing Octopus | un coup par phase | endurance vidée, un coup par phase (confirmé) |
+| Raging Raven | un coup | endurance vidée en un coup, formes bête et Beauty (confirmé) |
+| Crying Wolf | un coup, toute arme (confirmé) | endurance vidée en un coup, formes bête et Beauty (confirmé) |
+| Screaming Mantis | un coup avec la poupée (confirmé) | endurance vidée en un coup avec la poupée (confirmé) |
+| Les quatre Beauty | un coup (Screaming Beauty confirmée) | endurance vidée en un coup (confirmé) |
+| Metal Gear RAY | détruit en un coup (confirmé) | détruit en un coup (confirmé) |
+| Vamp | à terre en un tir, la seringue reste nécessaire | non couvert |
+| Liquid Ocelot | voir ci-dessous | voir ci-dessous |
+
+Pour Octopus, Raven et les Beauty, le Létal "toute arme" (Mk.2 compris)
+est préparé mais n'a pas été revu en jeu.
+
+**Liquid Ocelot** (combat final, aux poings, donc pareil dans les deux
+modes) : au premier coup, sa vie **et** son endurance tombent au
+plancher de la phase ; le coup suivant lance la phase suivante. Les 7
+derniers coups scénarisés ne sont pas couverts.
+
+### Metal Gear REX
+
+- **Vie** : verrouillable (ligne "Santé Metal Gear REX"), elle ne baisse
+  plus du tout.
+- **Mitrailleuse** : avec **Pas de rechargement**, elle ne surchauffe
+  plus. La chaleur monte normalement à chaque tir, et l'arme se bloque un
+  moment à 100 % ; le trainer empêche la chaleur de monter.
+- **Missiles** : avec **Munitions infinies**, toujours 15/15. REX a 15
+  tubes, chacun avec son propre temps de rechargement après un tir (c'est
+  pour ça que le compteur remonte tout seul) ; les tubes restent toujours
+  prêts.
+- **Laser** : avec **Rail Gun / Solar Gun toujours chargés**, il passe
+  au niveau 5 (le maximum, avec son son) dès que tu commences à charger,
+  au lieu de passer par les niveaux 1 à 5. Le laser a aussi une réserve
+  d'énergie (le "x/100" du HUD) que chaque tir consomme : elle ne baisse
+  plus, donc chaque tir part au niveau 5. Le rayon garde sa durée
+  normale.
+- La téléportation ne déplace pas REX (seulement la caméra).
+
+### Invisible : les mini Gekko aussi
+
+Les mini Gekko ne détectent plus Snake : leurs lasers ne le reconnaissent
+plus (pas de laser rouge, pas d'alerte), et ni la proximité ni le contact
+ne les font réagir (plus de "!"). Il reste un passage en Prudence si
+Snake reste immobile au milieu d'eux ; "Pas d'alerte" le bloque.
+
 ## Guide des onglets
 
 ### Barre du haut (toujours visible)
@@ -58,6 +238,9 @@ refuse d'écrire plutôt que de risquer de corrompre la mémoire du jeu.
 - **Rafraîchir maintenant** / **(Re)connecter** : relit tout tout de
   suite / se raccroche au jeu (après un redémarrage du jeu par exemple).
 - **Aide** : résumé, version compatible et historique des versions.
+- **Profil** : le profil appliqué en dernier, et **Enregistrer sous Fx**
+  pour ranger la configuration actuelle sous une touche (voir "Profils
+  F1 à F11" plus bas).
 - **Langue** : français ou anglais (le trainer redémarre).
 - **Points Drebin** : solde actuel et total des ventes, avec un champ
   et un bouton OK pour chacun.
@@ -77,25 +260,35 @@ L'onglet des réglages en direct, en plusieurs groupes :
 - **Vitesse du jeu** : curseur de 10 % à 300 % (100 % au centre), case
   **Pause** (gel complet du jeu), liste **Difficulté** (Liquid à The
   Boss ; change la difficulté enregistrée à la prochaine sauvegarde).
+  Au clavier, même jeu au premier plan : touche **Pause** pour la pause,
+  pavé numérique **+** / **−** pour ±10 % et **0** pour revenir à 100 %
+  (bandeau "Vitesse : x %" par-dessus le jeu).
 - **Alerte** :
   - **État réel** : l'état d'alerte en cours (Normal, Alerte, Évasion,
     Prudence) ;
   - **Forcer** : impose un état d'alerte au choix, ou "Automatique" pour
-    laisser le jeu décider ;
+    laisser le jeu décider. En **Alerte**, un soldat de la zone donne
+    réellement l'alerte (musique, recherche, compte à rebours maintenu) ;
+    de retour en Automatique, le jeu enchaîne Évasion, Prudence puis
+    Normal ;
   - **Pas d'alerte** : l'alerte générale ne se déclenche jamais, quelle
     qu'en soit la cause (vue, bruit, corps trouvé, lasers des mini
     Gekko...). Les ennemis peuvent encore réagir individuellement.
 - **Armes et combat** :
   - **Munitions infinies** : munitions infinies d'origine du jeu sur
     toutes les armes (symbole infini au HUD) ;
-  - **Pas de rechargement** : le chargeur ne se vide plus ;
-  - **Un coup, un mort**, avec le choix **Létal / Non létal** : en
-    Létal, tout ennemi touché tombe en un coup (soldats, Gekko, mini
-    Gekko, tanks, hélicoptères, véhicules, objets destructibles, et
-    tous les boss, voir plus bas) ; en Non létal, les dégâts normaux ne
-    sont plus appliqués ;
+  - **Pas de rechargement** : le chargeur ne se vide plus (et la
+    mitrailleuse de Metal Gear REX ne surchauffe plus) ;
+  - **Silencieux illimités** : le silencieux monté ne s'use plus ;
+  - **Un coup, un mort**, avec le choix **Létal / Non létal**, quelle
+    que soit l'arme : en Létal, tout ennemi touché tombe en un coup ; en
+    Non létal, il est mis K.O. (endurance vidée, vie intacte). Les
+    machines (Gekko, tanks, hélicoptères, véhicules, Metal Gear RAY,
+    objets destructibles) sont détruites dans les deux modes, les mini
+    Gekko détruits en Létal et paralysés en Non létal. Boss : voir plus
+    bas ;
   - **Rail Gun / Solar Gun toujours chargés** : tir chargé à fond dès
-    l'appui sur la gâchette.
+    l'appui sur la gâchette (et laser de Metal Gear REX au niveau 5).
 - **Snake** :
   - **Intouchable** : aucun impact n'a d'effet sur Snake (ni dégâts, ni
     projection, ni assommage) ;
@@ -103,11 +296,15 @@ L'onglet des réglages en direct, en plusieurs groupes :
     debout devant eux (à combiner avec "Pas d'alerte" pour les lasers
     des mini Gekko).
 - **Jauges** : Santé, Stamina, **Grip** (suspendu à un rebord),
-  **Oxygène** (sous l'eau), Stress, batterie du Solid Eye, Santé de
-  Metal Gear REX. Pour chacune : un curseur en pourcentage pour la
+  **Oxygène** (sous l'eau), Stress, batterie du Solid Eye, **Drebin 893**
+  (le véhicule de l'acte 2), **Van** (celui à protéger à l'acte 3), Santé
+  de Metal Gear REX. Pour chacune : un curseur en pourcentage pour la
   régler, et une case **Verrouiller** qui la maintient à ce niveau
   (Santé verrouillée à 100 % = vie infinie, Grip à 100 % = grip
-  infini...).
+  infini...). Une jauge verrouillée ne bouge plus du tout : le jeu
+  n'écrit plus dedans. Grip, oxygène, Drebin 893 et Van affichent "pas
+  suspendu", "hors de l'eau" ou "absent" quand ils ne sont pas actifs ;
+  les verrouiller à ce moment-là les verrouille à 100 %.
 
 ### Armes
 
@@ -119,7 +316,15 @@ arme :
 - **Munitions** : la réserve, modifiable ;
 - **Équiper** : met l'arme en main immédiatement, sans menu (voir
   "Équiper en direct" plus bas). Actif seulement pour les armes
-  possédées.
+  possédées ;
+- **Personnaliser** (armes à emplacements d'accessoires) : un choix par
+  emplacement (silencieux, lumière, laser, visée, sous le canon),
+  appliqué tout de suite, même sur l'arme en main. Les accessoires non
+  possédés sont grisés.
+
+Dans la section **Accessoires**, la colonne **Munitions / Quantité**
+donne le nombre de silencieux et les munitions des lance-grenades
+(Masterkey, XM320, GP-30), modifiables.
 
 Un filtre par nom permet de retrouver une arme vite.
 
@@ -264,8 +469,8 @@ le jeu. Confirmé en jeu (2026-10-04) :
   de 7 coups scénarisés n'est pas couverte ;
 - **Screaming Mantis**, forme bête : sa vie ne peut pas descendre sous
   50, seule son endurance déclenche la défaite ; le patch vide les deux
-  d'un coup. **Pas encore testé en jeu** (seule la baisse de vie l'a
-  été). Seule la poupée Mantis l'atteint, comme dans le jeu.
+  d'un coup (confirmé en V2.4). Seule la poupée Mantis l'atteint, comme
+  dans le jeu.
 
 L'ancien système (forçage de la vie par paliers, synchronisé sur un vrai
 coup) n'est plus utilisé dès que ces patchs sont posés.
@@ -296,7 +501,8 @@ principes, chacun avec ses patchs (confirmés en jeu, 2026-10-04) :
   explosifs, le M82A2 et le Rail Gun les touchent ; toutes les armes
   comptent et chaque coup retire toute leur vie ;
 - **véhicule de Millennium Park** : son filtre d'armes est levé ;
-- **mini Gekko** : détruits au premier impact ;
+- **mini Gekko** : détruits au premier impact (V2.4 : paralysés en Non
+  létal) ;
 - **objets destructibles** (portails à abattre au canon de tank...) :
   cèdent au premier impact. Le minimum imposé par le niveau (verrou de
   scénario éventuel) est conservé.
@@ -311,6 +517,31 @@ x86_64-w64-mingw32-gcc -shared -O2 -municode -o native/speedhack_x64.dll native/
 
 `mingw64/bin` doit être dans le PATH (sinon `cc1.exe` échoue silencieusement,
 sans aucun message).
+
+**V2.4 : quelle que soit l'arme, dans les deux modes.** Règle générale :
+en Létal tout coup tue, en Non létal tout coup met K.O. par l'endurance
+sans toucher à la vie, comme pour les soldats, y compris le Mk.2 et les
+armes létales. Confirmé en jeu (2026-10-10) :
+
+- **machines** (sans endurance) détruites dans les deux modes : Gekko,
+  tanks, hélicoptères, véhicules, **Metal Gear RAY**, objets
+  destructibles ; le Mk.2 les touche aussi (hélicoptères, Gekko, portails
+  confirmés ; tanks non testés faute de tank) ;
+- **mini Gekko** : détruits au premier coup en Létal, paralysés en Non
+  létal, Mk.2 compris ;
+- **Crying Wolf**, **Raging Raven**, **Screaming Mantis** (avec la
+  poupée, formes bête et Beauty), **Laughing Octopus** et les Beauty :
+  endurance vidée en Non létal ; en Létal, Crying Wolf et Screaming
+  Mantis confirmés avec toute arme, Octopus, Beauty et Raven préparés
+  pour les armes d'endurance mais pas encore revus en jeu ;
+- **Liquid Ocelot** (combat final, aux poings) : dans les deux modes,
+  vie **et** endurance au plancher de la phase au premier coup, le
+  suivant lance la phase suivante. Les 7 derniers coups scénarisés ne
+  sont pas couverts.
+
+Les patchs Létal et Non létal se partagent certains sites (Crying
+Wolf) : en changeant de mode, ceux du mode inactif sont retirés avant de
+poser les autres.
 
 ### Rail Gun / Solar Gun toujours chargés
 
@@ -335,16 +566,64 @@ Onglet "État de jeu", groupe "Snake" et tableau des jauges.
   dégâts, ni projection, ni assommage.
 - **Invisible** : les soldats et les Gekko ne voient plus Snake, même
   debout devant eux, comme avec le Camouflage furtif mais sans la
-  transparence (l'indice de camouflage affiche 99 %). Il couvre la
-  vision seulement : les lasers des mini Gekko (détection par contact en
-  mouvement, à laquelle le vrai Camouflage furtif n'échappe pas non plus)
-  et les autres sources d'alerte restent actifs. Cocher aussi
-  **"Pas d'alerte"** pour que rien ne déclenche l'alerte générale :
-  les deux réglages sont complémentaires.
+  transparence (l'indice de camouflage affiche 99 %). Depuis la V2.4,
+  les mini Gekko ne le détectent plus non plus (lasers, proximité,
+  contact) ; il reste un passage en Prudence si Snake reste immobile au
+  milieu d'eux. Cocher aussi **"Pas d'alerte"** pour que rien ne
+  déclenche l'alerte générale : les deux réglages sont complémentaires.
 - **Grip** et **Oxygène** : nouvelles lignes du tableau des jauges, avec
   curseur et case "Verrouiller" comme les autres. Elles n'existent que
   suspendu à un rebord ou sous l'eau ("pas suspendu" / "hors de l'eau"
   sinon). Verrouillées à 100 % : grip ou oxygène infinis.
+
+### Profils, raccourcis, bandeau et alerte forcée (V2.4) : comment ça marche
+
+- **Raccourcis globaux** : les touches F1 à F11 qui ont un profil, la
+  touche Pause et le pavé numérique + / − / 0 sont enregistrés auprès de
+  Windows (`RegisterHotKey`) : ils marchent quel que soit le programme au
+  premier plan. Les touches F sans profil ne sont pas prises.
+- **Retour en arrière** : au premier profil activé, le trainer garde une
+  copie de la configuration en cours ; la touche du profil actif la
+  remet et oublie la copie.
+- **Son "GO"** : le trainer demande au jeu de jouer son propre son (moteur
+  audio FMOD du jeu, via la DLL injectée), d'où le volume et la sortie
+  audio du jeu. Si le jeu n'est pas accroché, un bip Windows le remplace.
+- **Bandeau** : petite fenêtre transparente, toujours au premier plan,
+  qui ne prend ni le focus ni les clics, centrée en haut de la fenêtre du
+  jeu.
+- **Alerte forcée** : le trainer choisit un soldat présent dans la zone
+  (unité valide, en service, non neutralisé) et appelle la fonction du jeu
+  par laquelle un soldat signale Snake ; le compte à rebours de l'alerte
+  est ensuite maintenu au maximum tant que l'alerte est forcée.
+- **Jauges figées** : pour chaque jauge, toutes les instructions du jeu
+  qui l'écrivent (dégâts, régénération, baisse naturelle…) ont été
+  trouvées au débogueur, puis neutralisées tant que la ligne est
+  verrouillée ; le trainer reste seul à écrire la valeur verrouillée.
+- **Accessoires** : chaque arme a un champ de bits des accessoires montés,
+  que le trainer modifie directement ; il appelle ensuite les fonctions du
+  jeu qui reconstruisent et redessinent le menu de personnalisation.
+  Silencieux illimités : la fonction de tir retire 1 au silencieux monté
+  et 1 à la réserve, les deux retraits sont neutralisés.
+
+### Metal Gear REX (V2.4) : comment ça marche
+
+- **Mitrailleuse** : la chaleur (0 à 4000, affichée en %) est relue,
+  augmentée à chaque tir puis réécrite ; l'arme se bloque quand elle
+  atteint le maximum. Le patch supprime la réécriture : la chaleur reste
+  à 0 et le seuil n'est jamais atteint.
+- **Missiles** : 15 tubes, chacun avec un minuteur de rechargement ; le
+  compteur affiché est le nombre de tubes prêts, recompté à chaque image.
+  Un tir décrémente ce compteur et arme le minuteur du tube : les deux
+  sont neutralisés.
+- **Laser** : la charge (0 à 10000, niveaux 1 à 5) est plafonnée par une
+  réserve d'énergie (le "x/100" du HUD). Pendant la charge, le calcul
+  "charge + vitesse, plafonnée" est remplacé par "charge = réserve" ;
+  pendant le tir, la charge baisse normalement (durée du rayon) mais la
+  réserve n'est plus diminuée.
+- **Pourquoi la téléportation ne marche pas avec REX** : dans REX, la
+  position que modifie le trainer est celle de Snake, que suit la
+  caméra ; au premier pas, le jeu recale Snake sur la position du corps
+  de REX, stockée ailleurs et non trouvée.
 
 ### Équiper en direct, sans menu (V2.2)
 

@@ -95,6 +95,9 @@ def _bundled_path(*parts):
 
 TRAINER_ICON = _bundled_path("assets", "MGS4_Best_Trainer.ico")
 DEFAULT_TELEPORT_POINTS_FILE = _bundled_path("assets", "default_teleport_points.json")
+# Profils fournis (F1 Normal, F2 God mode), charges tant que l'utilisateur
+# n'a pas son propre profiles.json (cree au premier enregistrement).
+DEFAULT_PROFILES_FILE = _bundled_path("assets", "default_profiles.json")
 
 
 def _writable_data_path(*parts):
@@ -5658,7 +5661,7 @@ class VitalsTab(QWidget):
             self.alert_label.setText("?")
 
 
-TRAINER_VERSION = "V2.3"
+TRAINER_VERSION = "V2.4"
 
 TRAINER_HELP_TEXT = tr("help.text")
 
@@ -6089,9 +6092,11 @@ def _beep() -> None:
 
 
 def load_profiles() -> dict[str, dict]:
-    """{"F1": {"name": ..., "settings": {...}}, ...} - vide si absent/illisible."""
+    """{"F1": {"name": ..., "settings": {...}}, ...} - profils fournis si le
+    fichier de l'utilisateur n'existe pas encore, vide s'il est illisible."""
+    path = PROFILES_FILE if os.path.exists(PROFILES_FILE) else DEFAULT_PROFILES_FILE
     try:
-        with open(PROFILES_FILE, encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, ValueError):
         return {}
