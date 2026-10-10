@@ -2309,7 +2309,7 @@ class MGS4Live:
     #    B800B0, comme des fonctions de soldats). Forme Beauty (1173BB1,
     #    commune aux quatre) : "sub ecx,ebx" (1173CF9) -> "xor ecx,ecx",
     #    endurance a 0 au premier coup (valide sur Laughing Beauty). Crying
-    #    Wolf (FE7D80) a son propre calcul : pas encore couvert.
+    #    Wolf (FE7D80) : voir les entrees dediees plus bas.
     #    Armes letales en Non letal (comme les soldats : la vie n'est jamais
     #    touchee, le coup vide l'endurance) : Octopus bete, passage force par
     #    B800B0 ("jle" 1434BCF) et ecriture de vie 1434D68 neutralisee ;
@@ -2345,6 +2345,35 @@ class MGS4Live:
             (0x1173BC7, bytes.fromhex("0f845d010000448b8d"), bytes.fromhex("909090909090")),
             (0x13F8BFF, bytes.fromhex("81feffffff7f8b8d14"), bytes.fromhex("e96900000090")),
             (0xF08FF0, bytes.fromhex("41898814030000e884"), bytes.fromhex("90909090909090")),
+            # Crying Wolf (FE7D80, son propre calcul) : chaque "endurance -
+            # degat" -> 0 ; les branches "vie" (coups letaux) mettent aussi 0
+            # (memes "sub" que le patch Letal) mais l'ecriture est redirigee
+            # vers l'endurance (+0x314 -> +0x31C) : la vie n'est jamais touchee.
+            (0xFE7E21, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE7E9E, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE7FB7, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE805F, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE80B4, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE8157, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE8425, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE84E0, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE85BD, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE8864, bytes.fromhex("2bca4863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE89FC, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE8A96, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE8B30, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE823C, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE835B, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE8654, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE87A7, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE88F3, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE896A, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE824F, bytes.fromhex("8983140300008bc5"), bytes.fromhex("89831c030000")),
+            (0xFE836C, bytes.fromhex("8983140300008d42"), bytes.fromhex("89831c030000")),
+            (0xFE8665, bytes.fromhex("8983140300008d42"), bytes.fromhex("89831c030000")),
+            (0xFE87B8, bytes.fromhex("898314030000e84d"), bytes.fromhex("89831c030000")),
+            (0xFE8901, bytes.fromhex("898314030000e945"), bytes.fromhex("89831c030000")),
+            (0xFE897B, bytes.fromhex("898314030000e88a"), bytes.fromhex("89831c030000")),
         ],
         "health_freeze": [
             (0x96C53B, bytes.fromhex("66418989480b00004489a7"), bytes.fromhex("9090909090909090")),
@@ -2408,6 +2437,42 @@ class MGS4Live:
             (0xF08FC2, bytes.fromhex("75028bd82bc34898"), bytes.fromhex("9090")),
             (0xF09038, bytes.fromhex("0f8f42010000f30f"), bytes.fromhex("909090909090")),
             (0x112717A, bytes.fromhex("2bd74963c84863c2"), bytes.fromhex("31d2")),
+            # Toute arme tue (comme les soldats), aussi les coups d'endurance
+            # (flechettes...) : Crying Wolf, branches endurance -> 0 et ecriture
+            # redirigee vers la vie ; Octopus, chemin vie force avec la valeur
+            # de mise a mort (1434CC7, jle 1434CCE neutralise) ; Beauty, tout
+            # coup par le chemin vie (1173BC7 jmp) ; Raven, chemin endurance
+            # redirige vers le chemin vie (13F8C6D jmp 13F8BFF).
+            (0xFE7E21, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE7E9E, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE7FB7, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE805F, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE80B4, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE8157, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE8425, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE84E0, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE85BD, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE8864, bytes.fromhex("2bca4863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE89FC, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE8A96, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE8B30, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE7E2F, bytes.fromhex("89831c03000085c0"), bytes.fromhex("898314030000")),
+            (0xFE7EAC, bytes.fromhex("89831c0300008d42"), bytes.fromhex("898314030000")),
+            (0xFE7FC8, bytes.fromhex("89831c030000e8bd"), bytes.fromhex("898314030000")),
+            (0xFE8070, bytes.fromhex("89831c030000e815"), bytes.fromhex("898314030000")),
+            (0xFE80C2, bytes.fromhex("89831c0300000f8f"), bytes.fromhex("898314030000")),
+            (0xFE816A, bytes.fromhex("89831c0300008bc5"), bytes.fromhex("898314030000")),
+            (0xFE8435, bytes.fromhex("89831c0300008d42"), bytes.fromhex("898314030000")),
+            (0xFE84F1, bytes.fromhex("89831c0300008d42"), bytes.fromhex("898314030000")),
+            (0xFE85CB, bytes.fromhex("89831c0300008d42"), bytes.fromhex("898314030000")),
+            (0xFE8872, bytes.fromhex("89831c0300007f1a"), bytes.fromhex("898314030000")),
+            (0xFE8A0D, bytes.fromhex("89831c030000e8d8"), bytes.fromhex("898314030000")),
+            (0xFE8AA7, bytes.fromhex("89831c0300008d42"), bytes.fromhex("898314030000")),
+            (0xFE8B3E, bytes.fromhex("89831c030000488b"), bytes.fromhex("898314030000")),
+            (0x1434CCE, bytes.fromhex("0f8e67010000496386"), bytes.fromhex("909090909090")),
+            (0x1434CC7, bytes.fromhex("448b456f4585c0"), bytes.fromhex("41b8ffffff7f90")),
+            (0x1173BC7, bytes.fromhex("0f845d010000448b8d"), bytes.fromhex("e95e01000090")),
+            (0x13F8C6D, bytes.fromhex("8bd6488bcde8397478"), bytes.fromhex("e98dffffff")),
         ],
         "vehicles_one_shot_kill": [
             (0x102DAF3, bytes.fromhex("755e488d4c2430"), bytes.fromhex("9090")),
@@ -5088,11 +5153,18 @@ class VitalsTab(QWidget):
         self.live.set_machine_kill(active)
         try:
             self.live.set_code_patch("vehicles_one_shot_kill", active)
-            self.live.set_code_patch("minigekko_lethal", active and lethal)
-            self.live.set_code_patch("minigekko_non_lethal", active and not lethal)
+            # Les patchs Letal / Non letal partagent des sites (Crying Wolf) :
+            # retirer d'abord ceux du mode inactif, puis poser ceux du mode actif.
+            lethal_patches = ("minigekko_lethal", "boss_one_shot_kill")
+            non_lethal_patches = ("minigekko_non_lethal", "boss_non_lethal_kill")
+            wanted = lethal_patches if active and lethal else non_lethal_patches if active else ()
+            for name in lethal_patches + non_lethal_patches:
+                if name not in wanted:
+                    self.live.set_code_patch(name, False)
+            results = {name: self.live.set_code_patch(name, True) for name in wanted}
             self.live.set_code_patch("destructibles_one_shot_kill", active)
-            non_lethal_ok = self.live.set_code_patch("boss_non_lethal_kill", active and not lethal)
-            lethal_ok = self.live.set_code_patch("boss_one_shot_kill", active and lethal)
+            non_lethal_ok = results.get("boss_non_lethal_kill", False)
+            lethal_ok = results.get("boss_one_shot_kill", False)
             # Coups des boss geres par le jeu lui-meme (patchs de code) : pas
             # de degats par paliers ecrits par-dessus (_reassert_boss_staged_damage).
             self._boss_kill_patched = active and (lethal_ok if lethal else non_lethal_ok)
