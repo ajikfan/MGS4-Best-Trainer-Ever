@@ -4977,6 +4977,22 @@ class VitalsTab(QWidget):
         if name in self.locked_percents:
             self.locked_percents[name] = value
 
+    SPEED_STEP_PERCENT = 10
+
+    def speed_percent(self) -> int:
+        return round(self._speed_from_slider(self.speed_slider.value()) * 100)
+
+    def set_speed_percent(self, percent: int) -> int:
+        """Regle la vitesse (10-300 %) via le curseur ; renvoie la valeur retenue."""
+        percent = max(10, min(300, percent))
+        speed = percent / 100
+        if speed <= 1.0:
+            value = (speed - 1.0) / (1.0 - self.SPEED_SLOWDOWN_FLOOR) * 100
+        else:
+            value = (speed - 1.0) / (self.SPEED_BOOST_CEILING - 1.0) * 100
+        self.speed_slider.setValue(round(value))
+        return self.speed_percent()
+
     def _on_speed_changed(self, value: int):
         speed = self._speed_from_slider(value)
         self.speed_value_label.setText(f"{round(speed * 100)} %")
@@ -6398,6 +6414,8 @@ class TrainerWindow(QMainWindow):
     # Touche Pause du clavier : coche/decoche la case Pause (toujours prise).
     VK_PAUSE = 0x13
     HOTKEY_ID_PAUSE = 0xB100
+    # Pave numerique + / - / 0 : vitesse du jeu +10 %, -10 %, 100 %.
+    SPEED_HOTKEYS = {0xB101: (0x6B, +1), 0xB102: (0x6D, -1), 0xB103: (0x60, 0)}
 
     def register_profile_hotkeys(self):
         user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -6412,11 +6430,17 @@ class TrainerWindow(QMainWindow):
                     self._hotkeys.append(hotkey_id)
         if user32.RegisterHotKey(hwnd, self.HOTKEY_ID_PAUSE, self.MOD_NOREPEAT, self.VK_PAUSE):
             self._hotkeys.append(self.HOTKEY_ID_PAUSE)
+        for hotkey_id, (vk, _step) in self.SPEED_HOTKEYS.items():
+            if user32.RegisterHotKey(hwnd, hotkey_id, 0, vk):  # repetition autorisee (touche maintenue)
+                self._hotkeys.append(hotkey_id)
 
     def nativeEvent(self, event_type, message):
         if event_type == b"windows_generic_MSG" or event_type == "windows_generic_MSG":
             msg = wintypes.MSG.from_address(int(message))
             if msg.message == self.WM_HOTKEY:
+                if msg.wParam in self.SPEED_HOTKEYS:
+                    self._on_speed_hotkey(self.SPEED_HOTKEYS[msg.wParam][1])
+                    return True, 0
                 if msg.wParam == self.HOTKEY_ID_PAUSE:
                     pause = self.vitals_tab.pause_check
                     if pause.isEnabled():
@@ -6427,6 +6451,18 @@ class TrainerWindow(QMainWindow):
                     self.apply_profile(PROFILE_KEYS[index], from_hotkey=True)
                     return True, 0
         return super().nativeEvent(event_type, message)
+
+    def _on_speed_hotkey(self, step: int):
+        vitals = self.vitals_tab
+        if not vitals.speed_slider.isEnabled():
+            return
+        if step == 0:
+            percent = 100
+        else:
+            current = vitals.speed_percent()
+            percent = (round(current / vitals.SPEED_STEP_PERCENT) + step) * vitals.SPEED_STEP_PERCENT
+        percent = vitals.set_speed_percent(percent)
+        self.overlay.show_message(tr("overlay.speed", percent=percent), percent >= 100, self.live.pid)
 
     def _capture_state(self) -> dict:
         """Configuration actuelle au format d'un profil (accessoires si accroche)."""
