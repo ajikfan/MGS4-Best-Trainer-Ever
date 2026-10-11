@@ -37,9 +37,20 @@ droit administrateur n'est nécessaire.
 
 ### Le trainer reste sur « Non connecté »
 
-Lance le jeu et charge une partie : le trainer s'accroche tout seul. S'il
-ne s'accroche toujours pas après une mise à jour Steam du jeu, les
-adresses ont probablement bougé : voir [Maintenance](maintenance.md).
+Lance le jeu et charge une partie : le trainer s'accroche tout seul.
+
+S'il ne s'accroche plus après une **mise à jour Steam du jeu**, les
+adresses du jeu ont probablement bougé et le trainer doit être recalibré.
+Le mieux est d'**attendre une mise à jour du trainer** : le recalibrage
+demande des outils de débogage et des vérifications en jeu (le détail
+est dans [Maintenance](maintenance.md), pour qui veut s'y essayer).
+En attendant, n'utilise pas le trainer sur la nouvelle version du jeu :
+même si certaines fonctions semblent marcher, des valeurs pourraient
+être lues ou écrites au mauvais endroit. Les patchs de code, eux,
+refusent de s'appliquer s'ils ne retrouvent pas le code attendu.
+
+Pour éviter d'être pris de court, tu peux désactiver la mise à jour
+automatique de MGS4 dans Steam (Propriétés du jeu → Mises à jour).
 
 ### Un bouton « Équiper » est refusé pendant une cinématique
 

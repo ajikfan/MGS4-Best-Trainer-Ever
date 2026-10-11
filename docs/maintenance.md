@@ -23,7 +23,11 @@ de MGS4-SaveStats pour la méthode de diagnostic complète).
 1.4.1.** Si une future mise à jour du jeu casse la détection (le trainer
 reste bloqué sur "Non connecté", ou le contrôle de cohérence échoue en
 boucle après reconnexion), c'est probablement la même cause : il faudra
-recalibrer ce décalage.
+recalibrer ce décalage, vérifier les patchs de code (chacun refuse de
+s'appliquer si ses octets d'origine ne sont plus là) et publier une
+nouvelle version du trainer. Côté joueurs, la [FAQ](faq.md) leur
+conseille d'attendre cette mise à jour plutôt que de recalibrer
+eux-mêmes.
 
 ## Empaqueter en .exe autonome
 

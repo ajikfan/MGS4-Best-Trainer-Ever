@@ -58,6 +58,9 @@ Détail dans [Nouveautés par version](docs/nouveautes.md).
 
 ## ⚠️ Avertissements
 
+- **Mise à jour du jeu** : le trainer est calibré pour MGS4 Steam
+  **1.4.1**. Après une mise à jour du jeu, attends une nouvelle version
+  du trainer avant de l'utiliser (voir la [FAQ](docs/faq.md)).
 - **Usage solo uniquement, à tes risques.** Ce n'est pas un outil
   officiel : il lit/écrit dans la mémoire d'un autre processus, ce qu'un
   antivirus peut signaler à tort.
