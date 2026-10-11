@@ -60,8 +60,26 @@ code est dans le paquet `mgs4trainer/` :
 - `ui/` : un fichier par onglet, plus l'aide, les profils et le bandeau,
   et la fenêtre principale (`main_window.py`).
 
-Le source de la DLL injectée est `native/speedhack.c` (voir
-[Comment ça marche](fonctionnement.md) pour la commande de compilation).
+## Recompiler la DLL
+
+Uniquement si tu modifies `native/speedhack.c` : la DLL est fournie déjà
+compilée (`native/speedhack_x64.dll`), dans le dépôt comme dans le zip,
+et le trainer l'utilise telle quelle. Les joueurs n'ont jamais besoin de
+compilateur.
+
+Il faut un compilateur C ciblant Windows, testé avec
+`x86_64-w64-mingw32-gcc` via [MSYS2](https://www.msys2.org/) (mingw64) :
+
+```
+x86_64-w64-mingw32-gcc -shared -O2 -municode -o native/speedhack_x64.dll native/speedhack.c -lkernel32 -lwinmm
+```
+
+Piège propre à MinGW : le dossier `mingw64/bin` de MSYS2 doit être dans
+le PATH de Windows, sinon `cc1.exe` échoue sans afficher aucun message.
+
+Après une modification de la DLL, refaire le build de l'exe (voir plus
+haut) pour qu'elle soit embarquée. La DLL déjà injectée dans un jeu en
+cours ne change pas : relancer le jeu pour charger la nouvelle.
 
 ## Patchs de code : règles
 

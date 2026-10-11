@@ -144,16 +144,9 @@ principes, chacun avec ses patchs (confirmés en jeu, 2026-10-04) :
   cèdent au premier impact. Le minimum imposé par le niveau (verrou de
   scénario éventuel) est conservé.
 
-Modifier `native/speedhack.c` nécessite un compilateur C ciblant Windows
-(testé avec `x86_64-w64-mingw32-gcc` via [MSYS2](https://www.msys2.org/),
-mingw64) :
-
-```
-x86_64-w64-mingw32-gcc -shared -O2 -municode -o native/speedhack_x64.dll native/speedhack.c -lkernel32 -lwinmm
-```
-
-`mingw64/bin` doit être dans le PATH (sinon `cc1.exe` échoue silencieusement,
-sans aucun message).
+La DLL est fournie déjà compilée (`native/speedhack_x64.dll`) : aucun
+compilateur n'est nécessaire pour utiliser le trainer. Pour la modifier,
+voir [Recompiler la DLL](maintenance.md#recompiler-la-dll).
 
 **V2.4 : quelle que soit l'arme, dans les deux modes.** Règle générale :
 en Létal tout coup tue, en Non létal tout coup met K.O. par l'endurance
