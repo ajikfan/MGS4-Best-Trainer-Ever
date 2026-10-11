@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.4
+# MGS4 Trainer — V2.4.1
 
 Trainer de recherche/édition mémoire live pour Metal Gear Solid 4
 (portage PC Steam) : lit et **écrit** en direct la mémoire du process
@@ -45,6 +45,23 @@ sans scan. Un contrôle de cohérence (`sanity_check`, basé sur deux champs
 toujours à 0 sur toute sauvegarde connue) s'exécute avant d'autoriser la
 moindre écriture — si le jeu ne répond pas comme attendu, le trainer
 refuse d'écrire plutôt que de risquer de corrompre la mémoire du jeu.
+
+## Nouveautés de la V2.4.1
+
+- **Correctif mini Gekko** : en "Un coup, un mort" Non létal, marcher sur
+  un groupe de mini Gekko pouvait faire planter le jeu. Le contact de
+  Snake leur envoyait une paralysie relancée à chaque image ; ils
+  sursautent maintenant normalement, et un tir les paralyse toujours.
+- **Correctif OctoCamo** : les motifs qui ont leurs propres couleurs
+  (Cadavre et motifs spéciaux) avaient un rendu délavé quand on les
+  équipait depuis le trainer : le trainer remplaçait leurs teintes par
+  celles de la table de la sauvegarde. Ils sont maintenant identiques à
+  ceux du menu.
+- **Invisible** : un tir sans silencieux ne fait plus passer les ennemis
+  en alerte. Ils peuvent encore entendre et venir voir, et le hold-up
+  reste possible.
+- **Code** : le trainer est maintenant découpé en plusieurs fichiers
+  (paquet `mgs4trainer/`) ; `python live_trainer.py` se lance comme avant.
 
 ## Nouveautés de la V2.4
 
@@ -292,9 +309,10 @@ L'onglet des réglages en direct, en plusieurs groupes :
 - **Snake** :
   - **Intouchable** : aucun impact n'a d'effet sur Snake (ni dégâts, ni
     projection, ni assommage) ;
-  - **Invisible** : les soldats et les Gekko ne le voient plus, même
-    debout devant eux (à combiner avec "Pas d'alerte" pour les lasers
-    des mini Gekko).
+  - **Invisible** : les soldats, les Gekko et les mini Gekko ne le voient
+    plus, même debout devant eux, et un tir sans silencieux ne les fait
+    plus passer en alerte (le hold-up reste possible). À combiner avec
+    "Pas d'alerte" pour que rien ne déclenche l'alerte générale.
 - **Jauges** : Santé, Stamina, **Grip** (suspendu à un rebord),
   **Oxygène** (sous l'eau), Stress, batterie du Solid Eye, **Drebin 893**
   (le véhicule de l'acte 2), **Van** (celui à protéger à l'acte 3), Santé
@@ -569,8 +587,13 @@ Onglet "État de jeu", groupe "Snake" et tableau des jauges.
   transparence (l'indice de camouflage affiche 99 %). Depuis la V2.4,
   les mini Gekko ne le détectent plus non plus (lasers, proximité,
   contact) ; il reste un passage en Prudence si Snake reste immobile au
-  milieu d'eux. Cocher aussi **"Pas d'alerte"** pour que rien ne
-  déclenche l'alerte générale : les deux réglages sont complémentaires.
+  milieu d'eux. Depuis la V2.4.1, un tir sans silencieux ne fait plus
+  passer en alerte : le jeu range tous les bruits dans une table commune
+  que les soldats consultent, et le trainer empêche les tirs d'y être
+  enregistrés. Les autres bruits (coups contre un mur, pas) restent
+  actifs, car le "Freeze !" du hold-up passe par la même table. Cocher
+  aussi **"Pas d'alerte"** pour que rien ne déclenche l'alerte générale :
+  les deux réglages sont complémentaires.
 - **Grip** et **Oxygène** : nouvelles lignes du tableau des jauges, avec
   curseur et case "Verrouiller" comme les autres. Elles n'existent que
   suspendu à un rebord ou sous l'eau ("pas suspendu" / "hors de l'eau"
