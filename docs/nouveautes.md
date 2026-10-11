@@ -1,0 +1,147 @@
+# Nouveautés par version
+
+[← Retour au README](../README.md)
+
+Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
+
+## Nouveautés de la V2.4.1
+
+- **Correctif mini Gekko** : en "Un coup, un mort" Non létal, marcher sur
+  un groupe de mini Gekko pouvait faire planter le jeu. Le contact de
+  Snake leur envoyait une paralysie relancée à chaque image ; ils
+  sursautent maintenant normalement, et un tir les paralyse toujours.
+- **Correctif OctoCamo** : les motifs qui ont leurs propres couleurs
+  (Cadavre et motifs spéciaux) avaient un rendu délavé quand on les
+  équipait depuis le trainer : le trainer remplaçait leurs teintes par
+  celles de la table de la sauvegarde. Ils sont maintenant identiques à
+  ceux du menu.
+- **Invisible** : un tir sans silencieux ne fait plus passer les ennemis
+  en alerte. Ils peuvent encore entendre et venir voir, et le hold-up
+  reste possible.
+- **Code** : le trainer est maintenant découpé en plusieurs fichiers
+  (paquet `mgs4trainer/`) ; `python live_trainer.py` se lance comme avant.
+
+## Nouveautés de la V2.4
+
+### Profils F1 à F11 et raccourcis clavier
+
+Toute la configuration de l'onglet "État de jeu" (et les accessoires des
+armes) rangée sous une touche F1 à F11, utilisable même jeu au premier
+plan, avec le son "GO" du jeu et un bandeau par-dessus le jeu ; touche
+Pause et pavé numérique + / − / 0 pour la vitesse. Mode d'emploi complet
+dans le [guide](guide.md#profils-f1-à-f11).
+
+### Armes : personnaliser les accessoires
+
+- Nouvelle colonne **Accessoires** dans l'onglet Armes, avec un bouton
+  **Personnaliser** sur chaque arme qui a des emplacements. Il ouvre une
+  fenêtre avec une liste par emplacement, comme le menu du jeu :
+  Silencieux, Lumière, Laser, Visée, Sous le canon (avec "Aucun"). Le
+  choix s'applique tout de suite, même sur l'arme que Snake a en main,
+  et le menu de personnalisation du jeu se met à jour s'il est ouvert.
+  Les accessoires que ta partie ne possède pas sont grisés.
+- Dans la section **Accessoires**, la colonne **Munitions / Quantité**
+  affiche et modifie le nombre de silencieux que tu possèdes et les
+  munitions des lance-grenades montés (Masterkey, XM320, GP-30).
+- Nouvelle case **Silencieux illimités** (onglet "État de jeu") : le
+  silencieux monté ne s'use plus à chaque tir, quelle que soit l'arme.
+
+### Alerte forcée : une vraie alerte
+
+Forcer **Alerte** fait maintenant donner l'alerte par un vrai soldat de
+la zone : musique, renforts, recherche, comme si Snake avait été repéré,
+et le compte à rebours reste à 99.99 tant que l'alerte est forcée (avant,
+il affichait 0.00). De retour en **Automatique**, le jeu reprend la main
+et enchaîne normalement Évasion, Prudence puis Normal. Dans une zone sans
+aucun soldat, le jeu ne gère pas d'alerte : la forcer n'a aucun effet.
+
+### Jauges : verrouillées pour de bon, et deux nouvelles
+
+- **Plus aucune variation** : avant, une jauge verrouillée était
+  réécrite par le trainer à chaque rafraîchissement, et le jeu avait le
+  temps de la faire bouger entre deux (stress qui passe de 0 à 0,1, vie
+  qui baisse et remonte quand Snake est touché). Maintenant, verrouiller
+  la vie, l'endurance, le stress, la batterie du Solid Eye, le Drebin
+  893, le Van ou Metal Gear REX empêche le jeu lui-même d'écrire dans la
+  jauge : elle ne bouge plus du tout.
+- **Drebin 893** : la vie du véhicule de l'acte 2. **Van** : la vie du
+  van à protéger à l'acte 3. Deux nouvelles lignes, verrouillables, qui
+  affichent "absent" en dehors de leur séquence.
+- **Grip et oxygène** : un verrou ne peut plus rester bloqué à 0 % (ce
+  qui arrivait avec un profil enregistré alors que la jauge n'était pas
+  active, et laissait la barre descendre). Verrouiller une de ces jauges
+  quand elle n'est pas active la verrouille à 100 %.
+
+### Un coup, un mort : quelle que soit l'arme, dans les deux modes
+
+La règle est maintenant la même partout, comme pour les soldats :
+
+- **Létal** : tout coup tue, avec n'importe quelle arme, y compris le
+  pistolet tranquillisant Mk.2 ;
+- **Non létal** : tout coup met K.O. en vidant l'endurance, sans jamais
+  toucher à la vie, y compris avec une arme létale.
+
+Ce qui n'a pas d'endurance est **détruit dans les deux modes** : Gekko,
+tanks, hélicoptères, véhicules de Millennium Park, Metal Gear RAY et
+objets destructibles. Le Mk.2 les touche aussi maintenant (hélicoptères,
+Gekko, portails confirmés ; tanks préparés mais pas testés faute de
+tank).
+
+**Mini Gekko** : détruits net au premier coup en Létal (Mk.2 compris,
+sans passer par la paralysie) ; **paralysés** en Non létal, avec
+n'importe quelle arme (avant, une balle de Mk.23 les détruisait).
+
+**Portails et objets destructibles** : ils tombent en un coup, mais
+seulement quand le jeu l'autorise. Certains portails sont protégés par
+le scénario tant que la séquence prévue n'est pas arrivée ; les forcer
+plus tôt bloquait la progression (déclencheur de script jamais atteint).
+Le trainer respecte donc ce verrou : le portail résiste tant que le jeu
+le protège, puis cède au premier tir dès que le moment est venu.
+
+**Boss**, toujours via la mise à mort prévue par le jeu (transitions de
+phase et fins de combat gérées par le jeu) :
+
+| Boss | Létal | Non létal |
+|---|---|---|
+| Laughing Octopus | un coup par phase | endurance vidée, un coup par phase (confirmé) |
+| Raging Raven | un coup | endurance vidée en un coup, formes bête et Beauty (confirmé) |
+| Crying Wolf | un coup, toute arme (confirmé) | endurance vidée en un coup, formes bête et Beauty (confirmé) |
+| Screaming Mantis | un coup avec la poupée (confirmé) | endurance vidée en un coup avec la poupée (confirmé) |
+| Les quatre Beauty | un coup (Screaming Beauty confirmée) | endurance vidée en un coup (confirmé) |
+| Metal Gear RAY | détruit en un coup (confirmé) | détruit en un coup (confirmé) |
+| Vamp | à terre en un tir, la seringue reste nécessaire | non couvert |
+| Liquid Ocelot | voir ci-dessous | voir ci-dessous |
+
+Pour Octopus, Raven et les Beauty, le Létal "toute arme" (Mk.2 compris)
+est préparé mais n'a pas été revu en jeu.
+
+**Liquid Ocelot** (combat final, aux poings, donc pareil dans les deux
+modes) : au premier coup, sa vie **et** son endurance tombent au
+plancher de la phase ; le coup suivant lance la phase suivante. Les 7
+derniers coups scénarisés ne sont pas couverts.
+
+### Metal Gear REX
+
+- **Vie** : verrouillable (ligne "Santé Metal Gear REX"), elle ne baisse
+  plus du tout.
+- **Mitrailleuse** : avec **Pas de rechargement**, elle ne surchauffe
+  plus. La chaleur monte normalement à chaque tir, et l'arme se bloque un
+  moment à 100 % ; le trainer empêche la chaleur de monter.
+- **Missiles** : avec **Munitions infinies**, toujours 15/15. REX a 15
+  tubes, chacun avec son propre temps de rechargement après un tir (c'est
+  pour ça que le compteur remonte tout seul) ; les tubes restent toujours
+  prêts.
+- **Laser** : avec **Rail Gun / Solar Gun toujours chargés**, il passe
+  au niveau 5 (le maximum, avec son son) dès que tu commences à charger,
+  au lieu de passer par les niveaux 1 à 5. Le laser a aussi une réserve
+  d'énergie (le "x/100" du HUD) que chaque tir consomme : elle ne baisse
+  plus, donc chaque tir part au niveau 5. Le rayon garde sa durée
+  normale.
+- La téléportation ne déplace pas REX (seulement la caméra).
+
+### Invisible : les mini Gekko aussi
+
+Les mini Gekko ne détectent plus Snake : leurs lasers ne le reconnaissent
+plus (pas de laser rouge, pas d'alerte), et ni la proximité ni le contact
+ne les font réagir (plus de "!"). Il reste un passage en Prudence si
+Snake reste immobile au milieu d'eux ; "Pas d'alerte" le bloque.
