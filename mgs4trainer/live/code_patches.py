@@ -125,8 +125,17 @@ class CodePatchesMixin:
     #    Letal : destruction au premier coup (jg 11FBF86), flechette
     #    enregistree comme un coup (11DBFE0 la rangeait en simple contact :
     #    bts 11DC059 neutralise) et plus de paralysie (jb 1216CC9 neutralise).
-    #    Non letal : aucun degat (sub 11FBF78 neutralise) et toujours la
-    #    paralysie (je 1216CBF -> jmp 1216D74).
+    #    Non letal : aucun degat (sub 11FBF78 neutralise) et la paralysie pour
+    #    tout coup (1216D74), sauf :
+    #     - mini Gekko deja marque mort (r8 = [+0x1308], bit 1) : reaction
+    #       normale (1216D45, mort 0x13) ;
+    #     - contact de Snake qui marche dessus (type 0x68, sans enregistrement
+    #       de coup, a chaque image) : sursaut normal (1216CD4, reaction 0x16).
+    #    La paralysie relancee a chaque image sur plusieurs mini Gekko laissait
+    #    des taches liberees dans la liste des taches (plantage 2026-10-11,
+    #    73F5EB, taches 11FD310 voisines abimees).
+    #    1216CBF : "test r8b,2 ; jne 1216D45" ;
+    #    1216CC9 : "cmp eax,0x68 ; je 1216CD4 ; jmp 1216D74".
     CODE_PATCHES = {
         "minigekko_lethal": [
             (0x11FBF86, bytes.fromhex("7f08488bcbe890f3"), bytes.fromhex("9090")),
@@ -135,7 +144,10 @@ class CodePatchesMixin:
         ],
         "minigekko_non_lethal": [
             (0x11FBF78, bytes.fromhex("29b3dc1200008b83dc"), bytes.fromhex("909090909090")),
-            (0x1216CBF, bytes.fromhex("0f84af0000000fbae1"), bytes.fromhex("e9b000000090")),
+            (0x1216CBF, bytes.fromhex("0f84af0000000fbae10f"), bytes.fromhex("41f6c0020f857c000000")),
+            # Site partage avec minigekko_lethal (les deux ne sont jamais poses
+            # ensemble : _apply_instant_kill_mode retire d'abord l'autre).
+            (0x1216CC9, bytes.fromhex("0f82a500000083f8687508"), bytes.fromhex("83f8687406e9a1000000")),
         ],
         "boss_non_lethal_kill": [
             (0xB800CC, bytes.fromhex("756f448b891c030000"), bytes.fromhex("9090")),
