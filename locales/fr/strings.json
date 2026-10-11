@@ -74,7 +74,7 @@
   "vitals.untouchable": "Intouchable",
   "vitals.untouchable_tooltip": "Patch de code : Snake ignore tous les impacts - balles, explosions, mines, coups et attaques non létales ne lui font plus rien (ni dégâts, ni projection, ni assommage).",
   "vitals.invisible": "Invisible",
-  "vitals.invisible_tooltip": "Patch de code : les soldats et les Gekko ne voient plus Snake, même debout devant eux (comme le Camouflage furtif, sans la transparence). L'indice de camouflage affiche 99 %. Comme le Camouflage furtif, il ne protège pas des lasers des mini Gekko (détection par contact avec le faisceau, pas par la vue) : cocher aussi « Pas d'alerte » pour que leur détection ne déclenche pas d'alerte.",
+  "vitals.invisible_tooltip": "Patch de code : les soldats, les Gekko et les mini Gekko ne voient plus Snake, même debout devant eux (comme le Camouflage furtif, sans la transparence ; l'indice de camouflage affiche 99 %), et les tirs sans silencieux ne les font plus passer en alerte. Ils peuvent encore entendre les coups contre un mur et venir voir, et le hold-up reste possible. Il reste un passage en Prudence si Snake reste immobile au milieu des mini Gekko : cocher aussi « Pas d'alerte » pour que rien ne déclenche l'alerte générale.",
   "vitals.grip_inactive": "pas suspendu",
   "vitals.oxygen_inactive": "hors de l'eau",
   "vitals.drebin_inactive": "absent",

@@ -1,0 +1,871 @@
+"""Onglet Etat de jeu (reglages en direct, jauges, profils)."""
+from PySide6.QtCore import QTimer, Qt
+from PySide6.QtWidgets import (
+    QButtonGroup, QCheckBox, QComboBox, QGroupBox, QHBoxLayout,
+    QHeaderView, QLabel, QPushButton, QSlider, QTableWidget,
+    QTableWidgetItem, QVBoxLayout, QWidget,
+)
+
+import mgs4save
+
+from mgs4trainer.core.gamedata import ALERT_STATE_NAMES, VITALS
+from mgs4trainer.core.i18n import alert_state_name, tr, vital_display_name
+from mgs4trainer.live import MGS4Live
+from mgs4trainer.ui.common import AMMO_LOCK_REFRESH_MS
+
+
+class VitalsTab(QWidget):
+    """Onglet "Etat de jeu" : Sante/Stamina/Stress/Batterie Solid
+    Eye/Sante Metal Gear REX (live.read_vital_percent/write_vital_percent,
+    voir VITALS) via un curseur 0-100% (pas la valeur brute - la vraie
+    borne max de chaque champ est lue en live et sert a convertir), avec
+    une case "Verrouiller" par ligne (reecrit le pourcentage a chaque
+    rafraichissement - "vie infinie" etc.), plus l'etat d'alerte en
+    lecture seule (l'ecriture ne tient pas, voir ALERT_STATE_RVA)."""
+
+    # Mapping asymetrique centre sur 0 = vitesse normale (1.0x) : moitie
+    # gauche du curseur (-100..0) va de 10% a 100%, moitie droite (0..100)
+    # de 100% a 300% - le curseur reste visuellement symetrique (demande
+    # explicite de l'utilisateur : "au milieu pour la vitesse normale")
+    # meme si la plage de vitesses couverte ne l'est pas.
+    SPEED_SLIDER_RANGE = (-100, 100)
+    SPEED_SLOWDOWN_FLOOR = 0.1  # multiplicateur au bout gauche (-100)
+    SPEED_BOOST_CEILING = 3.0  # multiplicateur au bout droit (+100)
+
+    @classmethod
+    def _speed_from_slider(cls, value: int) -> float:
+        if value <= 0:
+            return 1.0 + (value / 100) * (1.0 - cls.SPEED_SLOWDOWN_FLOOR)
+        return 1.0 + (value / 100) * (cls.SPEED_BOOST_CEILING - 1.0)
+
+    def __init__(self, live: MGS4Live):
+        super().__init__()
+        self.live = live
+        self.value_labels: dict[str, QLabel] = {}
+        self.sliders: dict[str, QSlider] = {}
+        self.lock_checks: dict[str, QCheckBox] = {}
+        self.locked_percents: dict[str, float] = {}
+        # Maximum de chaque jauge du joueur (grip, oxygene), voir
+        # PLAYER_GAUGE_ROWS.
+        self._gauge_max = {name: self.PLAYER_GAUGE_MAX for name in self.PLAYER_GAUGE_ROWS}
+        # "Munitions infinies" : drapeau d'arme du jeu (MGS4Live.
+        # set_infinite_ammo) depuis le 2026-10-04, plus de reecriture des
+        # reserves (l'ancienne boucle faisait ramer le trainer).
+
+        # Degats en paliers pour "Un coup, un mort" sur les boss (voir
+        # _reassert_boss_staged_damage) : contrairement aux ennemis
+        # standards (code-patch, vraie mise a mort en un coup), les boss
+        # n'ont pas d'instruction de degats exploitable - on quantifie
+        # chaque coup REEL en paliers de 25% plutot que de forcer 0
+        # directement (deja teste : forcer 0 soi-meme peut desynchroniser
+        # l'etat du combat et le bloquer, 2026-09-26). Reinitialise a
+        # chaque nouveau pointeur boss_actor2 (nouvelle phase/pool).
+        self._boss_damage_addr: int | None = None
+        self._boss_damage_max_hp: int | None = None
+        self._boss_damage_max_stamina: int | None = None
+        self._boss_damage_step_hp: int = -1
+        self._boss_damage_step_stamina: int = -1
+        # Raging Raven (pas de paliers, voir _reassert_boss_staged_damage) :
+        # derniere valeur observee, pour ne forcer 0 que sur une vraie
+        # transition/baisse detectee, jamais en continu.
+        self._raven_last_hp: int | None = None
+        self._raven_last_stamina: int | None = None
+        self._boss_kill_patched = False
+        # Difficulte d'un profil choisi avant l'accrochage, ecrite par
+        # sync_to_game (la liste se recale sur le jeu a chaque rafraichissement).
+        self._pending_difficulty: int | None = None
+
+        layout = QVBoxLayout(self)
+
+        # Regroupement en QGroupBox par theme (demande utilisateur
+        # 2026-10-01 : l'onglet devenait trop charge en controles empiles
+        # a plat) - purement visuel, aucun changement de comportement des
+        # widgets eux-memes (meme noms, memes connexions).
+        speed_group = QGroupBox(tr("vitals.speed_group"))
+        speed_layout = QVBoxLayout(speed_group)
+
+        speed_row = QHBoxLayout()
+        self.speed_slider = QSlider(Qt.Horizontal)
+        self.speed_slider.setRange(*self.SPEED_SLIDER_RANGE)
+        self.speed_slider.setValue(0)
+        self.speed_slider.valueChanged.connect(self._on_speed_changed)
+        speed_row.addWidget(self.speed_slider, 1)
+        self.speed_value_label = QLabel("100 %")
+        self.speed_value_label.setMinimumWidth(60)
+        speed_row.addWidget(self.speed_value_label)
+        self.pause_check = QCheckBox(tr("vitals.pause"))
+        self.pause_check.toggled.connect(self._on_pause_toggled)
+        speed_row.addWidget(self.pause_check)
+        speed_layout.addLayout(speed_row)
+
+        difficulty_row = QHBoxLayout()
+        difficulty_row.addWidget(QLabel(tr("vitals.difficulty")))
+        self.difficulty_combo = QComboBox()
+        for score in sorted(mgs4save.DIFFICULTY_NAMES):
+            self.difficulty_combo.addItem(tr(f"difficulty.{score}"), score)
+        self.difficulty_combo.setToolTip(tr("vitals.difficulty_tooltip"))
+        self.difficulty_combo.activated.connect(self._on_difficulty_changed)
+        difficulty_row.addWidget(self.difficulty_combo)
+        difficulty_row.addStretch(1)
+        speed_layout.addLayout(difficulty_row)
+        layout.addWidget(speed_group)
+
+        alert_group = QGroupBox(tr("vitals.alert_group"))
+        alert_layout = QVBoxLayout(alert_group)
+
+        alert_row = QHBoxLayout()
+        alert_row.addWidget(QLabel(tr("vitals.alert_real_state")))
+        self.alert_label = QLabel("?")
+        self.alert_label.setStyleSheet("font-weight: bold;")
+        alert_row.addWidget(self.alert_label)
+        alert_row.addStretch(1)
+        alert_layout.addLayout(alert_row)
+
+        force_row = QHBoxLayout()
+        force_row.addWidget(QLabel(tr("vitals.alert_force")))
+        self.alert_force_combo = QComboBox()
+        self.alert_force_combo.addItem(tr("vitals.alert_auto"))
+        for state_value in sorted(ALERT_STATE_NAMES):
+            self.alert_force_combo.addItem(alert_state_name(state_value))
+        self.alert_force_combo.setToolTip(tr("vitals.alert_force_tooltip"))
+        self.alert_force_combo.activated.connect(self._on_alert_force_changed)
+        force_row.addWidget(self.alert_force_combo)
+        force_row.addStretch(1)
+        alert_layout.addLayout(force_row)
+
+        self.no_alerts_check = QCheckBox(tr("vitals.no_alerts"))
+        self.no_alerts_check.setToolTip(tr("vitals.no_alerts_tooltip"))
+        self.no_alerts_check.toggled.connect(self._on_no_alerts_toggled)
+        alert_layout.addWidget(self.no_alerts_check)
+        layout.addWidget(alert_group)
+
+        weapons_group = QGroupBox(tr("vitals.weapons_group"))
+        weapons_layout = QVBoxLayout(weapons_group)
+
+        weapons_row = QHBoxLayout()
+        self.infinite_ammo_check = QCheckBox(tr("vitals.infinite_ammo"))
+        self.infinite_ammo_check.setToolTip(tr("vitals.infinite_ammo_tooltip"))
+        self.infinite_ammo_check.toggled.connect(self._on_infinite_ammo_toggled)
+        weapons_row.addWidget(self.infinite_ammo_check)
+        self.no_reload_check = QCheckBox(tr("vitals.no_reload"))
+        self.no_reload_check.setToolTip(tr("vitals.no_reload_tooltip"))
+        self.no_reload_check.toggled.connect(self._on_no_reload_toggled)
+        weapons_row.addWidget(self.no_reload_check)
+        self.infinite_silencer_check = QCheckBox(tr("vitals.infinite_silencer"))
+        self.infinite_silencer_check.setToolTip(tr("vitals.infinite_silencer_tooltip"))
+        self.infinite_silencer_check.toggled.connect(self._on_infinite_silencer_toggled)
+        weapons_row.addWidget(self.infinite_silencer_check)
+        self.instant_kill_check = QCheckBox(tr("vitals.instant_kill"))
+        self.instant_kill_check.setToolTip(tr("vitals.instant_kill_tooltip"))
+        self.instant_kill_check.toggled.connect(self._apply_instant_kill_mode)
+        weapons_row.addWidget(self.instant_kill_check)
+        pill, self.lethal_btn, self.non_lethal_btn, self._lethal_group = self._build_pill_toggle(
+            tr("vitals.lethal"), tr("vitals.non_lethal")
+        )
+        self.lethal_btn.setToolTip(tr("vitals.lethal_tooltip"))
+        self.non_lethal_btn.setToolTip(tr("vitals.non_lethal_tooltip"))
+        self.lethal_btn.toggled.connect(self._apply_instant_kill_mode)
+        self.non_lethal_btn.toggled.connect(self._apply_instant_kill_mode)
+        weapons_row.addWidget(pill)
+        weapons_row.addStretch(1)
+        weapons_layout.addLayout(weapons_row)
+
+        self.railgun_charge_check = QCheckBox(tr("vitals.railgun_charge"))
+        self.railgun_charge_check.setToolTip(tr("vitals.railgun_charge_tooltip"))
+        self.railgun_charge_check.toggled.connect(self._on_railgun_charge_toggled)
+        weapons_layout.addWidget(self.railgun_charge_check)
+        layout.addWidget(weapons_group)
+
+        snake_group = QGroupBox(tr("vitals.snake_group"))
+        snake_layout = QHBoxLayout(snake_group)
+        self.untouchable_check = QCheckBox(tr("vitals.untouchable"))
+        self.untouchable_check.setToolTip(tr("vitals.untouchable_tooltip"))
+        self.untouchable_check.toggled.connect(self._on_untouchable_toggled)
+        snake_layout.addWidget(self.untouchable_check)
+        self.invisible_check = QCheckBox(tr("vitals.invisible"))
+        self.invisible_check.setToolTip(tr("vitals.invisible_tooltip"))
+        self.invisible_check.toggled.connect(self._on_invisible_toggled)
+        snake_layout.addWidget(self.invisible_check)
+
+        snake_layout.addStretch(1)
+        layout.addWidget(snake_group)
+
+        # Grip, Oxygene : pas dans linkvarbuf (composant du joueur, voir
+        # MGS4Live.read_player_gauge), meme presentation que les autres jauges.
+        names = list(VITALS)
+        names[names.index("Stamina") + 1:names.index("Stamina") + 1] = ["Grip", "Oxygene"]
+        rex = names.index("Sante Metal Gear REX")
+        names[rex:rex] = ["Drebin 893", "Van"]
+        self.table = QTableWidget(len(names), 3)
+        self.table.setHorizontalHeaderLabels([tr("table.field"), tr("table.live_value"), tr("table.lock")])
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.horizontalHeader().setMinimumSectionSize(90)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        layout.addWidget(self.table)
+
+        for row, name in enumerate(names):
+            self._build_row(row, name)
+
+        self.table.resizeColumnToContents(0)
+        self.table.resizeColumnToContents(2)
+
+        # Minuteur dedie (AMMO_LOCK_REFRESH_MS, plus rapide que le cycle
+        # general REFRESH_MS) pour "Munitions infinies"/"Pas de
+        # rechargement" - voir _reassert_ammo_locks.
+        self.ammo_lock_timer = QTimer(self)
+        self.ammo_lock_timer.timeout.connect(self._reassert_ammo_locks)
+        self.ammo_lock_timer.start(AMMO_LOCK_REFRESH_MS)
+
+    @staticmethod
+    def _build_pill_toggle(left_text: str, right_text: str):
+        """2 QPushButton cochables regroupes (exclusif) stylises en une
+        seule "pilule" scindee en deux (coins arrondis uniquement sur les
+        bords exterieurs, pas de bordure au milieu) - demande utilisateur
+        2026-09-26, plus lisible qu'une paire de cases a cocher separees
+        pour un choix mutuellement exclusif. Retourne (widget conteneur,
+        bouton gauche, bouton droit, le QButtonGroup - a garder en vie
+        c'est deja fait via le parent Qt, mais utile si l'appelant veut
+        y toucher)."""
+        container = QWidget()
+        row = QHBoxLayout(container)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(0)
+        left_btn = QPushButton(left_text)
+        right_btn = QPushButton(right_text)
+        base = (
+            "QPushButton {{ {radius} border: 1px solid #808080;"
+            " background: #808080; color: white; padding: 4px 10px; }}"
+            " QPushButton:checked {{ background: #2ea3ff; border-color: #2ea3ff; }}"
+        )
+        left_btn.setStyleSheet(base.format(
+            radius="border-top-left-radius: 13px; border-bottom-left-radius: 13px;"
+                   " border-top-right-radius: 0px; border-bottom-right-radius: 0px;"
+        ))
+        right_btn.setStyleSheet(base.format(
+            radius="border-top-right-radius: 13px; border-bottom-right-radius: 13px;"
+                   " border-top-left-radius: 0px; border-bottom-left-radius: 0px;"
+        ))
+        for btn in (left_btn, right_btn):
+            btn.setCheckable(True)
+            btn.setMinimumHeight(26)
+        group = QButtonGroup(container)
+        group.setExclusive(True)
+        group.addButton(left_btn)
+        group.addButton(right_btn)
+        left_btn.setChecked(True)
+        row.addWidget(left_btn)
+        row.addWidget(right_btn)
+        return container, left_btn, right_btn, group
+
+    def _build_row(self, row: int, name: str):
+        name_item = QTableWidgetItem(vital_display_name(name))
+        name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
+        self.table.setItem(row, 0, name_item)
+
+        control = QWidget()
+        control_layout = QHBoxLayout(control)
+        control_layout.setContentsMargins(4, 0, 4, 0)
+        control_layout.setSpacing(6)
+        slider = QSlider(Qt.Horizontal)
+        slider.setRange(0, 100)
+        slider.valueChanged.connect(lambda value, n=name: self._on_slider_changed(n, value))
+        control_layout.addWidget(slider, 1)
+        self.sliders[name] = slider
+        value_label = QLabel("? %")
+        value_label.setMinimumWidth(90)
+        control_layout.addWidget(value_label)
+        self.value_labels[name] = value_label
+        control.setLayout(control_layout)
+        self.table.setCellWidget(row, 1, control)
+
+        lock = QCheckBox()
+        lock.toggled.connect(lambda checked, n=name: self._on_lock_toggled(n, checked))
+        lock_wrap = QWidget()
+        lock_layout = QHBoxLayout(lock_wrap)
+        lock_layout.setContentsMargins(0, 0, 0, 0)
+        lock_layout.addWidget(lock)
+        lock_layout.setAlignment(Qt.AlignCenter)
+        self.table.setCellWidget(row, 2, lock_wrap)
+        self.lock_checks[name] = lock
+
+    # Lignes du tableau -> jauge MGS4Live.PLAYER_GAUGES (actives seulement
+    # suspendu / sous l'eau). Maximum : 2000 (valeur de depart constatee,
+    # et des champs voisins), ou la plus haute valeur vue si plus grande.
+    PLAYER_GAUGE_ROWS = {"Grip": "grip", "Oxygene": "oxygen", "Drebin 893": "drebin", "Van": "van"}
+    PLAYER_GAUGE_MAX = 2000
+
+    def _on_lock_toggled(self, name: str, checked: bool):
+        if checked:
+            if name in self.PLAYER_GAUGE_ROWS and self._player_gauge_inactive(name):
+                # Curseur fige sur la derniere valeur vue (il ne suit la jauge
+                # que quand elle est active) : verrouiller a 100 % plutot que
+                # sur ce reste, sinon la jauge baisse jusqu'a lui (2026-10-10).
+                slider = self.sliders[name]
+                slider.blockSignals(True)
+                slider.setValue(100)
+                slider.blockSignals(False)
+            self.locked_percents[name] = self.sliders[name].value()
+        else:
+            self.locked_percents.pop(name, None)
+        if name in self.GAUGE_FREEZE_PATCHES:
+            self._apply_gauge_freezes()
+
+    # Jauge verrouillee : le jeu ne l'ecrit plus du tout (patch de code, voir
+    # MGS4Live.CODE_PATCHES), le trainer y ecrit la valeur verrouillee - plus
+    # de petites variations entre deux reecritures.
+    GAUGE_FREEZE_PATCHES = {
+        "Sante": "health_freeze", "Stamina": "stamina_freeze",
+        "Stress": "stress_freeze", "Batterie Solid Eye": "battery_freeze",
+        "Drebin 893": "drebin_freeze", "Van": "drebin_freeze",
+        "Sante Metal Gear REX": "rex_freeze",
+    }
+
+    def _apply_gauge_freezes(self):
+        # Un patch peut servir a plusieurs lignes (Drebin 893 et Van) : pose
+        # si au moins une de ses lignes est verrouillee.
+        wanted: dict[str, bool] = {}
+        for name, patch in self.GAUGE_FREEZE_PATCHES.items():
+            if name in self.lock_checks:
+                wanted[patch] = wanted.get(patch, False) or self.lock_checks[name].isChecked()
+        for patch, enabled in wanted.items():
+            try:
+                self.live.set_code_patch(patch, enabled)
+            except OSError:
+                pass
+
+    def _on_slider_changed(self, name: str, value: int):
+        if not (self.live.connected and self.live.sane):
+            return
+        if name in self.PLAYER_GAUGE_ROWS:
+            # Sans effet quand la jauge n'est pas active (pas suspendu, hors de l'eau).
+            gauge = self.PLAYER_GAUGE_ROWS[name]
+            try:
+                current = self.live.read_player_gauge(gauge)
+                if current is not None and current >= 0:
+                    self.live.write_player_gauge(gauge, round(value / 100 * self._gauge_max[name]))
+            except OSError:
+                pass
+            if name in self.locked_percents:
+                self.locked_percents[name] = value
+            return
+        try:
+            self.live.write_vital_percent(name, value)
+        except OSError:
+            self.value_labels[name].setText("erreur")
+            return
+        if name in self.locked_percents:
+            self.locked_percents[name] = value
+
+    SPEED_STEP_PERCENT = 10
+
+    def speed_percent(self) -> int:
+        return round(self._speed_from_slider(self.speed_slider.value()) * 100)
+
+    def set_speed_percent(self, percent: int) -> int:
+        """Regle la vitesse (10-300 %) via le curseur ; renvoie la valeur retenue."""
+        percent = max(10, min(300, percent))
+        speed = percent / 100
+        if speed <= 1.0:
+            value = (speed - 1.0) / (1.0 - self.SPEED_SLOWDOWN_FLOOR) * 100
+        else:
+            value = (speed - 1.0) / (self.SPEED_BOOST_CEILING - 1.0) * 100
+        self.speed_slider.setValue(round(value))
+        return self.speed_percent()
+
+    def _on_speed_changed(self, value: int):
+        speed = self._speed_from_slider(value)
+        self.speed_value_label.setText(f"{round(speed * 100)} %")
+        if not (self.live.connected and self.live.sane):
+            return
+        self.live.set_game_speed(speed)
+
+    def _on_pause_toggled(self, checked: bool):
+        if not (self.live.connected and self.live.sane):
+            return
+        self.live.set_paused(checked)
+
+    def sync_to_game(self):
+        """La DLL reste dans le jeu apres la fermeture du trainer, avec ses
+        drapeaux (constate 2026-10-04 : "Pas de rechargement" encore actif
+        au lancement suivant, case decochee). A chaque accrochage, on lui
+        renvoie l'etat reel des cases."""
+        if not (self.live.connected and self.live.sane):
+            return
+        if self._pending_difficulty is not None:
+            try:
+                if self.live.write_difficulty(self._pending_difficulty):
+                    self._pending_difficulty = None
+            except OSError:
+                pass
+        self._on_speed_changed(self.speed_slider.value())
+        self._on_pause_toggled(self.pause_check.isChecked())
+        self._on_no_reload_toggled(self.no_reload_check.isChecked())
+        self._on_infinite_ammo_toggled(self.infinite_ammo_check.isChecked())
+        self._on_infinite_silencer_toggled(self.infinite_silencer_check.isChecked())
+        self._on_no_alerts_toggled(self.no_alerts_check.isChecked())
+        self._on_railgun_charge_toggled(self.railgun_charge_check.isChecked())
+        self._on_untouchable_toggled(self.untouchable_check.isChecked())
+        self._on_invisible_toggled(self.invisible_check.isChecked())
+        self._apply_gauge_freezes()
+        self._on_alert_force_changed(self.alert_force_combo.currentIndex())
+        self._apply_instant_kill_mode()
+
+    def _apply_instant_kill_mode(self):
+        """Appele par la case a cocher maitresse ET par le bouton pilule
+        Letal/Non letal (les deux doivent se recalculer ensemble) - un
+        seul des deux effets actif a la fois cote DLL, jamais les deux."""
+        if not (self.live.connected and self.live.sane):
+            return
+        active = self.instant_kill_check.isChecked()
+        lethal = self.lethal_btn.isChecked()
+        self.live.set_one_shot_kill(active and lethal)
+        self.live.set_non_lethal(active and not lethal)
+        # Ce qui n'a pas d'endurance (Gekko, tanks, vehicules, helicopteres,
+        # mini Gekko, objets destructibles) est detruit dans les deux modes.
+        self.live.set_machine_kill(active)
+        try:
+            self.live.set_code_patch("vehicles_one_shot_kill", active)
+            self.live.set_code_patch("liquid_final_kill", active)
+            # Les patchs Letal / Non letal partagent des sites (Crying Wolf) :
+            # retirer d'abord ceux du mode inactif, puis poser ceux du mode actif.
+            lethal_patches = ("minigekko_lethal", "boss_one_shot_kill")
+            non_lethal_patches = ("minigekko_non_lethal", "boss_non_lethal_kill")
+            wanted = lethal_patches if active and lethal else non_lethal_patches if active else ()
+            for name in lethal_patches + non_lethal_patches:
+                if name not in wanted:
+                    self.live.set_code_patch(name, False)
+            results = {name: self.live.set_code_patch(name, True) for name in wanted}
+            self.live.set_code_patch("destructibles_one_shot_kill", active)
+            non_lethal_ok = results.get("boss_non_lethal_kill", False)
+            lethal_ok = results.get("boss_one_shot_kill", False)
+            # Coups des boss geres par le jeu lui-meme (patchs de code) : pas
+            # de degats par paliers ecrits par-dessus (_reassert_boss_staged_damage).
+            self._boss_kill_patched = active and (lethal_ok if lethal else non_lethal_ok)
+        except OSError:
+            self._boss_kill_patched = False
+        # Repart d'une reference 100% fraiche a chaque (re)activation du
+        # mode, voir _reassert_boss_staged_damage.
+        self._boss_damage_addr = None
+        self._boss_damage_step_hp = -1
+        self._boss_damage_step_stamina = -1
+        self._raven_last_hp = None
+        self._raven_last_stamina = None
+
+    def _on_infinite_ammo_toggled(self, checked: bool):
+        try:
+            self.live.set_infinite_ammo(checked)
+            self.live.set_code_patch("rex_infinite_missiles", checked)
+        except OSError:
+            pass
+
+    def _on_no_reload_toggled(self, checked: bool):
+        if not (self.live.connected and self.live.sane):
+            return
+        self.live.set_no_reload(checked)
+        try:
+            self.live.set_code_patch("rex_gun_no_heat", checked)
+        except OSError:
+            pass
+
+    def _on_no_alerts_toggled(self, checked: bool):
+        if not (self.live.connected and self.live.sane):
+            return
+        self.live.set_no_alerts(checked)
+
+    def _player_gauge_inactive(self, name: str) -> bool:
+        if not (self.live.connected and self.live.sane):
+            return True
+        try:
+            value = self.live.read_player_gauge(self.PLAYER_GAUGE_ROWS[name])
+        except OSError:
+            return True
+        return value is None or value < 0
+
+    def _reassert_player_gauges(self):
+        for name, gauge in self.PLAYER_GAUGE_ROWS.items():
+            label = self.value_labels[name]
+            slider = self.sliders[name]
+            value = self.live.read_player_gauge(gauge)
+            if value is None:
+                label.setText("?")
+                continue
+            if value < 0:
+                label.setText(tr(f"vitals.{gauge}_inactive"))
+                continue
+            real_max = self.live.player_gauge_max(gauge)
+            maxi = self._gauge_max[name] = real_max or max(self._gauge_max[name], value)
+            if name in self.locked_percents:
+                target = round(self.locked_percents[name] / 100 * maxi)
+                if value < target:
+                    self.live.write_player_gauge(gauge, target)
+                    value = target
+            percent = value / maxi * 100
+            label.setText(f"{value} / {maxi} ({percent:.1f}%)")
+            if not slider.isSliderDown():
+                slider.blockSignals(True)
+                slider.setValue(round(percent))
+                slider.blockSignals(False)
+
+    def _on_infinite_silencer_toggled(self, checked: bool):
+        try:
+            self.live.set_code_patch("infinite_silencer", checked)
+        except OSError:
+            pass
+
+    def _on_untouchable_toggled(self, checked: bool):
+        try:
+            self.live.set_code_patch("untouchable", checked)
+        except OSError:
+            pass
+
+    def _on_invisible_toggled(self, checked: bool):
+        try:
+            self.live.set_code_patch("invisible", checked)
+        except OSError:
+            pass
+
+    def _on_railgun_charge_toggled(self, checked: bool):
+        if not (self.live.connected and self.live.sane):
+            return
+        self.live.set_railgun_force_charge(checked)
+        try:
+            self.live.set_code_patch("rex_laser_full_charge", checked)
+        except OSError:
+            pass
+
+    # Profils (2026-10-09) : toute la configuration de l'onglet sauf la
+    # pause - vitesse, difficulte, alerte, cases, Letal/Non letal, et pour
+    # chaque jauge son verrou et le niveau verrouille.
+    PROFILE_CHECKS = (
+        "no_alerts", "infinite_ammo", "no_reload", "infinite_silencer", "instant_kill",
+        "railgun_charge", "untouchable", "invisible",
+    )
+
+    def profile_settings(self) -> dict:
+        settings = {
+            "speed": self.speed_slider.value(),
+            "difficulty": self.difficulty_combo.currentData(),
+            "alert_force": self.alert_force_combo.currentIndex(),
+            "lethal": self.lethal_btn.isChecked(),
+            "gauges": {name: {"locked": self.lock_checks[name].isChecked(),
+                              "percent": round(self.locked_percents.get(name, self.sliders[name].value()))}
+                       for name in self.sliders},
+        }
+        for key in self.PROFILE_CHECKS:
+            settings[key] = getattr(self, f"{key}_check").isChecked()
+        return settings
+
+    def apply_profile(self, settings: dict):
+        """Remplit l'onglet avec le profil puis le renvoie au jeu (tout de
+        suite si accroche, sinon a l'accrochage via sync_to_game). Une cle
+        absente vaut desactive."""
+        widgets = [self.speed_slider, self.alert_force_combo, self.lethal_btn, self.non_lethal_btn]
+        widgets += [getattr(self, f"{key}_check") for key in self.PROFILE_CHECKS]
+        for widget in widgets:
+            widget.blockSignals(True)
+        self.speed_slider.setValue(int(settings.get("speed", 0)))
+        self.speed_value_label.setText(f"{round(self._speed_from_slider(self.speed_slider.value()) * 100)} %")
+        self.alert_force_combo.setCurrentIndex(max(0, min(int(settings.get("alert_force", 0)),
+                                                          self.alert_force_combo.count() - 1)))
+        (self.lethal_btn if settings.get("lethal", True) else self.non_lethal_btn).setChecked(True)
+        for key in self.PROFILE_CHECKS:
+            getattr(self, f"{key}_check").setChecked(bool(settings.get(key, False)))
+        for widget in widgets:
+            widget.blockSignals(False)
+
+        gauges = settings.get("gauges", {})
+        for name, slider in self.sliders.items():
+            gauge = gauges.get(name, {})
+            lock = self.lock_checks[name]
+            if gauge.get("locked"):
+                percent = max(0, min(int(gauge.get("percent", 100)), 100))
+                if name in self.PLAYER_GAUGE_ROWS and percent == 0:
+                    # Profil enregistre jauge inactive (curseur a 0) : un verrou
+                    # a 0 % ne remonterait jamais la jauge (2026-10-10).
+                    percent = 100
+                slider.blockSignals(True)
+                slider.setValue(percent)
+                slider.blockSignals(False)
+                lock.setChecked(True)
+                self.locked_percents[name] = percent  # reecrit au prochain rafraichissement
+            else:
+                lock.setChecked(False)
+
+        difficulty = settings.get("difficulty")
+        self._pending_difficulty = difficulty if difficulty in mgs4save.DIFFICULTY_NAMES else None
+        if self._pending_difficulty is not None:
+            self.difficulty_combo.setCurrentIndex(self.difficulty_combo.findData(self._pending_difficulty))
+        self.sync_to_game()
+
+    def _on_difficulty_changed(self, index: int):
+        try:
+            self.live.write_difficulty(self.difficulty_combo.itemData(index))
+        except OSError:
+            pass
+
+    ALERT_FORCE_ALERT_INDEX = 2  # Automatique, Normal, Alerte, Evasion, Prudence
+
+    def _on_alert_force_changed(self, index: int):
+        if not (self.live.connected and self.live.sane):
+            return
+        if index == self.ALERT_FORCE_ALERT_INDEX:
+            # Vraie alerte donnee par un soldat (musique, recherche, compte a
+            # rebours que le jeu reprend au retour en Automatique).
+            try:
+                self.live.trigger_real_alert()
+            except OSError:
+                pass
+        if index == 0:
+            self.live.set_alert_mode_override(None)
+        else:
+            self.live.set_alert_mode_override(index - 1)
+
+    def _reassert_ammo_locks(self):
+        """Cycle dedie (AMMO_LOCK_REFRESH_MS, independant du
+        rafraichissement general de l'UI) : certaines armes tirent assez
+        vite pour vider plusieurs coups entre deux cycles a REFRESH_MS
+        (750ms) avant correction, visible/genant (demande utilisateur
+        2026-09-26)."""
+        if not (self.live.connected and self.live.sane):
+            return
+        if self.infinite_ammo_check.isChecked():
+            # Le jeu peut reconstruire la table des armes (chargement de
+            # zone) : on reverifie le drapeau (une lecture, ecriture rare).
+            try:
+                self.live.set_infinite_ammo(True)
+            except OSError:
+                pass
+        try:
+            self._reassert_player_gauges()
+        except OSError:
+            pass
+        if self.alert_force_combo.currentIndex() == self.ALERT_FORCE_ALERT_INDEX:
+            try:
+                self.live.hold_alert_timer()
+            except OSError:
+                pass
+        # "Pas de rechargement" : patch de code (install_no_reload_hook),
+        # plus besoin de reassertion ici depuis le 2026-09-29 - voir
+        # _on_no_reload_toggled.
+        if self.instant_kill_check.isChecked():
+            try:
+                self._reassert_boss_staged_damage()
+            except OSError:
+                pass
+
+    # Paliers successifs (fraction de la reference 100% capturee a
+    # l'activation/au changement de phase) - le dernier palier est un
+    # reste volontairement non nul : le coup final reste un vrai coup du
+    # jeu plutot qu'une ecriture memoire, pour ne pas court-circuiter
+    # l'evenement de victoire/KO du jeu (voir commentaire plus bas). Par
+    # paliers de 10% (90% a 10%) plutot que 25% - premier essai a 75%
+    # juge trop brutal (demande utilisateur 2026-09-26).
+    BOSS_DAMAGE_STEPS = tuple(i / 10 for i in range(9, 0, -1))
+
+    def _reassert_boss_staged_damage(self):
+        """Les boss ne passent pas par l'instruction de degats patchee
+        (one_shot_kill normal pour les ennemis standards) - pas
+        d'equivalent trouve malgre plusieurs pistes (voir notes.md). A la
+        place : chaque coup REEL encaisse par le boss (vie en mode Letal,
+        stamina en mode Non letal, deux mecanismes distincts selon la
+        phase, constate sur le boss 1) fait chuter la jauge au palier
+        suivant plutot que de la forcer directement a 0. Deja teste et
+        confirme dangereux (2026-09-26) : forcer 0 nous-memes plutot que
+        via un vrai coup du jeu peut desynchroniser l'etat du combat et le
+        bloquer completement (necessite alors de recharger un
+        checkpoint) - le dernier palier laisse donc volontairement un
+        reste (5%), le coup qui l'acheve reste un vrai coup traite
+        normalement par le jeu. Detection automatique du boss actif (voir
+        MGS4Live.active_boss_addr) : deux boss testes a ce jour, deux
+        jeux d'offsets differents selon le hook qui se declenche."""
+        addr = self.live.active_boss_addr()
+        if not addr:
+            self._boss_damage_addr = None
+            return
+
+        if self._boss_kill_patched:
+            # Mise a mort geree par le jeu lui-meme (CODE_PATCHES
+            # "boss_one_shot_kill" : Laughing Octopus et sa Beauty, Raging
+            # Raven) : rien a ecrire par-dessus. Evite aussi de se fier a
+            # active_boss_kind, trompe par un pointeur boss_actor2 perime
+            # (encore l'armure d'Octopus pendant le combat contre Raven).
+            return
+
+        if self.live.active_boss_kind() == "raven":
+            # Pas de mecanisme multi-phases connu pour ce boss (demande
+            # utilisateur 2026-09-27, a l'inverse du premier boss) - on
+            # force directement 0 plutot que de passer par les paliers de
+            # precaution ci-dessous, mais SEULEMENT quand une vraie baisse
+            # est detectee (un coup reel), jamais en continu a chaque
+            # cycle de 50ms - ecrire sans arret a fait planter le jeu
+            # (constate 2026-09-27).
+            if addr != self._boss_damage_addr:
+                self._boss_damage_addr = addr
+                self._raven_last_hp = self.live.active_boss_hp()
+                self._raven_last_stamina = self.live.active_boss_stamina()
+                return
+
+            current_hp = self.live.active_boss_hp()
+            hp_hit_detected = (current_hp is not None and self._raven_last_hp is not None
+                                and current_hp < self._raven_last_hp)
+
+            if self.lethal_btn.isChecked():
+                if hp_hit_detected:
+                    self.live.set_active_boss_hp(0)
+                    current_hp = 0
+                self._raven_last_hp = current_hp
+                return
+
+            # Non letal : n'importe quelle arme (letale ou non) fait
+            # avancer la stamina - contrairement a Laughing Octopus, pas
+            # besoin de restaurer la vie ici (demande utilisateur
+            # 2026-09-27) : un tir letal reste applique normalement, il
+            # sert juste aussi de signal pour faire chuter la stamina.
+            current_stamina = self.live.active_boss_stamina()
+            stamina_hit_detected = (current_stamina is not None and self._raven_last_stamina is not None
+                                     and current_stamina < self._raven_last_stamina)
+            if hp_hit_detected or stamina_hit_detected:
+                self.live.set_active_boss_stamina(0)
+                current_stamina = 0
+            self._raven_last_stamina = current_stamina
+            return
+
+        if addr != self._boss_damage_addr:
+            # Nouveau boss ou nouvelle phase (pool de vie/stamina
+            # different, ex. 7200 en phase 1 vs une autre valeur ensuite) -
+            # nouvelle reference 100%. Ne verrouille PAS addr tant que les
+            # deux valeurs lues ne sont pas franchement positives : si une
+            # session precedente (test manuel, ancien palier) avait laisse
+            # la vie ou la stamina a 0 pile a cette adresse, une reference
+            # a 0 casse tout le calcul de paliers pour le reste du combat
+            # (constate 2026-09-26, stamina restee a 0 apres un test
+            # manuel puis changement de scene).
+            fresh_hp = self.live.active_boss_hp()
+            fresh_stamina = self.live.active_boss_stamina()
+            if not fresh_hp or not fresh_stamina:
+                return
+            self._boss_damage_addr = addr
+            self._boss_damage_max_hp = fresh_hp
+            self._boss_damage_max_stamina = fresh_stamina
+            self._boss_damage_step_hp = -1
+            self._boss_damage_step_stamina = -1
+
+        lethal = self.lethal_btn.isChecked()
+        max_hp = self._boss_damage_max_hp
+        current_hp = self.live.active_boss_hp()
+        if current_hp is None or not max_hp:
+            return
+
+        if lethal:
+            step_idx = self._boss_damage_step_hp
+            next_idx = step_idx + 1
+            if next_idx >= len(self.BOSS_DAMAGE_STEPS):
+                return  # dernier palier deja atteint, on laisse le jeu finir normalement
+            current_floor = int(max_hp * self.BOSS_DAMAGE_STEPS[step_idx]) if step_idx >= 0 else max_hp
+            if current_hp >= current_floor:
+                return  # pas de nouveau coup reel depuis le dernier palier force
+            new_floor = int(max_hp * self.BOSS_DAMAGE_STEPS[next_idx])
+            self.live.set_active_boss_hp(new_floor)
+            self._boss_damage_step_hp = next_idx
+            return
+
+        # Non letal : n'importe quelle arme fait avancer la stamina par
+        # paliers (comme le code-patch le fait pour les ennemis standards,
+        # qui ignore la lethalite reelle de l'arme) - la vie reelle ne
+        # doit jamais baisser dans ce mode, sinon le boss pourrait mourir
+        # "pour de vrai" malgre le mode choisi. On restaure donc la vie si
+        # un tir letal vient de l'entamer, et on detecte le coup via CE
+        # signal (vie entamee) OU via une vraie baisse de stamina (arme
+        # non letale utilisee directement) - le premier des deux qui se
+        # produit fait avancer le palier de stamina.
+        hp_hit_detected = current_hp < max_hp
+        if hp_hit_detected:
+            self.live.set_active_boss_hp(max_hp)
+
+        max_stamina = self._boss_damage_max_stamina
+        current_stamina = self.live.active_boss_stamina()
+        step_idx = self._boss_damage_step_stamina
+        next_idx = step_idx + 1
+        if next_idx >= len(self.BOSS_DAMAGE_STEPS):
+            return
+        if current_stamina is None or not max_stamina:
+            return
+        current_floor = int(max_stamina * self.BOSS_DAMAGE_STEPS[step_idx]) if step_idx >= 0 else max_stamina
+        stamina_hit_detected = current_stamina < current_floor
+        if not (hp_hit_detected or stamina_hit_detected):
+            return
+        new_floor = int(max_stamina * self.BOSS_DAMAGE_STEPS[next_idx])
+        self.live.set_active_boss_stamina(new_floor)
+        self._boss_damage_step_stamina = next_idx
+
+    def set_advanced(self, advanced: bool):
+        pass  # pas de mode simple/avance distinct ici
+
+    def refresh(self):
+        if not (self.live.connected and self.live.sane):
+            for label in self.value_labels.values():
+                label.setText("?")
+            self.alert_label.setText("?")
+            self.speed_slider.setEnabled(False)
+            self.pause_check.setEnabled(False)
+            self.infinite_ammo_check.setEnabled(False)
+            self.no_reload_check.setEnabled(False)
+            self.infinite_silencer_check.setEnabled(False)
+            self.no_alerts_check.setEnabled(False)
+            self.railgun_charge_check.setEnabled(False)
+            self.untouchable_check.setEnabled(False)
+            self.invisible_check.setEnabled(False)
+            self.alert_force_combo.setEnabled(False)
+            self.difficulty_combo.setEnabled(False)
+            self.instant_kill_check.setEnabled(False)
+            self.lethal_btn.setEnabled(False)
+            self.non_lethal_btn.setEnabled(False)
+            return
+        self.difficulty_combo.setEnabled(True)
+        if not self.difficulty_combo.view().isVisible():
+            try:
+                index = self.difficulty_combo.findData(self.live.read_difficulty())
+            except OSError:
+                index = -1
+            self.difficulty_combo.setCurrentIndex(index)
+        self.speed_slider.setEnabled(True)
+        self.pause_check.setEnabled(True)
+        self.infinite_ammo_check.setEnabled(True)
+        self.no_reload_check.setEnabled(True)
+        self.infinite_silencer_check.setEnabled(True)
+        self.no_alerts_check.setEnabled(True)
+        self.railgun_charge_check.setEnabled(True)
+        self.untouchable_check.setEnabled(True)
+        self.invisible_check.setEnabled(True)
+        self.alert_force_combo.setEnabled(True)
+        self.instant_kill_check.setEnabled(True)
+        self.lethal_btn.setEnabled(True)
+        self.non_lethal_btn.setEnabled(True)
+
+        for name in VITALS:
+            if name in self.locked_percents:
+                try:
+                    self.live.write_vital_percent(name, self.locked_percents[name])
+                except OSError:
+                    pass
+            label = self.value_labels[name]
+            slider = self.sliders[name]
+            try:
+                raw = self.live.read_vital(name)
+                maxi = self.live.read_vital_max(name)
+                percent = (raw / maxi * 100) if maxi else 0.0
+            except OSError:
+                label.setText("?")
+                continue
+            label.setText(f"{raw} / {maxi} ({percent:.1f}%)")
+            if not slider.isSliderDown():
+                slider.blockSignals(True)
+                slider.setValue(round(percent))
+                slider.blockSignals(False)
+
+        try:
+            alert = self.live.read_alert_state()
+            self.alert_label.setText(alert_state_name(alert) if alert in ALERT_STATE_NAMES else tr("alert.unknown", value=alert))
+        except OSError:
+            self.alert_label.setText("?")
