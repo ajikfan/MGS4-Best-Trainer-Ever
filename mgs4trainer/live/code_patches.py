@@ -116,8 +116,9 @@ class CodePatchesMixin:
     #    B800B0 ("jle" 1434BCF) et ecriture de vie 1434D68 neutralisee ;
     #    Beauty, "je" vers le chemin vie (1173BC7) neutralise - valides en
     #    jeu. Raging Raven : chemin vie redirige vers l'appel d'endurance
-    #    (13F8BFF -> jmp 13F8C6D) ; Screaming Mantis bete : ecriture de vie
-    #    F08FF0 neutralisee (l'endurance a 0 lance la defaite) - non testes.
+    #    (13F8BFF -> jmp 13F8C6D), valide en jeu au M4 (2026-10-12) ;
+    #    Screaming Mantis bete : ecriture de vie F08FF0 neutralisee
+    #    (l'endurance a 0 lance la defaite) - non teste.
     #  - Mini Gekko (2026-10-10, comme les soldats) : 1216B90 choisit la
     #    reaction apres un coup ; type 0x37 ou bit 15 (flechette) -> 0x15
     #    (paralysie), meme si le drapeau "mort" (+0x1308 bit 1, pose par

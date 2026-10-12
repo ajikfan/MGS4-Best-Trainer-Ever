@@ -46,20 +46,12 @@
  * appliques du tout, voir install_damage_hook), [24] uint64
  * last_damaged_actor (pointeur brut vers le dernier personnage touche,
  * diagnostic uniquement - permet d'inspecter cote Python un personnage
- * sur lequel one_shot_kill n'a pas d'effet, ex. un boss), [32] uint64
- * boss_actor (pointeur brut vers l'acteur boss actif, mis a jour par un
- * second hook de lecture seule distinct de celui des degats - les boss ne
- * passent pas par l'instruction patchee pour one_shot_kill, voir
- * install_boss_tracker_hook), [40] uint8 boss_hook_installed, [41] uint8
- * boss_hook_error (memes codes que damage_hook_error), [42] uint64
- * boss_actor2 (meme idee, troisieme point d'injection distinct - routine
- * generique de recopie HP/parametres vers l'affichage, voir
- * install_boss_tracker_hook2), [50] uint8 boss_hook2_installed, [51]
- * uint8 boss_hook2_error, [52] uint64 coord_actor (pointeur brut capture
- * par une routine generique de calcul de distance entre deux acteurs -
- * position (X/Y/Z, 3 floats) a +0x10/+0x14/+0x18 de ce pointeur, voir
- * install_coord_tracker_hook), [60] uint8 coord_hook_installed, [61]
- * uint8 coord_hook_error, [62] uint8 gecko_hook_installed, [63] uint8
+ * sur lequel one_shot_kill n'a pas d'effet, ex. un boss), [32..61]
+ * reserve (anciens hooks de suivi des boss et des coordonnees, repris de
+ * la table CE communautaire et retires le 2026-10-12 : la position vient
+ * de la table des joueurs du jeu, les boss de patchs de code - octets
+ * gardes pour ne pas decaler les offsets lus cote Python), [62] uint8
+ * gecko_hook_installed, [63] uint8
  * gecko_hook_error - meme principe que damage_hook_installed/error mais
  * pour install_gecko_one_shot_kill_hook (instruction de degats separee,
  * commune aux Gecko et aux tanks, partage le flag one_shot_kill mais pas non_lethal -
@@ -152,15 +144,7 @@ typedef struct {
     UINT8 damage_hook_error;
     UINT8 non_lethal;
     UINT64 last_damaged_actor;
-    UINT64 boss_actor;
-    UINT8 boss_hook_installed;
-    UINT8 boss_hook_error;
-    UINT64 boss_actor2;
-    UINT8 boss_hook2_installed;
-    UINT8 boss_hook2_error;
-    UINT64 coord_actor;
-    UINT8 coord_hook_installed;
-    UINT8 coord_hook_error;
+    UINT8 reserved_32[30]; /* anciens boss/coord trackers, voir plus haut */
     UINT8 gecko_hook_installed;
     UINT8 gecko_hook_error;
     UINT8 no_reload;
@@ -1024,274 +1008,6 @@ static BOOL install_r12_probe_hook(void) {
     INT32 relJmp = (INT32)relToTrampoline;
     memcpy(objProbe + 1, &relJmp, 4);
     VirtualProtect(objProbe, 5, oldProt, &oldProt);
-
-    return TRUE;
-}
-
-/* Hook de tracking pur (lecture seule, ne modifie aucun comportement du
- * jeu) sur la routine generique de mise a jour des parties/points faibles
- * des boss (motif repris du script CE communautaire "Bosses 2" - generique
- * a tous les boss, pas specifique a un seul). Les boss ne passent pas par
- * l'instruction patchee par install_one_shot_kill_hook, d'ou ce second
- * point d'injection distinct pour au moins obtenir leur pointeur d'acteur.
- *
- * Trampoline (26 octets) :
- *   0   push rax / mov rax,&boss_actor / mov [rax],rdi / pop rax
- *   15  PASS: <6 octets originaux : mov esi,[rdi+0xE8]>
- *   21  jmp BACK
- *   26  (fin) */
-static BOOL install_boss_tracker_hook(void) {
-    HMODULE base = GetModuleHandle(NULL);
-    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
-    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
-    SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
-
-    /* mov esi,[rdi+0xE8] ; mov r14d,[rdi+0xF0] - aucun joker, motif exact
-     * (13 octets, seuls les 6 premiers sont remplaces par le jmp). */
-    static const BYTE pattern[] = {0x8B, 0xB7, 0xE8, 0x00, 0x00, 0x00,
-                                    0x44, 0x8B, 0xB7, 0xF0, 0x00, 0x00, 0x00};
-    static const char mask[] = "xxxxxxxxxxxxx";
-
-    BYTE *objBoss = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
-    if (!objBoss) {
-        g_shared->boss_hook_error = 1;
-        return FALSE;
-    }
-
-    BYTE *trampoline = alloc_near(objBoss, 4096);
-    if (!trampoline) {
-        g_shared->boss_hook_error = 2;
-        return FALSE;
-    }
-
-    UINT64 bossActorAddr = (UINT64)&g_shared->boss_actor;
-    BYTE code[26];
-    SIZE_T p = 0;
-
-    /* push rax ; mov rax,&boss_actor ; mov [rax],rdi ; pop rax */
-    code[p++] = 0x50;
-    code[p++] = 0x48;
-    code[p++] = 0xB8;
-    memcpy(&code[p], &bossActorAddr, 8);
-    p += 8;
-    code[p++] = 0x48;
-    code[p++] = 0x89;
-    code[p++] = 0x38; /* mov [rax],rdi (ModRM: mod=00,reg=rdi(111),rm=rax(000)) */
-    code[p++] = 0x58;
-
-    /* PASS : instruction originale (6 octets copies tels quels) */
-    memcpy(&code[p], objBoss, 6);
-    p += 6;
-
-    /* jmp BACK (vers objBoss+6, suite du code original jamais modifiee) */
-    code[p++] = 0xE9;
-    {
-        BYTE *nextInstrAddr = trampoline + p + 4;
-        INT64 rel64 = (INT64)(objBoss + 6) - (INT64)nextInstrAddr;
-        if (rel64 > 0x7FFFFFFFLL || rel64 < -0x80000000LL) {
-            g_shared->boss_hook_error = 3;
-            return FALSE;
-        }
-        INT32 rel = (INT32)rel64;
-        memcpy(&code[p], &rel, 4);
-        p += 4;
-    }
-
-    memcpy(trampoline, code, p);
-
-    INT64 relToTrampoline = (INT64)trampoline - (INT64)(objBoss + 5);
-    if (relToTrampoline > 0x7FFFFFFFLL || relToTrampoline < -0x80000000LL) {
-        g_shared->boss_hook_error = 3;
-        return FALSE;
-    }
-
-    DWORD oldProt;
-    VirtualProtect(objBoss, 6, PAGE_EXECUTE_READWRITE, &oldProt);
-    objBoss[0] = 0xE9;
-    INT32 relJmp = (INT32)relToTrampoline;
-    memcpy(objBoss + 1, &relJmp, 4);
-    objBoss[5] = 0x90;
-    VirtualProtect(objBoss, 6, oldProt, &oldProt);
-
-    return TRUE;
-}
-
-/* Second hook de tracking (lecture seule), motif repris du script CE
- * communautaire "Bosses Laughing Octopus" - malgre son nom, le motif ne
- * contient aucun octet specifique a ce boss : c'est la routine generique
- * qui recopie HP/parametres de l'acteur (rcx) vers un buffer d'affichage,
- * en lisant [rcx+0x314] (meme offset HP que partout ailleurs). Point
- * d'injection distinct de install_boss_tracker_hook (rdi) et de
- * install_one_shot_kill_hook.
- *
- * Trampoline (26 octets) :
- *   0   push rax / mov rax,&boss_actor2 / mov [rax],rcx / pop rax
- *   15  PASS: <6 octets originaux : mov eax,[rcx+0x314]>
- *   21  jmp BACK
- *   26  (fin) */
-static BOOL install_boss_tracker_hook2(void) {
-    HMODULE base = GetModuleHandle(NULL);
-    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
-    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
-    SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
-
-    /* jmp xxxxxxxx ; mov rcx,[rbx+xxxxxxxx] ; mov eax,[rcx+0x314] -
-     * les 4+4 octets de deplacement sont des jokers, le reste (opcodes,
-     * plus les 2 premiers octets utilises comme signature) doit
-     * correspondre exactement. Redirection au point objBoss2 = match+0xC
-     * (debut de "mov eax,[rcx+0x314]"), pas au debut du motif. */
-    static const BYTE pattern[] = {0xE9, 0, 0, 0, 0, 0x48, 0x8B, 0x8B, 0, 0, 0, 0, 0x8B, 0x81, 0x14, 0x03};
-    static const char mask[] = "x????xxx????xxxx";
-
-    BYTE *raw = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
-    if (!raw) {
-        g_shared->boss_hook2_error = 1;
-        return FALSE;
-    }
-    BYTE *objBoss2 = raw + 0xC;
-
-    BYTE *trampoline = alloc_near(objBoss2, 4096);
-    if (!trampoline) {
-        g_shared->boss_hook2_error = 2;
-        return FALSE;
-    }
-
-    UINT64 bossActor2Addr = (UINT64)&g_shared->boss_actor2;
-    BYTE code[26];
-    SIZE_T p = 0;
-
-    /* push rax ; mov rax,&boss_actor2 ; mov [rax],rcx ; pop rax */
-    code[p++] = 0x50;
-    code[p++] = 0x48;
-    code[p++] = 0xB8;
-    memcpy(&code[p], &bossActor2Addr, 8);
-    p += 8;
-    code[p++] = 0x48;
-    code[p++] = 0x89;
-    code[p++] = 0x08; /* mov [rax],rcx (ModRM: mod=00,reg=rcx(001),rm=rax(000)) */
-    code[p++] = 0x58;
-
-    /* PASS : instruction originale (6 octets copies tels quels) */
-    memcpy(&code[p], objBoss2, 6);
-    p += 6;
-
-    /* jmp BACK (vers objBoss2+6, suite du code original jamais modifiee) */
-    code[p++] = 0xE9;
-    {
-        BYTE *nextInstrAddr = trampoline + p + 4;
-        INT64 rel64 = (INT64)(objBoss2 + 6) - (INT64)nextInstrAddr;
-        if (rel64 > 0x7FFFFFFFLL || rel64 < -0x80000000LL) {
-            g_shared->boss_hook2_error = 3;
-            return FALSE;
-        }
-        INT32 rel = (INT32)rel64;
-        memcpy(&code[p], &rel, 4);
-        p += 4;
-    }
-
-    memcpy(trampoline, code, p);
-
-    INT64 relToTrampoline = (INT64)trampoline - (INT64)(objBoss2 + 5);
-    if (relToTrampoline > 0x7FFFFFFFLL || relToTrampoline < -0x80000000LL) {
-        g_shared->boss_hook2_error = 3;
-        return FALSE;
-    }
-
-    DWORD oldProt;
-    VirtualProtect(objBoss2, 6, PAGE_EXECUTE_READWRITE, &oldProt);
-    objBoss2[0] = 0xE9;
-    INT32 relJmp = (INT32)relToTrampoline;
-    memcpy(objBoss2 + 1, &relJmp, 4);
-    objBoss2[5] = 0x90;
-    VirtualProtect(objBoss2, 6, oldProt, &oldProt);
-
-    return TRUE;
-}
-
-/* Troisieme hook de tracking (lecture seule), motif repris du script CE
- * communautaire "aob Coordinates" - routine generique de calcul de
- * distance entre deux acteurs (alerte/rayon de detection...), capture
- * rbx (l'acteur "cible" du calcul, pas forcement toujours le joueur mais
- * un bon point de depart pour tester la position X/Y/Z a +0x10/+0x14/
- * +0x18 de ce pointeur, memes offsets que documente par le CE table).
- *
- * Trampoline (25 octets) :
- *   0   push rax / mov rax,&coord_actor / mov [rax],rbx / pop rax
- *   15  PASS: <5 octets originaux : movss xmm1,[rbx+0x14]>
- *   20  jmp BACK
- *   25  (fin) */
-static BOOL install_coord_tracker_hook(void) {
-    HMODULE base = GetModuleHandle(NULL);
-    PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
-    PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
-    SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
-
-    /* 02 74 ? F3 0F 10 ? ? F3 0F 10 ? ? F3 - le point d'injection reel est
-     * a +3 (debut de "F3 0F 10 4B 14"), pas au debut du motif. */
-    static const BYTE pattern[] = {0x02, 0x74, 0, 0xF3, 0x0F, 0x10, 0, 0,
-                                    0xF3, 0x0F, 0x10, 0, 0, 0xF3};
-    static const char mask[] = "xx?xxx??xxx??x";
-
-    BYTE *raw = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
-    if (!raw) {
-        g_shared->coord_hook_error = 1;
-        return FALSE;
-    }
-    BYTE *objCoord = raw + 3;
-
-    BYTE *trampoline = alloc_near(objCoord, 4096);
-    if (!trampoline) {
-        g_shared->coord_hook_error = 2;
-        return FALSE;
-    }
-
-    UINT64 coordActorAddr = (UINT64)&g_shared->coord_actor;
-    BYTE code[25];
-    SIZE_T p = 0;
-
-    /* push rax ; mov rax,&coord_actor ; mov [rax],rbx ; pop rax */
-    code[p++] = 0x50;
-    code[p++] = 0x48;
-    code[p++] = 0xB8;
-    memcpy(&code[p], &coordActorAddr, 8);
-    p += 8;
-    code[p++] = 0x48;
-    code[p++] = 0x89;
-    code[p++] = 0x18; /* mov [rax],rbx (ModRM: mod=00,reg=rbx(011),rm=rax(000)) */
-    code[p++] = 0x58;
-
-    /* PASS : instruction originale (5 octets copies tels quels) */
-    memcpy(&code[p], objCoord, 5);
-    p += 5;
-
-    /* jmp BACK (vers objCoord+5, suite du code original jamais modifiee) */
-    code[p++] = 0xE9;
-    {
-        BYTE *nextInstrAddr = trampoline + p + 4;
-        INT64 rel64 = (INT64)(objCoord + 5) - (INT64)nextInstrAddr;
-        if (rel64 > 0x7FFFFFFFLL || rel64 < -0x80000000LL) {
-            g_shared->coord_hook_error = 3;
-            return FALSE;
-        }
-        INT32 rel = (INT32)rel64;
-        memcpy(&code[p], &rel, 4);
-        p += 4;
-    }
-
-    memcpy(trampoline, code, p);
-
-    INT64 relToTrampoline = (INT64)trampoline - (INT64)(objCoord + 5);
-    if (relToTrampoline > 0x7FFFFFFFLL || relToTrampoline < -0x80000000LL) {
-        g_shared->coord_hook_error = 3;
-        return FALSE;
-    }
-
-    DWORD oldProt;
-    VirtualProtect(objCoord, 5, PAGE_EXECUTE_READWRITE, &oldProt);
-    objCoord[0] = 0xE9;
-    INT32 relJmp = (INT32)relToTrampoline;
-    memcpy(objCoord + 1, &relJmp, 4);
-    VirtualProtect(objCoord, 5, oldProt, &oldProt);
 
     return TRUE;
 }
@@ -2618,15 +2334,7 @@ static DWORD WINAPI InitThread(LPVOID param) {
             g_shared->probe_seq = 0;
             g_shared->probe_hook_installed = 0;
             g_shared->probe_hook_error = 0;
-            g_shared->boss_actor = 0;
-            g_shared->boss_hook_installed = 0;
-            g_shared->boss_hook_error = 0;
-            g_shared->boss_actor2 = 0;
-            g_shared->boss_hook2_installed = 0;
-            g_shared->boss_hook2_error = 0;
-            g_shared->coord_actor = 0;
-            g_shared->coord_hook_installed = 0;
-            g_shared->coord_hook_error = 0;
+            memset((void *)g_shared->reserved_32, 0, sizeof(g_shared->reserved_32));
             g_shared->gecko_hook_installed = 0;
             g_shared->gecko_hook_error = 0;
             g_shared->no_reload = 0;
@@ -2680,20 +2388,6 @@ static DWORD WINAPI InitThread(LPVOID param) {
     /* Hook de diagnostic temporaire, voir install_r12_probe_hook. */
     if (g_shared && install_r12_probe_hook()) {
         g_shared->probe_hook_installed = 1;
-    }
-
-    /* Hook de tracking pur, voir install_boss_tracker_hook - independant
-     * du precedent, echec silencieux egalement possible. */
-    if (g_shared && install_boss_tracker_hook()) {
-        g_shared->boss_hook_installed = 1;
-    }
-
-    if (g_shared && install_boss_tracker_hook2()) {
-        g_shared->boss_hook2_installed = 1;
-    }
-
-    if (g_shared && install_coord_tracker_hook()) {
-        g_shared->coord_hook_installed = 1;
     }
 
     if (g_shared && install_gecko_one_shot_kill_hook()) {

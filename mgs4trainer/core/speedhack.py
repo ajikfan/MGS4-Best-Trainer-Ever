@@ -261,47 +261,8 @@ class SpeedController:
         personnages (boss). 0 si aucun coup enregistre depuis l'injection."""
         return self._read_u64_at(24)
 
-    def boss_actor(self) -> int | None:
-        """Diagnostic : pointeur brut vers l'acteur boss actif, capture
-        par un second hook de lecture seule (voir install_boss_tracker_hook
-        dans native/speedhack.c) - les boss ne passent pas par l'instruction
-        patchee pour one_shot_kill, d'ou ce point d'injection distinct."""
-        return self._read_u64_at(32)
-
-    def boss_hook_installed(self) -> bool | None:
-        val = self._read_u8_at(40)
-        return None if val is None else bool(val)
-
-    def boss_hook_error(self) -> int | None:
-        """Memes codes que damage_hook_error()."""
-        return self._read_u8_at(41)
-
-    def boss_actor2(self) -> int | None:
-        """Diagnostic : meme idee que boss_actor mais capture au niveau
-        de la routine generique de recopie HP vers l'affichage (rcx),
-        voir install_boss_tracker_hook2 dans native/speedhack.c."""
-        return self._read_u64_at(42)
-
-    def boss_hook2_installed(self) -> bool | None:
-        val = self._read_u8_at(50)
-        return None if val is None else bool(val)
-
-    def boss_hook2_error(self) -> int | None:
-        return self._read_u8_at(51)
-
-    def coord_actor(self) -> int | None:
-        """Diagnostic : pointeur brut capture par une routine generique de
-        calcul de distance entre deux acteurs (voir install_coord_tracker_hook
-        dans native/speedhack.c) - pas forcement toujours le joueur, test
-        en cours (2026-09-27)."""
-        return self._read_u64_at(52)
-
-    def coord_hook_installed(self) -> bool | None:
-        val = self._read_u8_at(60)
-        return None if val is None else bool(val)
-
-    def coord_hook_error(self) -> int | None:
-        return self._read_u8_at(61)
+    # Offsets 32 a 61 : reserves (anciens hooks de suivi des boss et des
+    # coordonnees, retires le 2026-10-12, voir native/speedhack.c).
 
     def gecko_hook_installed(self) -> bool | None:
         val = self._read_u8_at(62)

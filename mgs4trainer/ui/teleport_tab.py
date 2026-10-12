@@ -15,14 +15,10 @@ from mgs4trainer.ui.common import warn_dialog
 
 
 class TeleportTab(QWidget):
-    """Points de teleportation pour Snake - experimental (2026-09-27),
-    voir notes.md. Repose sur coord_actor (native/speedhack.c,
-    install_coord_tracker_hook) : un hook de lecture seule sur une routine
-    generique de calcul de distance entre deux acteurs, qui capture le
-    pointeur de Snake (confirme stable pendant le deplacement + veritable
-    teleportation validee en jeu). Coordonnees absolues (pas relatives a
-    l'orientation du joueur) - +0x10 X, +0x14 Y (hauteur, le jeu peut
-    rejeter une position invalide sous le sol), +0x18 Z."""
+    """Points de teleportation pour Snake : position lue et ecrite dans
+    l'entree joueur de la table des joueurs du jeu (MGS4Live.player_position).
+    Coordonnees absolues - +0x10 X, +0x14 Y (hauteur, le jeu peut rejeter
+    une position invalide sous le sol), +0x18 Z."""
 
     def __init__(self, live: MGS4Live):
         super().__init__()

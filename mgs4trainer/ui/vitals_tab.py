@@ -52,25 +52,6 @@ class VitalsTab(QWidget):
         # set_infinite_ammo) depuis le 2026-10-04, plus de reecriture des
         # reserves (l'ancienne boucle faisait ramer le trainer).
 
-        # Degats en paliers pour "Un coup, un mort" sur les boss (voir
-        # _reassert_boss_staged_damage) : contrairement aux ennemis
-        # standards (code-patch, vraie mise a mort en un coup), les boss
-        # n'ont pas d'instruction de degats exploitable - on quantifie
-        # chaque coup REEL en paliers de 25% plutot que de forcer 0
-        # directement (deja teste : forcer 0 soi-meme peut desynchroniser
-        # l'etat du combat et le bloquer, 2026-09-26). Reinitialise a
-        # chaque nouveau pointeur boss_actor2 (nouvelle phase/pool).
-        self._boss_damage_addr: int | None = None
-        self._boss_damage_max_hp: int | None = None
-        self._boss_damage_max_stamina: int | None = None
-        self._boss_damage_step_hp: int = -1
-        self._boss_damage_step_stamina: int = -1
-        # Raging Raven (pas de paliers, voir _reassert_boss_staged_damage) :
-        # derniere valeur observee, pour ne forcer 0 que sur une vraie
-        # transition/baisse detectee, jamais en continu.
-        self._raven_last_hp: int | None = None
-        self._raven_last_stamina: int | None = None
-        self._boss_kill_patched = False
         # Difficulte d'un profil choisi avant l'accrochage, ecrite par
         # sync_to_game (la liste se recale sur le jeu a chaque rafraichissement).
         self._pending_difficulty: int | None = None
@@ -435,22 +416,11 @@ class VitalsTab(QWidget):
             for name in lethal_patches + non_lethal_patches:
                 if name not in wanted:
                     self.live.set_code_patch(name, False)
-            results = {name: self.live.set_code_patch(name, True) for name in wanted}
+            for name in wanted:
+                self.live.set_code_patch(name, True)
             self.live.set_code_patch("destructibles_one_shot_kill", active)
-            non_lethal_ok = results.get("boss_non_lethal_kill", False)
-            lethal_ok = results.get("boss_one_shot_kill", False)
-            # Coups des boss geres par le jeu lui-meme (patchs de code) : pas
-            # de degats par paliers ecrits par-dessus (_reassert_boss_staged_damage).
-            self._boss_kill_patched = active and (lethal_ok if lethal else non_lethal_ok)
         except OSError:
-            self._boss_kill_patched = False
-        # Repart d'une reference 100% fraiche a chaque (re)activation du
-        # mode, voir _reassert_boss_staged_damage.
-        self._boss_damage_addr = None
-        self._boss_damage_step_hp = -1
-        self._boss_damage_step_stamina = -1
-        self._raven_last_hp = None
-        self._raven_last_stamina = None
+            pass
 
     def _on_infinite_ammo_toggled(self, checked: bool):
         try:
@@ -653,151 +623,6 @@ class VitalsTab(QWidget):
                 self._reassert_boss_staged_damage()
             except OSError:
                 pass
-
-    # Paliers successifs (fraction de la reference 100% capturee a
-    # l'activation/au changement de phase) - le dernier palier est un
-    # reste volontairement non nul : le coup final reste un vrai coup du
-    # jeu plutot qu'une ecriture memoire, pour ne pas court-circuiter
-    # l'evenement de victoire/KO du jeu (voir commentaire plus bas). Par
-    # paliers de 10% (90% a 10%) plutot que 25% - premier essai a 75%
-    # juge trop brutal (demande utilisateur 2026-09-26).
-    BOSS_DAMAGE_STEPS = tuple(i / 10 for i in range(9, 0, -1))
-
-    def _reassert_boss_staged_damage(self):
-        """Les boss ne passent pas par l'instruction de degats patchee
-        (one_shot_kill normal pour les ennemis standards) - pas
-        d'equivalent trouve malgre plusieurs pistes (voir notes.md). A la
-        place : chaque coup REEL encaisse par le boss (vie en mode Letal,
-        stamina en mode Non letal, deux mecanismes distincts selon la
-        phase, constate sur le boss 1) fait chuter la jauge au palier
-        suivant plutot que de la forcer directement a 0. Deja teste et
-        confirme dangereux (2026-09-26) : forcer 0 nous-memes plutot que
-        via un vrai coup du jeu peut desynchroniser l'etat du combat et le
-        bloquer completement (necessite alors de recharger un
-        checkpoint) - le dernier palier laisse donc volontairement un
-        reste (5%), le coup qui l'acheve reste un vrai coup traite
-        normalement par le jeu. Detection automatique du boss actif (voir
-        MGS4Live.active_boss_addr) : deux boss testes a ce jour, deux
-        jeux d'offsets differents selon le hook qui se declenche."""
-        addr = self.live.active_boss_addr()
-        if not addr:
-            self._boss_damage_addr = None
-            return
-
-        if self._boss_kill_patched:
-            # Mise a mort geree par le jeu lui-meme (CODE_PATCHES
-            # "boss_one_shot_kill" : Laughing Octopus et sa Beauty, Raging
-            # Raven) : rien a ecrire par-dessus. Evite aussi de se fier a
-            # active_boss_kind, trompe par un pointeur boss_actor2 perime
-            # (encore l'armure d'Octopus pendant le combat contre Raven).
-            return
-
-        if self.live.active_boss_kind() == "raven":
-            # Pas de mecanisme multi-phases connu pour ce boss (demande
-            # utilisateur 2026-09-27, a l'inverse du premier boss) - on
-            # force directement 0 plutot que de passer par les paliers de
-            # precaution ci-dessous, mais SEULEMENT quand une vraie baisse
-            # est detectee (un coup reel), jamais en continu a chaque
-            # cycle de 50ms - ecrire sans arret a fait planter le jeu
-            # (constate 2026-09-27).
-            if addr != self._boss_damage_addr:
-                self._boss_damage_addr = addr
-                self._raven_last_hp = self.live.active_boss_hp()
-                self._raven_last_stamina = self.live.active_boss_stamina()
-                return
-
-            current_hp = self.live.active_boss_hp()
-            hp_hit_detected = (current_hp is not None and self._raven_last_hp is not None
-                                and current_hp < self._raven_last_hp)
-
-            if self.lethal_btn.isChecked():
-                if hp_hit_detected:
-                    self.live.set_active_boss_hp(0)
-                    current_hp = 0
-                self._raven_last_hp = current_hp
-                return
-
-            # Non letal : n'importe quelle arme (letale ou non) fait
-            # avancer la stamina - contrairement a Laughing Octopus, pas
-            # besoin de restaurer la vie ici (demande utilisateur
-            # 2026-09-27) : un tir letal reste applique normalement, il
-            # sert juste aussi de signal pour faire chuter la stamina.
-            current_stamina = self.live.active_boss_stamina()
-            stamina_hit_detected = (current_stamina is not None and self._raven_last_stamina is not None
-                                     and current_stamina < self._raven_last_stamina)
-            if hp_hit_detected or stamina_hit_detected:
-                self.live.set_active_boss_stamina(0)
-                current_stamina = 0
-            self._raven_last_stamina = current_stamina
-            return
-
-        if addr != self._boss_damage_addr:
-            # Nouveau boss ou nouvelle phase (pool de vie/stamina
-            # different, ex. 7200 en phase 1 vs une autre valeur ensuite) -
-            # nouvelle reference 100%. Ne verrouille PAS addr tant que les
-            # deux valeurs lues ne sont pas franchement positives : si une
-            # session precedente (test manuel, ancien palier) avait laisse
-            # la vie ou la stamina a 0 pile a cette adresse, une reference
-            # a 0 casse tout le calcul de paliers pour le reste du combat
-            # (constate 2026-09-26, stamina restee a 0 apres un test
-            # manuel puis changement de scene).
-            fresh_hp = self.live.active_boss_hp()
-            fresh_stamina = self.live.active_boss_stamina()
-            if not fresh_hp or not fresh_stamina:
-                return
-            self._boss_damage_addr = addr
-            self._boss_damage_max_hp = fresh_hp
-            self._boss_damage_max_stamina = fresh_stamina
-            self._boss_damage_step_hp = -1
-            self._boss_damage_step_stamina = -1
-
-        lethal = self.lethal_btn.isChecked()
-        max_hp = self._boss_damage_max_hp
-        current_hp = self.live.active_boss_hp()
-        if current_hp is None or not max_hp:
-            return
-
-        if lethal:
-            step_idx = self._boss_damage_step_hp
-            next_idx = step_idx + 1
-            if next_idx >= len(self.BOSS_DAMAGE_STEPS):
-                return  # dernier palier deja atteint, on laisse le jeu finir normalement
-            current_floor = int(max_hp * self.BOSS_DAMAGE_STEPS[step_idx]) if step_idx >= 0 else max_hp
-            if current_hp >= current_floor:
-                return  # pas de nouveau coup reel depuis le dernier palier force
-            new_floor = int(max_hp * self.BOSS_DAMAGE_STEPS[next_idx])
-            self.live.set_active_boss_hp(new_floor)
-            self._boss_damage_step_hp = next_idx
-            return
-
-        # Non letal : n'importe quelle arme fait avancer la stamina par
-        # paliers (comme le code-patch le fait pour les ennemis standards,
-        # qui ignore la lethalite reelle de l'arme) - la vie reelle ne
-        # doit jamais baisser dans ce mode, sinon le boss pourrait mourir
-        # "pour de vrai" malgre le mode choisi. On restaure donc la vie si
-        # un tir letal vient de l'entamer, et on detecte le coup via CE
-        # signal (vie entamee) OU via une vraie baisse de stamina (arme
-        # non letale utilisee directement) - le premier des deux qui se
-        # produit fait avancer le palier de stamina.
-        hp_hit_detected = current_hp < max_hp
-        if hp_hit_detected:
-            self.live.set_active_boss_hp(max_hp)
-
-        max_stamina = self._boss_damage_max_stamina
-        current_stamina = self.live.active_boss_stamina()
-        step_idx = self._boss_damage_step_stamina
-        next_idx = step_idx + 1
-        if next_idx >= len(self.BOSS_DAMAGE_STEPS):
-            return
-        if current_stamina is None or not max_stamina:
-            return
-        current_floor = int(max_stamina * self.BOSS_DAMAGE_STEPS[step_idx]) if step_idx >= 0 else max_stamina
-        stamina_hit_detected = current_stamina < current_floor
-        if not (hp_hit_detected or stamina_hit_detected):
-            return
-        new_floor = int(max_stamina * self.BOSS_DAMAGE_STEPS[next_idx])
-        self.live.set_active_boss_stamina(new_floor)
-        self._boss_damage_step_stamina = next_idx
 
     def set_advanced(self, advanced: bool):
         pass  # pas de mode simple/avance distinct ici

@@ -110,7 +110,10 @@ le jeu. Confirmé en jeu (2026-10-04) :
   dans le jeu.
 
 L'ancien système (forçage de la vie par paliers, synchronisé sur un vrai
-coup) n'est plus utilisé dès que ces patchs sont posés.
+coup) a été retiré le 12 octobre 2026, avec les hooks de suivi des boss
+qu'il utilisait (repris des scripts "Bosses 2" et "Bosses Laughing
+Octopus" de la table `MGS4.CT`) : il ne servait plus que de repli si les
+patchs refusaient de s'appliquer.
 
 **Gecko (robots) et tanks : hook séparé.** Les Gecko ne passent ni par
 l'instruction des ennemis humains ni par celle des boss - un troisième

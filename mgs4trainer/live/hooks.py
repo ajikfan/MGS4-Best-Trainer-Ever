@@ -1,5 +1,4 @@
 """MGS4Live : pilotage de la DLL injectee : vitesse, hooks de combat, suivi des boss."""
-import struct
 
 from mgs4trainer.core.speedhack import SpeedController
 
@@ -125,48 +124,3 @@ class HooksMixin:
     def last_damaged_actor(self) -> int | None:
         """Diagnostic uniquement, voir SpeedController.last_damaged_actor."""
         return self.speed.last_damaged_actor()
-
-    def boss_actor(self) -> int | None:
-        """Diagnostic uniquement, voir SpeedController.boss_actor."""
-        return self.speed.boss_actor()
-
-    def boss_hook_installed(self) -> bool | None:
-        return self.speed.boss_hook_installed()
-
-    def boss_hook_error(self) -> int | None:
-        return self.speed.boss_hook_error()
-
-    def boss_actor2(self) -> int | None:
-        return self.speed.boss_actor2()
-
-    def boss_hook2_installed(self) -> bool | None:
-        return self.speed.boss_hook2_installed()
-
-    def boss_hook2_error(self) -> int | None:
-        return self.speed.boss_hook2_error()
-
-    def boss_hp(self) -> int | None:
-        """Vie du boss actuellement suivi (boss_actor2, capture par
-        install_boss_tracker_hook2) - None si aucun boss actif. Meme
-        offset +0x314 que la vie des ennemis standards, mais alimente par
-        un chemin de code totalement different (les boss ne passent pas
-        par l'instruction patchee pour one_shot_kill, voir notes.md)."""
-        addr = self.boss_actor2()
-        if not addr:
-            return None
-        return struct.unpack("<i", self.proc.read_bytes(addr + 0x314, 4))[0]
-
-    def set_boss_hp(self, value: int) -> bool:
-        """Ecrit directement la vie du boss actuellement suivi. Utilise
-        en continu (pas via un hook de code) car on n'a pas trouve
-        l'instruction de degats propre aux boss - confirme fonctionnel en
-        jeu : forcer 0 en boucle fait progresser/tomber le boss (2026-09-26)."""
-        addr = self.boss_actor2()
-        if not addr:
-            return False
-        self.proc.write_bytes(addr + 0x314, struct.pack("<i", value))
-        return True
-
-    def coord_actor(self) -> int | None:
-        """Diagnostic uniquement, voir SpeedController.coord_actor."""
-        return self.speed.coord_actor()

@@ -57,7 +57,7 @@ code est dans le paquet `mgs4trainer/` :
   (`speedhack.py`) ;
 - `live/` : la classe `MGS4Live` (accès au jeu en cours), assemblée à
   partir de mixins par thème : accrochage (`base.py`), DLL et hooks
-  (`hooks.py`), joueur et jauges (`player.py`), boss (`bosses.py`), armes
+  (`hooks.py`), joueur et jauges (`player.py`), armes
   et accessoires (`weapons.py`), **patchs de code** (`code_patches.py`,
   la liste `CODE_PATCHES`), son et alerte (`sound_alert.py`),
   statistiques et lieu (`state.py`), équipement en direct (`equip.py`) ;
