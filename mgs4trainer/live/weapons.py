@@ -132,6 +132,34 @@ class WeaponsMixin:
             self.proc.write_bytes(solar + self.WEAPON_FLAGS_OFFSET, struct.pack("<I", wanted))
         return True
 
+    # Pas de rechargement (2026-10-12) : le bit 1 (chargeur infini, celui
+    # du Patriot) pose sur toutes les armes a chargeur ; comme il fige le
+    # chargeur a sa valeur du moment, on le remplit au maximum en meme temps.
+    # Pistolet solaire et Patriot laisses a leurs drapeaux d'origine (voir
+    # set_infinite_ammo).
+    def set_infinite_magazines(self, enabled: bool) -> bool:
+        """Pose (ou retire) le bit 1 ; rappele a chaque cycle, comme
+        set_infinite_ammo (le jeu peut reconstruire la table)."""
+        if not (self.connected and self.sane):
+            return False
+        table = self.base + self.WEAPON_TABLE_RVA
+        count = 0x40
+        block = self.proc.read_bytes(table, count * self.WEAPON_TABLE_STRIDE)
+        for weapon_id in range(count):
+            if weapon_id in self.NATIVE_INFINITE_WEAPON_IDS:
+                continue
+            entry = weapon_id * self.WEAPON_TABLE_STRIDE
+            current, maximum = struct.unpack_from("<hh", block, entry + self.WEAPON_MAGAZINE_ENTRY_OFFSET)
+            if maximum <= 0:
+                continue
+            flags = struct.unpack_from("<I", block, entry + self.WEAPON_FLAGS_OFFSET)[0]
+            wanted = (flags | self.WEAPON_FLAG_INFINITE_MAGAZINE) if enabled                 else (flags & ~self.WEAPON_FLAG_INFINITE_MAGAZINE)
+            if enabled and not flags & self.WEAPON_FLAG_INFINITE_MAGAZINE and current != maximum:
+                self.proc.write_bytes(table + entry + self.WEAPON_MAGAZINE_ENTRY_OFFSET, struct.pack("<h", maximum))
+            if wanted != flags:
+                self.proc.write_bytes(table + entry + self.WEAPON_FLAGS_OFFSET, struct.pack("<I", wanted))
+        return True
+
     def write_weapon_ammo(self, weapon_id: int, value: int) -> bool:
         """Retourne False sans rien ecrire si l'adresse munitions de cette
         arme n'est pas encore connue."""

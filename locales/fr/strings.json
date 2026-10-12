@@ -59,7 +59,7 @@
   "vitals.infinite_ammo": "Munitions infinies",
   "vitals.infinite_ammo_tooltip": "Active les munitions infinies d'origine du jeu (comme le Pistolet solaire) sur toutes les armes à munitions, grenades et explosifs compris : la réserve ne baisse plus et le HUD affiche le symbole infini. Le chargeur se vide toujours (voir « Pas de rechargement »). Décocher remet les armes à la normale. Missiles de Metal Gear REX illimités aussi.",
   "vitals.no_reload": "Pas de rechargement",
-  "vitals.no_reload_tooltip": "Patch de code (pas de réécriture en boucle) : supprime l'écriture du nouveau nombre de munitions du chargeur après un tir, quelle que soit l'arme équipée - une seule mise en place, pas de réassertion périodique. Empêche aussi la surchauffe de la mitrailleuse de Metal Gear REX.",
+  "vitals.no_reload_tooltip": "Le chargeur ne se vide jamais : le trainer active sur toutes les armes le « chargeur infini » prévu par le jeu (celui du Patriot), chargeur rempli au maximum. Empêche aussi la surchauffe de la mitrailleuse de Metal Gear REX.",
   "vitals.infinite_silencer": "Silencieux illimités",
   "vitals.infinite_silencer_tooltip": "Patch de code : le silencieux monté ne s'use plus à chaque tir (ni le silencieux en cours, ni la réserve), quelle que soit l'arme.",
   "vitals.instant_kill": "Un coup, un mort",

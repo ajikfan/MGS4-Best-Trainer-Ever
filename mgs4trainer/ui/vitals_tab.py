@@ -432,8 +432,12 @@ class VitalsTab(QWidget):
     def _on_no_reload_toggled(self, checked: bool):
         if not (self.live.connected and self.live.sane):
             return
-        self.live.set_no_reload(checked)
+        # Drapeau "chargeur infini" du jeu depuis le 2026-10-12 (reasserte
+        # dans _reassert_ammo_locks) ; l'ancien hook de la DLL (motif "No
+        # Reload") reste toujours eteint.
+        self.live.set_no_reload(False)
         try:
+            self.live.set_infinite_magazines(checked)
             self.live.set_code_patch("rex_gun_no_heat", checked)
         except OSError:
             pass
