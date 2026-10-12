@@ -159,7 +159,8 @@ armes létales. Confirmé en jeu (2026-10-10) :
 - **machines** (sans endurance) détruites dans les deux modes : Gekko,
   tanks, hélicoptères, véhicules, **Metal Gear RAY**, objets
   destructibles ; le Mk.2 les touche aussi (hélicoptères, Gekko, portails
-  confirmés ; tanks non testés faute de tank) ;
+  confirmés ; tanks non testés faute de tank), ainsi que les balles
+  tranquillisantes du Mosin-Nagant (Gekko confirmé) ;
 - **mini Gekko** : détruits au premier coup en Létal, paralysés en Non
   létal, Mk.2 compris ;
 - **Crying Wolf**, **Raging Raven**, **Screaming Mantis** (avec la

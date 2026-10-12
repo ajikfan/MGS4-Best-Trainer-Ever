@@ -350,6 +350,11 @@ class CodePatchesMixin:
             # du Mk.2) sans degats. Son test (1048188 "jae") devient "jmp" :
             # la flechette va au gestionnaire des balles (1047EF0).
             (0x1048188, bytes.fromhex("0f830d0200008b9388"), bytes.fromhex("e90e02000090")),
+            # Balles tranquillisantes du Mosin-Nagant (2026-10-12, drapeaux
+            # 0x84082B) : 10483B0 tient tout coup au bit 23 pour traite sans
+            # degats (10483EB "bt eax,0x17 ; jb 1048522") -> le saut est
+            # neutralise, la balle suit le chemin des autres coups.
+            (0x10483EF, bytes.fromhex("0f822d01000025ff03"), bytes.fromhex("909090909090")),
             # Metal Gear RAY (2026-10-10, 60000 de vie, aucune endurance) : sa
             # propre fonction de degats 138D270 calcule vie - degat puis
             # l'ecrit (138D4DA) ; "add ecx,edx" (138D4D8) -> "xor ecx,ecx" :
