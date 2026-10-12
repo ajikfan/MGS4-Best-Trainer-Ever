@@ -104,12 +104,15 @@ propres recherches :
   réécrits en C et en Python :
   - "Un coup, un mort" / "Non létal" : script "aob Damage" et sa logique
     "Remove Lethal" ;
-  - suivi des boss : scripts "Bosses 2" et "Bosses Laughing Octopus".
-    L'offset de stamina qu'elle documente (`+31C+4`) s'est révélé décalé
-    de 4 octets en test : le bon champ est `+0x31C`, corrigé par nos
-    propres scans ;
-  - Téléportation (jusqu'à la V2.2) : script "aob Coordinates" (position
-    X/Y/Z à `+0x10`/`+0x14`/`+0x18`) ;
+  - suivi des boss (jusqu'à la V2.4.1, retiré depuis) : scripts
+    "Bosses 2" et "Bosses Laughing Octopus" ;
+  - Téléportation (jusqu'à la V2.2, retiré depuis) : script "aob
+    Coordinates" ;
+  - alerte forcée (jusqu'à la V2.4.1, remplacée depuis par nos propres
+    minuteries de soldats) : script "Alert -- Ignore" ;
+  - "Pas d'alerte" (jusqu'à la V2.4.1) : script "aob No Alerts". Depuis,
+    patch de code issu de notre propre analyse, sur la même fonction du
+    jeu (voir [Comment ça marche](docs/fonctionnement.md)) ;
   - plusieurs formules d'adresses (table des objets, statistiques, état
     d'alerte) ont été repérées en lisant ses scripts (détail dans les
     commentaires du code), puis **vérifiées en jeu par nos propres

@@ -214,6 +214,22 @@ Onglet "État de jeu", groupe "Snake" et tableau des jauges.
   suspendu à un rebord ou sous l'eau ("pas suspendu" / "hors de l'eau"
   sinon). Verrouillées à 100 % : grip ou oxygène infinis.
 
+### Pas d'alerte : comment ça marche
+
+L'état d'alerte du jeu est recalculé à chaque image par une fonction
+qui parcourt les unités de soldats : chacune propose un état et donne
+ses minuteries (compte à rebours d'Alerte, minuterie d'Évasion et de
+Prudence). La fonction garde le plus grave et recopie les minuteries
+les plus hautes. Le trainer neutralise ces trois prises (patch de code,
+octets d'origine vérifiés) : la fonction tourne toujours, mais renvoie
+Normal avec des minuteries à 0. Les soldats gardent leurs réactions
+individuelles (« ! », visée, tirs) sans que l'alerte générale parte.
+
+C'est la même fonction que le script "aob No Alerts" de la table
+`MGS4.CT`, qui la court-circuitait dès son entrée (méthode utilisée
+jusqu'à la V2.4.1) ; nous l'avons retrouvée de notre côté en remontant
+depuis l'instruction qui écrit l'état d'alerte (12 octobre 2026).
+
 ### Profils, raccourcis, bandeau et alerte forcée (V2.4) : comment ça marche
 
 - **Raccourcis globaux** : les touches F1 à F11 qui ont un profil, la
@@ -229,10 +245,19 @@ Onglet "État de jeu", groupe "Snake" et tableau des jauges.
 - **Bandeau** : petite fenêtre transparente, toujours au premier plan,
   qui ne prend ni le focus ni les clics, centrée en haut de la fenêtre du
   jeu.
-- **Alerte forcée** : le trainer choisit un soldat présent dans la zone
-  (unité valide, en service, non neutralisé) et appelle la fonction du jeu
-  par laquelle un soldat signale Snake ; le compte à rebours de l'alerte
-  est ensuite maintenu au maximum tant que l'alerte est forcée.
+- **Alerte forcée** (refaite le 12 octobre 2026) : chaque soldat qui
+  participe à l'alerte a deux minuteries, le compte à rebours de l'Alerte
+  (99.99, qui descend quand plus personne ne voit Snake) puis celle de
+  l'Évasion et de la Prudence (passage en Prudence à mi-course, en Normal
+  à 0). Le jeu en recopie le maximum à chaque image pour décider de
+  l'état. Le trainer place les minuteries des soldats dans l'étape choisie
+  et les y maintient ; en Automatique, il n'écrit plus rien et le jeu
+  reprend son décompte là où il en est. Si la zone n'est pas en alerte,
+  il fait d'abord signaler Snake par un soldat (fonction du jeu appelée
+  par la DLL). L'ancienne méthode, qui court-circuitait la fonction de
+  calcul de l'alerte (script "Alert -- Ignore" de `MGS4.CT`), n'est plus
+  utilisée : au retour en Automatique, le jeu retombait d'un coup en
+  Normal.
 - **Jauges figées** : pour chaque jauge, toutes les instructions du jeu
   qui l'écrivent (dégâts, régénération, baisse naturelle…) ont été
   trouvées au débogueur, puis neutralisées tant que la ligne est

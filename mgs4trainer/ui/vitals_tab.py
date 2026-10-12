@@ -441,7 +441,13 @@ class VitalsTab(QWidget):
     def _on_no_alerts_toggled(self, checked: bool):
         if not (self.live.connected and self.live.sane):
             return
-        self.live.set_no_alerts(checked)
+        # Patch de code "no_alerts" depuis le 2026-10-12 ; l'ancien court-
+        # circuit de la DLL (motif "aob No Alerts") reste toujours eteint.
+        self.live.set_no_alerts(False)
+        try:
+            self.live.set_code_patch("no_alerts", checked)
+        except OSError:
+            pass
 
     def _player_gauge_inactive(self, name: str) -> bool:
         if not (self.live.connected and self.live.sane):
@@ -574,22 +580,21 @@ class VitalsTab(QWidget):
         except OSError:
             pass
 
-    ALERT_FORCE_ALERT_INDEX = 2  # Automatique, Normal, Alerte, Evasion, Prudence
-
     def _on_alert_force_changed(self, index: int):
+        """Liste : Automatique, puis les etats dans l'ordre de
+        ALERT_STATE_NAMES (index - 1). Le jeu est place dans l'etape voulue
+        de son propre deroule et maintenu par _reassert_ammo_locks (voir
+        MGS4Live.hold_alert_state) ; en Automatique, plus aucune ecriture."""
         if not (self.live.connected and self.live.sane):
             return
-        if index == self.ALERT_FORCE_ALERT_INDEX:
-            # Vraie alerte donnee par un soldat (musique, recherche, compte a
-            # rebours que le jeu reprend au retour en Automatique).
+        # Ancien forcage par court-circuit de la fonction de calcul (B5F120,
+        # motif "Alert -- Ignore") : toujours desactive depuis le 2026-10-12.
+        self.live.set_alert_mode_override(None)
+        if index:
             try:
-                self.live.trigger_real_alert()
+                self.live.hold_alert_state(index - 1)
             except OSError:
                 pass
-        if index == 0:
-            self.live.set_alert_mode_override(None)
-        else:
-            self.live.set_alert_mode_override(index - 1)
 
     def _reassert_ammo_locks(self):
         """Cycle dedie (AMMO_LOCK_REFRESH_MS, independant du
@@ -610,17 +615,16 @@ class VitalsTab(QWidget):
             self._reassert_player_gauges()
         except OSError:
             pass
-        if self.alert_force_combo.currentIndex() == self.ALERT_FORCE_ALERT_INDEX:
+        if self.alert_force_combo.currentIndex():
             try:
-                self.live.hold_alert_timer()
+                self.live.hold_alert_state(self.alert_force_combo.currentIndex() - 1)
             except OSError:
                 pass
-        # "Pas de rechargement" : patch de code (install_no_reload_hook),
-        # plus besoin de reassertion ici depuis le 2026-09-29 - voir
-        # _on_no_reload_toggled.
-        if self.instant_kill_check.isChecked():
+        if self.no_reload_check.isChecked():
+            # Meme raison que les munitions infinies : table reconstruite
+            # au chargement d'une zone.
             try:
-                self._reassert_boss_staged_damage()
+                self.live.set_infinite_magazines(True)
             except OSError:
                 pass
 

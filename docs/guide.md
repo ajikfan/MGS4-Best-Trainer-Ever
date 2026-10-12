@@ -44,13 +44,18 @@ L'onglet des réglages en direct, en plusieurs groupes :
   - **État réel** : l'état d'alerte en cours (Normal, Alerte, Évasion,
     Prudence) ;
   - **Forcer** : impose un état d'alerte au choix, ou "Automatique" pour
-    laisser le jeu décider. En **Alerte**, un soldat de la zone donne
-    réellement l'alerte (musique, recherche, compte à rebours maintenu) ;
-    de retour en Automatique, le jeu enchaîne Évasion, Prudence puis
-    Normal ;
+    laisser le jeu décider. Le jeu reste dans l'étape choisie tant que tu
+    ne reviens pas sur Automatique, puis reprend son décompte là où il en
+    est (Alerte → Évasion → Prudence → Normal). Depuis Normal, Alerte,
+    Évasion et Prudence font donner l'alerte par un vrai soldat de la zone
+    (musique, renforts, recherche) ; Normal met fin à l'alerte en cours.
+    Sans soldat dans la zone, le jeu ne gère pas d'alerte : forcer n'a
+    aucun effet ;
   - **Pas d'alerte** : l'alerte générale ne se déclenche jamais, quelle
     qu'en soit la cause (vue, bruit, corps trouvé, lasers des mini
-    Gekko...). Les ennemis peuvent encore réagir individuellement.
+    Gekko...). Les ennemis réagissent encore individuellement : un
+    soldat qui te voit affiche son « ! », te vise et peut te tirer
+    dessus, mais sans alerte générale, renforts ni musique d'alerte.
 - **Armes et combat** :
   - **Munitions infinies** : munitions infinies d'origine du jeu sur
     toutes les armes (symbole infini au HUD) ;

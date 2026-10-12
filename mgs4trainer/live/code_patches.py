@@ -137,6 +137,16 @@ class CodePatchesMixin:
     #    73F5EB, taches 11FD310 voisines abimees).
     #    1216CBF : "test r8b,2 ; jne 1216D45" ;
     #    1216CC9 : "cmp eax,0x68 ; je 1216CD4 ; jmp 1216D74".
+    #  - Pas d'alerte (2026-10-12, notre propre analyse) : l'etat d'alerte
+    #    (mgs4+1D77AB8) est ecrit par la mise a jour B5C2C7 a partir de
+    #    B5FA90, qui parcourt les unites de soldats (entrees de 0xE0) :
+    #    etat propose par l'unite (+0xC8, garde dans ebx a B5FC33), max de
+    #    leurs minuteries (+0xB4/+0xB8 -> esi/ebp, cmovl B5FC0F/B5FC14)
+    #    recopie dans le gestionnaire (+0x74/+0x78). Ces trois prises
+    #    neutralisees : la fonction tourne toujours (comptes de soldats)
+    #    mais renvoie Normal, minuteries a 0. Meme fonction que le script
+    #    "aob No Alerts" de MGS4.CT (qui la court-circuitait a l'entree),
+    #    retrouvee independamment depuis l'ecriture de l'etat.
     CODE_PATCHES = {
         "minigekko_lethal": [
             (0x11FBF86, bytes.fromhex("7f08488bcbe890f3"), bytes.fromhex("9090")),
@@ -354,6 +364,10 @@ class CodePatchesMixin:
         "liquid_final_kill": [
             (0x112717A, bytes.fromhex("2bd74963c84863c2"), bytes.fromhex("31d2")),
             (0x1127255, bytes.fromhex("2bd74863ce4863c2"), bytes.fromhex("31d2")),
+        ],
+        "no_alerts": [
+            (0xB5FC0D, bytes.fromhex("3bf20f4cf23be90f4ce98bcb"), bytes.fromhex("3bf29090903be9909090")),
+            (0xB5FC33, bytes.fromhex("418bd833c04503d2"), bytes.fromhex("909090")),
         ],
         "untouchable": [(0x96C0B0, bytes.fromhex("488bc455535657488d68a1"), bytes.fromhex("c3"))],
         "invisible": [

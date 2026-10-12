@@ -1,6 +1,7 @@
 """MGS4Live : son du jeu (FMOD) et alerte forcee."""
 import struct
 import threading
+import time
 
 from mgs4trainer.core.gamedata import ALERT_STATE_RVA
 from mgs4trainer.core.winproc import MEM_COMMIT, PAGE_READWRITE, kernel32
@@ -87,73 +88,115 @@ class SoundAlertMixin:
         except OSError:
             _beep()
 
-    # Vraie alerte (2026-10-09, validee en jeu) : forcer l'etat seul (court-
-    # circuit de B5FA90) laissait le compte a rebours a 0.00 et rien a
-    # reprendre pour le jeu. Le compte a rebours = gestionnaire d'alerte
-    # ([mgs4+23F0B5B0]) +0x78 (frames, x900 -> mgs4+1D77ABC, 6000 = 99.99),
-    # recopie a chaque image du max des minuteries des soldats (soldat
-    # +0x461C, +0x4618 = 10800000), que leur IA decompte. On fait donc
-    # donner l'alerte par un soldat : B43750(soldat, index cible) = le soldat
-    # qui repere Snake (position transmise a son unite [soldat+0x4578],
-    # signalement, minuteries). Soldats : gestionnaire +0x30 nombre, +0x38
-    # tableau (pas 0x10, pointeur a +8).
+    # Alerte forcee (refonte 2026-10-12, mesuree en jeu) : plus de court-
+    # circuit de la fonction de calcul (B5F120), on place le jeu dans
+    # l'etape voulue de son propre deroule et on l'y maintient ; en
+    # Automatique, on n'ecrit plus rien et le jeu reprend son decompte.
+    # Chaque soldat de l'alerte a deux minuteries : +0x461C = compte a
+    # rebours de l'Alerte (images, 6000 = 99.99), qui descend a 0 quand plus
+    # personne ne voit Snake -> Evasion ; +0x4618 part alors de 10800000 et
+    # descend : sous 5400000 -> Prudence, a 0 -> Normal. Le gestionnaire
+    # d'alerte [mgs4+23F0B5B0] en recopie le max a chaque image (+0x74 et
+    # +0x78) : ecrire seulement le gestionnaire ne tient pas une image.
+    # Soldats : +0x30 nombre, +0x38 tableau (pas 0x10, pointeur a +8).
+    # Pour entrer dans ce deroule depuis Normal, un soldat donne l'alerte :
+    # B43750(soldat, index cible) = le soldat qui repere Snake.
     ALERT_MANAGER_PTR_RVA = 0x23F0B5B0
     SOLDIER_REPORT_FUNC = {"report": (0xB43750, "48895c2408574883ec40488bb9784500")}
     ALERT_FULL_FRAMES = 6000
     ALERT_SECOND_TIMER = 10800000
+    # Prudence : juste sous le seuil Evasion -> Prudence (5400000).
+    ALERT_CAUTION_TIMER = 5400000 - 900
+    # Delai avant de redemander un signalement si le jeu est reste en
+    # Normal (soldat qui n'a pas pu signaler, changement de zone).
+    ALERT_RETRIGGER_S = 3.0
 
     def _alert_manager(self) -> int:
         return struct.unpack("<Q", self.proc.read_bytes(self.base + self.ALERT_MANAGER_PTR_RVA, 8))[0]
 
-    def _alert_soldier(self, manager: int) -> int:
-        """Un soldat actif de la zone (unite presente), 0 si aucun."""
+    def _alert_soldiers(self, manager: int) -> list[int]:
         count = struct.unpack("<i", self.proc.read_bytes(manager + 0x30, 4))[0]
         table = struct.unpack("<Q", self.proc.read_bytes(manager + 0x38, 8))[0]
         if not table or not 0 < count < 512:
-            return 0
+            return []
         block = self.proc.read_bytes(table, count * 0x10)
-        for index in range(count):
-            soldier = struct.unpack_from("<Q", block, index * 0x10 + 8)[0]
-            if not soldier:
+        soldiers = [struct.unpack_from("<Q", block, i * 0x10 + 8)[0] for i in range(count)]
+        return [s for s in soldiers if s]
+
+    def _report_candidates(self, manager: int) -> list[int]:
+        """Soldats avec une unite, les plus probables d'abord : drapeaux
+        +0x45AC a 0, puis sans le bit 0x40 (0xC0/0xE0 = soldats d'une
+        autre partie de la zone, constate en s01a57), puis les autres."""
+        ranked = []
+        for soldier in self._alert_soldiers(manager):
+            if not struct.unpack("<Q", self.proc.read_bytes(soldier + 0x4578, 8))[0]:
                 continue
-            # Present dans la zone : unite, +0x4624 = 1 et +0x45AC = 0 (8 =
-            # soldat d'une autre partie de la zone, que le jeu ne met pas a
-            # jour - son alerte ne prend pas).
-            unit = struct.unpack("<Q", self.proc.read_bytes(soldier + 0x4578, 8))[0]
-            active = struct.unpack("<i", self.proc.read_bytes(soldier + 0x4624, 4))[0]
-            absent = struct.unpack("<i", self.proc.read_bytes(soldier + 0x45AC, 4))[0]
-            if unit and active == 1 and absent == 0:
-                return soldier
-        return 0
+            flags = struct.unpack("<i", self.proc.read_bytes(soldier + 0x45AC, 4))[0]
+            ranked.append((0 if flags == 0 else 1 if not flags & 0x40 else 2, soldier))
+        return [soldier for _, soldier in sorted(ranked, key=lambda r: r[0])]
 
     def trigger_real_alert(self) -> bool:
-        """Fait donner l'alerte par un soldat (fil separe). Faux si aucun
-        soldat ou appel impossible ; le maintien de l'affichage marche quand meme."""
+        """Fait donner l'alerte par un soldat (fil separe : essaie les
+        candidats jusqu'a ce que le jeu passe en Alerte). Faux si aucun
+        soldat ou appel impossible."""
         if not (self.connected and self.sane and self.speed.main_loop_hook_installed()):
             return False
+        if getattr(self, "_alert_trigger_busy", False):
+            return True
         try:
             funcs = self._live_funcs(self.SOLDIER_REPORT_FUNC)
             manager = self._alert_manager()
-            soldier = self._alert_soldier(manager) if manager else 0
+            candidates = self._report_candidates(manager) if manager else []
             target = struct.unpack("<i", self.proc.read_bytes(self.base + self.PLAYER_INDEX_RVA, 4))[0]
         except OSError:
             return False
-        self._alert_holder = soldier
-        if funcs is None or not soldier:
+        if funcs is None or not candidates:
             return False
-        threading.Thread(target=self.speed.game_call, args=(funcs["report"], soldier, target), daemon=True).start()
+        self._alert_trigger_busy = True
+        threading.Thread(target=self._report_alert, args=(funcs["report"], candidates[:8], target),
+                         daemon=True).start()
         return True
 
-    def hold_alert_timer(self) -> None:
-        """Alerte forcee : compte a rebours maintenu a 99.99 (gestionnaire +
-        soldat qui a donne l'alerte), le jeu reprend la main quand on arrete."""
+    def _report_alert(self, func: int, candidates: list[int], target: int) -> None:
+        try:
+            for soldier in candidates:
+                if self.speed.game_call(func, soldier, target) is None:
+                    return  # jeu en pause ou DLL absente : on reessaiera plus tard
+                time.sleep(0.1)
+                if self.read_alert_state() != 0:
+                    return
+        except OSError:
+            pass
+        finally:
+            self._alert_trigger_busy = False
+
+    def hold_alert_state(self, wanted: int) -> None:
+        """Maintient l'etape `wanted` (0=Normal, 1=Alerte, 2=Evasion,
+        3=Prudence, voir ALERT_STATE_NAMES) en reecrivant les compteurs du
+        jeu - a appeler en boucle tant que le forcage est actif."""
         manager = self._alert_manager()
         if not manager:
             return
-        self.proc.write_bytes(manager + 0x74, struct.pack("<ii", self.ALERT_SECOND_TIMER, self.ALERT_FULL_FRAMES))
-        soldier = getattr(self, "_alert_holder", 0)
-        if soldier:
-            self.proc.write_bytes(soldier + 0x4618, struct.pack("<ii", self.ALERT_SECOND_TIMER, self.ALERT_FULL_FRAMES))
+        state = self.read_alert_state()
+        if (wanted != 0 and state == 0) or (wanted == 1 and state != 1):
+            # Hors du deroule d'alerte, ou Alerte demandee depuis Evasion/
+            # Prudence : un soldat donne l'alerte (comme un nouveau reperage).
+            now = time.monotonic()
+            if now - getattr(self, "_alert_last_trigger", 0.0) >= self.ALERT_RETRIGGER_S:
+                self._alert_last_trigger = now
+                self.trigger_real_alert()
+            if state == 0:
+                return
+        timers = {0: (0, 0), 1: (self.ALERT_SECOND_TIMER, self.ALERT_FULL_FRAMES),
+                  2: (self.ALERT_SECOND_TIMER, 0), 3: (self.ALERT_CAUTION_TIMER, 0)}[wanted]
+        packed = struct.pack("<ii", *timers)
+        for soldier in self._alert_soldiers(manager):
+            # Seulement les soldats qui participent a l'alerte (+0x4618 non
+            # nul) : les autres restent en dehors, comme dans le jeu.
+            current = self.proc.read_bytes(soldier + 0x4618, 8)
+            if current[:4] != bytes(4) and current != packed:
+                self.proc.write_bytes(soldier + 0x4618, packed)
+        self.proc.write_bytes(manager + 0x74, packed)
 
     def read_alert_state(self) -> int:
         """Lecture seule - l'ecriture ne tient pas (voir ALERT_STATE_RVA)."""
