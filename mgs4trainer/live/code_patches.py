@@ -147,7 +147,59 @@ class CodePatchesMixin:
     #    mais renvoie Normal, minuteries a 0. Meme fonction que le script
     #    "aob No Alerts" de MGS4.CT (qui la court-circuitait a l'entree),
     #    retrouvee independamment depuis l'ecriture de l'etat.
+    #  - Un coup, un mort sur les soldats (2026-10-13, notre propre analyse,
+    #    trouve par point d'arret materiel sur la vie d'un soldat) : C52190
+    #    applique un coup a l'objet de vie d'un soldat (18BC1B0 : +0x314 vie,
+    #    +0x31C endurance, +0x324 sommeil). Elle charge r9d = 0x7FFFFFFF,
+    #    la "mise a mort" du jeu, et l'utilise comme degats dans certains cas
+    #    (C5225F) ; puis aiguille : coups d'endurance/etourdissement vers
+    #    C52458, flechettes (bit 15) vers C52297, sinon C523B9 : etat 0x4000
+    #    -> sommeil (B80300, qui reconnait aussi 0x7FFFFFFF : jauge videe),
+    #    autrement vie (C523D4). C5223E : "mov ebp,r9d ; jmp C523B9" (tout
+    #    coup = mise a mort, quel que soit son type), puis C523C3 :
+    #    Letal -> "jmp" vers la vie (mort), Non letal -> NOP vers le sommeil
+    #    (endormi, Z). Valide en jeu (balles, flechettes, deux modes).
+    #    Remplace le hook DLL repris du script "aob Damage" de MGS4.CT.
     CODE_PATCHES = {
+        # Site C5223E commun aux deux (jamais poses ensemble, voir
+        # VitalsTab._apply_instant_kill_mode).
+        # Gekko, Letal : 1048160 prend tout coup d'etat 0x4000 (flechettes du
+        # Mk.2) pour un tranquillisant. Son test (1048188 "jae") devient
+        # "jmp" : la flechette va au gestionnaire des balles (1047EF0), donc
+        # a la mise a mort B21FF0.
+        "gekko_dart_kill": [
+            # Signature ancree sur le "bt eax,0xe" precedent : elle ne doit pas
+            # deborder sur le site de gekko_non_lethal_sleep (104818E).
+            (0x1048184, bytes.fromhex("0fbae00e0f830d020000"), bytes.fromhex("0fbae00ee90e02000090")),
+        ],
+        # Gekko, Non letal (2026-10-13) : une flechette endort un Gekko quand
+        # ses deux jauges de tranquillisant (objet de vie, mots +0x33C et
+        # +0x340) tombent a 0, mais seulement touche a la jambe (104818E :
+        # drapeaux du coup +0x88 & 0x240 ou 0x210). Tout coup est pris par
+        # 1048160 (test de l'etat 0x4000 neutralise, site partage avec
+        # gekko_dart_kill), le test de jambe devient "drapeaux de jambe poses"
+        # (or [rbx+0x88],0x240), le coup est reecrit en flechette du Mk.2
+        # (type +0x10C = 0x10008202 : sans ca, une balle fait seulement
+        # s'accroupir le Gekko) et les quatre calculs de jauge ("add cx,dx"
+        # avant chaque ecriture) donnent 0 : endormi au premier coup, toute
+        # arme, ou qu'on le touche (valide a l'Operator et au Mk.2).
+        "gekko_non_lethal_sleep": [
+            (0x1048184, bytes.fromhex("0fbae00e0f830d020000"), bytes.fromhex("0fbae00e909090909090")),
+            (0x104818E, bytes.fromhex("8b93880000008bc225400200003d400200000f95c181e21002000081fa100200000f95c084c80f85cf010000"),
+             bytes.fromhex("818b8800000040020000" + "c7830c01000002820010" + "90" * 24)),
+            (0x1048243, bytes.fromhex("6603ca66898b4003"), bytes.fromhex("31c990")),
+            (0x10482A1, bytes.fromhex("6603ca9983e207"), bytes.fromhex("31c990")),
+            (0x104831A, bytes.fromhex("6603ca66898b4003"), bytes.fromhex("31c990")),
+            (0x1048362, bytes.fromhex("6603ca66898b3c03"), bytes.fromhex("31c990")),
+        ],
+        "soldier_one_shot_kill": [
+            (0xC5223E, bytes.fromhex("85ed7e218b83ac45"), bytes.fromhex("4489cde973010000")),
+            (0xC523C3, bytes.fromhex("740f8bd5488bcfe8"), bytes.fromhex("eb0f")),
+        ],
+        "soldier_non_lethal_kill": [
+            (0xC5223E, bytes.fromhex("85ed7e218b83ac45"), bytes.fromhex("4489cde973010000")),
+            (0xC523C3, bytes.fromhex("740f8bd5488bcfe8"), bytes.fromhex("9090")),
+        ],
         "minigekko_lethal": [
             (0x11FBF86, bytes.fromhex("7f08488bcbe890f3"), bytes.fromhex("9090")),
             (0x11DC059, bytes.fromhex("410fbaea1841f7c2"), bytes.fromhex("9090909090")),
@@ -345,11 +397,15 @@ class CodePatchesMixin:
             # Tanks (gestionnaire de coups FF9290) : coups au bit 15 (Mk.2)
             # ignores (FF9387 "bt edx,0xf ; jb") -> acceptes.
             (0xFF938B, bytes.fromhex("0f82ba0000000fbae2"), bytes.fromhex("909090909090")),
-            # Gekko : les coups passent par 5 gestionnaires (aiguillage 1046D5F) ;
-            # 1048160 prend tout coup d'etat 0x4000 (tranquillisant, flechettes
-            # du Mk.2) sans degats. Son test (1048188 "jae") devient "jmp" :
-            # la flechette va au gestionnaire des balles (1047EF0).
-            (0x1048188, bytes.fromhex("0f830d0200008b9388"), bytes.fromhex("e90e02000090")),
+            # Gekko et tanks (2026-10-13, notre propre analyse) : B21FF0 retire
+            # de la vie a un objet de vie ; un degat de 0x7FFFFFFF y vaut deja
+            # "mise a mort" (degat = vie restante). "cmove eax,r8d" (B2200E)
+            # -> "mov eax,r8d" et "jne" (B22042) neutralise : tout coup est une
+            # mise a mort. Remplace le hook DLL repris du script "aob Damage
+            # Gecko" de MGS4.CT. Appelee aussi par quelques effets continus
+            # sur les soldats (gaz, feu), comme l'ancien hook.
+            (0xB2200E, bytes.fromhex("410f44c04863c8"), bytes.fromhex("418bc090")),
+            (0xB22042, bytes.fromhex("750c458b91"), bytes.fromhex("9090")),
             # Balles tranquillisantes du Mosin-Nagant (2026-10-12, drapeaux
             # 0x84082B) : 10483B0 tient tout coup au bit 23 pour traite sans
             # degats (10483EB "bt eax,0x17 ; jb 1048522") -> le saut est

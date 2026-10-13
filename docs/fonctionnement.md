@@ -73,20 +73,24 @@ Onglet "État de jeu" : deux cases indépendantes.
 ### Un coup, un mort / Non létal
 
 Onglet "État de jeu" : case "Un coup, un mort" + sélecteur Létal/Non
-létal. **Technique différente de tout le reste du trainer** : un vrai
-patch de code (pas juste une redirection de fonction comme le contrôle
-de vitesse) — localise et redirige l'instruction du jeu qui applique
-les dégâts, porté du script Cheat Engine communautaire (`MGS4.CT`,
-section "aob Damage", auteur RMLSNK) plutôt que découvert de zéro.
-Jamais appliqué au joueur lui-même (vérifie l'équipe de la cible avant
-d'agir).
+létal. Ce sont des patchs de code (instructions du jeu modifiées,
+octets d'origine vérifiés avant d'écrire).
 
-- **Létal** : tue en un coup n'importe quel ennemi touché.
-- **Non létal** : les dégâts normaux ne sont plus appliqués du tout.
+**Soldats (refait le 13 octobre 2026).** La fonction de dégâts des
+soldats (trouvée par point d'arrêt matériel sur la vie d'un soldat)
+connaît déjà une "mise à mort" : un dégât spécial qui vide toute la
+jauge visée. Le trainer donne cette valeur à chaque coup, quel que soit
+son type, puis choisit la jauge :
 
-Confirmé fonctionnel en jeu sur les ennemis standards (2026-09-26). Peut
-ne pas fonctionner si le motif attendu n'est pas trouvé dans cette
-version du jeu (aucun crash dans ce cas, juste sans effet).
+- **Létal** : la vie — le soldat meurt au premier coup, fléchettes
+  tranquillisantes comprises ;
+- **Non létal** : le sommeil — le soldat s'endort aussitôt, balles
+  comprises, sans jamais perdre de vie.
+
+Le joueur a sa propre fonction de dégâts, il n'est jamais concerné.
+Jusqu'à la V2.4.1, les soldats passaient par un hook porté du script
+"aob Damage" de la table `MGS4.CT` (RMLSNK), qui forçait la vie à 0 au
+moment de son écriture.
 
 **Boss (V2.3) : la mise à mort du jeu lui-même.** Chaque boss a sa
 propre fonction de dégâts, trouvée au débogueur en partant de sa jauge
@@ -115,13 +119,13 @@ qu'il utilisait (repris des scripts "Bosses 2" et "Bosses Laughing
 Octopus" de la table `MGS4.CT`) : il ne servait plus que de repli si les
 patchs refusaient de s'appliquer.
 
-**Gecko (robots) et tanks : hook séparé.** Les Gecko ne passent ni par
-l'instruction des ennemis humains ni par celle des boss - un troisième
-patch de code dédié (porté du script CE "aob Damage Gecko") gère leur
-cas, branché sur le même bouton/flag "Un coup, un mort" (pas de variante
-non létale, ça n'a pas de sens pour un robot). Ce patch vise en réalité
-la fonction de dégâts commune aux Gecko **et aux tanks** (confirmé en
-jeu sur les deux, 2026-10-03).
+**Gekko et tanks (refait le 13 octobre 2026).** Ils partagent une même
+fonction de dégâts, qui connaît elle aussi la "mise à mort" du jeu : le
+trainer y fait passer chaque coup en Létal (tanks : dans les deux
+modes). En Non létal, un Gekko s'endort au premier coup, toute arme, où
+qu'on le touche : le trainer traite chaque coup comme une fléchette du
+Mk.2 dans la jambe et vide d'un coup ses deux jauges de tranquillisant. Jusqu'à la V2.4.1, les Gekko et les tanks passaient par un
+hook porté du script "aob Damage Gecko" de la table `MGS4.CT`.
 
 **Tanks : n'importe quelle arme (V2.1).** Normalement, un tank ignore la
 plupart des armes : son code de collision n'enregistre que les coups de

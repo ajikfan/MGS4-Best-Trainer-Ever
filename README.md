@@ -99,11 +99,14 @@ propres recherches :
   chaîne de pointeurs vers la structure de jeu (voir [Comment ça marche](docs/fonctionnement.md)).
 - **Table Cheat Engine communautaire `MGS4.CT`, par RMLSNK** (version
   7.7 du fichier utilisé ici). Cette table n'est **pas redistribuée**
-  dans ce dépôt (aucune licence n'y est indiquée) ; le trainer réutilise
-  ses motifs d'octets (AOB), ses offsets de structure et sa logique,
-  réécrits en C et en Python :
-  - "Un coup, un mort" / "Non létal" : script "aob Damage" et sa logique
-    "Remove Lethal" ;
+  dans ce dépôt (aucune licence n'y est indiquée). Jusqu'à la V2.4.1, le
+  trainer réutilisait plusieurs de ses scripts, réécrits en C et en
+  Python ; depuis, **tous ont été remplacés par notre propre code** :
+  - "Un coup, un mort" / "Non létal" sur les soldats : script "aob
+    Damage" et sa logique "Remove Lethal" ;
+  - "Un coup, un mort" sur les Gekko et les tanks : script "aob Damage
+    Gecko" ;
+  - "Pas de rechargement" : script "No Reload" ;
   - suivi des boss (jusqu'à la V2.4.1, retiré depuis) : scripts
     "Bosses 2" et "Bosses Laughing Octopus" ;
   - Téléportation (jusqu'à la V2.2, retiré depuis) : script "aob

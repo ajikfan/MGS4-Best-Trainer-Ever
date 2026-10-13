@@ -400,8 +400,10 @@ class VitalsTab(QWidget):
             return
         active = self.instant_kill_check.isChecked()
         lethal = self.lethal_btn.isChecked()
-        self.live.set_one_shot_kill(active and lethal)
-        self.live.set_non_lethal(active and not lethal)
+        # Soldats : patchs de code soldier_* depuis le 2026-10-13 ; l'ancien
+        # hook de la DLL (motif "aob Damage") reste toujours eteint.
+        self.live.set_one_shot_kill(False)
+        self.live.set_non_lethal(False)
         # Ce qui n'a pas d'endurance (Gekko, tanks, vehicules, helicopteres,
         # mini Gekko, objets destructibles) est detruit dans les deux modes.
         self.live.set_machine_kill(active)
@@ -410,8 +412,9 @@ class VitalsTab(QWidget):
             self.live.set_code_patch("liquid_final_kill", active)
             # Les patchs Letal / Non letal partagent des sites (Crying Wolf) :
             # retirer d'abord ceux du mode inactif, puis poser ceux du mode actif.
-            lethal_patches = ("minigekko_lethal", "boss_one_shot_kill")
-            non_lethal_patches = ("minigekko_non_lethal", "boss_non_lethal_kill")
+            lethal_patches = ("soldier_one_shot_kill", "gekko_dart_kill", "minigekko_lethal", "boss_one_shot_kill")
+            non_lethal_patches = ("soldier_non_lethal_kill", "gekko_non_lethal_sleep", "minigekko_non_lethal",
+                                  "boss_non_lethal_kill")
             wanted = lethal_patches if active and lethal else non_lethal_patches if active else ()
             for name in lethal_patches + non_lethal_patches:
                 if name not in wanted:
