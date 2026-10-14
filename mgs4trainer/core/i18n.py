@@ -48,6 +48,17 @@ def set_language(lang: str) -> None:
     _save_settings(settings)
 
 
+def update_check_enabled() -> bool:
+    """Recherche d'une mise a jour au lancement (active par defaut)."""
+    return bool(_load_settings().get("check_updates", True))
+
+
+def set_update_check(enabled: bool) -> None:
+    settings = _load_settings()
+    settings["check_updates"] = enabled
+    _save_settings(settings)
+
+
 def restart_trainer() -> None:
     """Relance le process a l'identique (meme exe/script, memes
     arguments) - utilise apres un changement de langue. os.execv

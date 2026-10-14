@@ -36,15 +36,50 @@ python -m PyInstaller --noconfirm MGS4Trainer.spec
 ```
 
 Utiliser le fichier `.spec` fourni (pas une commande PyInstaller "à la
-main") est important : il embarque l'icône et le dossier `assets/`
-(nécessaire à l'icône affichée dans la fenêtre au runtime). Le résultat
-est dans `dist/MGS4Trainer/` (dossier complet à copier, pas juste
-l'exe).
+main") est important. Depuis la V2.5, le résultat (`dist/MGS4Trainer/`,
+dossier complet à copier, pas juste l'exe) est en deux parties :
+
+- `MGS4Trainer.exe` et `_internal/` : le **moteur** (`launcher.py`),
+  c'est-à-dire Python, PySide6 et les modules standard listés dans
+  `release_files.RUNTIME_MODULES`. Il ne contient pas le code du trainer ;
+- `app/` : le **code** du trainer (`live_trainer.py`, `mgs4trainer/`,
+  `mgs4save.py`, `locales/`, `assets/`, la DLL), copié tel quel par le
+  `.spec` d'après `release_files.app_files()`. C'est ce dossier que la
+  mise à jour remplace, fichier par fichier.
+
+Au lancement, l'exe installe d'abord une mise à jour en attente (dossier
+`update/` validé par `update/ready.json`, voir `launcher.py`), puis lance
+`app/live_trainer.py`. Si le code a besoin d'un module absent du moteur,
+l'ajouter à `RUNTIME_MODULES` et augmenter `LAUNCHER_VERSION` dans
+`launcher.py` : cette version demandera le zip complet.
 
 L'exe n'est pas signé : Windows SmartScreen affichera un avertissement
 au premier lancement ("Windows a protégé votre PC") — c'est normal pour
 un outil indépendant non signé, il suffit de cliquer "Informations
 complémentaires" → "Exécuter quand même".
+
+## Publier une version (avec la mise à jour par petits fichiers)
+
+Le bouton « Mise à jour » du trainer (`core/updater.py`) lit la dernière
+release GitHub, télécharge son `manifest.json`, puis seulement les
+fichiers du code dont l'empreinte diffère, **depuis le dépôt au tag de la
+release** (raw.githubusercontent.com). D'où l'ordre :
+
+1. Mettre `TRAINER_VERSION` (`mgs4trainer/ui/help.py`) et le changelog à
+   jour, puis commiter. Tout le code doit être commité : `make_manifest.py`
+   refuse sinon.
+2. `python -m PyInstaller --noconfirm MGS4Trainer.spec`, puis zipper
+   `dist/MGS4Trainer/`.
+3. `python make_manifest.py` → `dist/manifest.json` (empreintes prises
+   dans le dépôt au commit courant ; fichiers texte comparés après
+   CRLF → LF, car Git les extrait en CRLF sous Windows).
+4. Créer le tag (même nom que `TRAINER_VERSION`, ex. `V2.5`) **sur ce
+   commit**, pousser commit et tag.
+5. Créer la release GitHub sur ce tag, avec le zip **et**
+   `manifest.json` (nom exact) en pièces jointes.
+
+Une release sans `manifest.json` reste visible par le bouton, qui propose
+alors seulement la page de téléchargement.
 
 ## Organisation du code
 

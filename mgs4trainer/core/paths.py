@@ -3,16 +3,15 @@ import os
 import sys
 
 
-# Racine du depot (dossier de live_trainer.py) en mode developpement.
+# Dossier de live_trainer.py : racine du depot en mode developpement,
+# dossier app/ a cote de l'exe en mode empaquete (launcher.py).
 SOURCE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def _bundled_path(*parts):
-    """Fichier embarque dans l'exe (PyInstaller --add-data, voir
-    MGS4Trainer.spec), ou a cote du script en mode developpement - meme
-    convention que gui_app.py."""
-    base = getattr(sys, "_MEIPASS", SOURCE_ROOT)
-    return os.path.join(base, *parts)
+    """Fichier livre avec le code (assets, locales, DLL : voir
+    release_files.py), dans le meme dossier que lui."""
+    return os.path.join(SOURCE_ROOT, *parts)
 
 
 TRAINER_ICON = _bundled_path("assets", "MGS4_Best_Trainer.ico")
