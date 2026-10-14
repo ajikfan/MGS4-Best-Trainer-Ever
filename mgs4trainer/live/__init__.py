@@ -7,7 +7,8 @@ from mgs4trainer.live.player import PlayerMixin
 from mgs4trainer.live.sound_alert import SoundAlertMixin
 from mgs4trainer.live.state import GameStateMixin
 from mgs4trainer.live.weapons import WeaponsMixin
+from mgs4trainer.live.zone import ZoneMixin
 
 
-class MGS4Live(LiveBase, HooksMixin, PlayerMixin, WeaponsMixin, CodePatchesMixin, SoundAlertMixin, GameStateMixin, EquipMixin):
+class MGS4Live(LiveBase, HooksMixin, PlayerMixin, WeaponsMixin, CodePatchesMixin, SoundAlertMixin, GameStateMixin, EquipMixin, ZoneMixin):
     """Acces au jeu en cours : reunit les mixins de mgs4trainer.live."""

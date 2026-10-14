@@ -120,6 +120,41 @@ class VitalsTab(QWidget):
         alert_layout.addWidget(self.no_alerts_check)
         layout.addWidget(alert_group)
 
+        # Toute la zone (2026-10-13) : sommeil et emotions sur tous les
+        # soldats eveilles, voir MGS4Live.zone_action.
+        zone_group = QGroupBox(tr("vitals.zone_group"))
+        zone_group.setToolTip(tr("vitals.zone_tooltip"))
+        zone_layout = QVBoxLayout(zone_group)
+        zone_row = QHBoxLayout()
+        zone_layout.addLayout(zone_row)
+        zone_row.addWidget(QLabel(tr("vitals.zone_target")))
+        self.zone_target_combo = QComboBox()
+        for target in self.live.ZONE_TARGETS:
+            self.zone_target_combo.addItem(tr(f"vitals.zone_target_{target}"), target)
+        zone_row.addWidget(self.zone_target_combo)
+        self.zone_buttons = [self.zone_target_combo]
+        for action in ("kill", "knockout", "sleep", "laugh", "cry", "rage", "scream"):
+            button = QPushButton(tr(f"vitals.zone_{action}"))
+            button.setToolTip(tr("vitals.zone_tooltip"))
+            button.clicked.connect(lambda _checked=False, a=action: self._on_zone_action(a))
+            zone_row.addWidget(button)
+            self.zone_buttons.append(button)
+        zone_row.addStretch(1)
+        # Attitude des rebelles (maintenue dans refresh, voir
+        # MGS4Live.maintain_rebel_attitude).
+        rebels_row = QHBoxLayout()
+        self.rebels_check = QCheckBox(tr("vitals.rebels"))
+        self.rebels_check.setToolTip(tr("vitals.rebels_tooltip"))
+        rebels_row.addWidget(self.rebels_check)
+        pill, self.rebels_neutral_btn, self.rebels_hostile_btn, self._rebels_group = self._build_pill_toggle(
+            tr("vitals.rebels_neutral"), tr("vitals.rebels_hostile")
+        )
+        rebels_row.addWidget(pill)
+        rebels_row.addStretch(1)
+        zone_layout.addLayout(rebels_row)
+        self.zone_buttons += [self.rebels_check, self.rebels_neutral_btn, self.rebels_hostile_btn]
+        layout.addWidget(zone_group)
+
         weapons_group = QGroupBox(tr("vitals.weapons_group"))
         weapons_layout = QVBoxLayout(weapons_group)
 
@@ -445,6 +480,10 @@ class VitalsTab(QWidget):
         except OSError:
             pass
 
+    def _on_zone_action(self, action: str):
+        if self.live.connected and self.live.sane:
+            self.live.zone_action(action, self.zone_target_combo.currentData())
+
     def _on_no_alerts_toggled(self, checked: bool):
         if not (self.live.connected and self.live.sane):
             return
@@ -518,11 +557,12 @@ class VitalsTab(QWidget):
             pass
 
     # Profils (2026-10-09) : toute la configuration de l'onglet sauf la
-    # pause - vitesse, difficulte, alerte, cases, Letal/Non letal, et pour
+    # pause - vitesse, difficulte, alerte, cases, Letal/Non letal, cible et
+    # attitude des rebelles du groupe "Toute la zone" (2026-10-13), et pour
     # chaque jauge son verrou et le niveau verrouille.
     PROFILE_CHECKS = (
         "no_alerts", "infinite_ammo", "no_reload", "infinite_silencer", "instant_kill",
-        "railgun_charge", "untouchable", "invisible",
+        "railgun_charge", "untouchable", "invisible", "rebels",
     )
 
     def profile_settings(self) -> dict:
@@ -531,6 +571,8 @@ class VitalsTab(QWidget):
             "difficulty": self.difficulty_combo.currentData(),
             "alert_force": self.alert_force_combo.currentIndex(),
             "lethal": self.lethal_btn.isChecked(),
+            "rebels_hostile": self.rebels_hostile_btn.isChecked(),
+            "zone_target": self.zone_target_combo.currentData(),
             "gauges": {name: {"locked": self.lock_checks[name].isChecked(),
                               "percent": round(self.locked_percents.get(name, self.sliders[name].value()))}
                        for name in self.sliders},
@@ -552,6 +594,9 @@ class VitalsTab(QWidget):
         self.alert_force_combo.setCurrentIndex(max(0, min(int(settings.get("alert_force", 0)),
                                                           self.alert_force_combo.count() - 1)))
         (self.lethal_btn if settings.get("lethal", True) else self.non_lethal_btn).setChecked(True)
+        (self.rebels_hostile_btn if settings.get("rebels_hostile") else self.rebels_neutral_btn).setChecked(True)
+        target = self.zone_target_combo.findData(settings.get("zone_target", "enemies"))
+        self.zone_target_combo.setCurrentIndex(max(0, target))
         for key in self.PROFILE_CHECKS:
             getattr(self, f"{key}_check").setChecked(bool(settings.get(key, False)))
         for widget in widgets:
@@ -657,6 +702,8 @@ class VitalsTab(QWidget):
             self.instant_kill_check.setEnabled(False)
             self.lethal_btn.setEnabled(False)
             self.non_lethal_btn.setEnabled(False)
+            for button in self.zone_buttons:
+                button.setEnabled(False)
             return
         self.difficulty_combo.setEnabled(True)
         if not self.difficulty_combo.view().isVisible():
@@ -678,6 +725,13 @@ class VitalsTab(QWidget):
         self.instant_kill_check.setEnabled(True)
         self.lethal_btn.setEnabled(True)
         self.non_lethal_btn.setEnabled(True)
+        for button in self.zone_buttons:
+            button.setEnabled(True)
+        if self.rebels_check.isChecked():
+            try:
+                self.live.maintain_rebel_attitude("hostile" if self.rebels_hostile_btn.isChecked() else "neutral")
+            except OSError:
+                pass
 
         for name in VITALS:
             if name in self.locked_percents:
