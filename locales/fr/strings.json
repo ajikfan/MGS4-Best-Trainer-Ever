@@ -86,7 +86,7 @@
   "vitals.lethal": "Létal",
   "vitals.non_lethal": "Non létal",
   "vitals.lethal_tooltip": "Un coup tue n'importe quel ennemi touché, boss compris.",
-  "vitals.non_lethal_tooltip": "Un coup met K.O. quelle que soit l'arme (soldats, boss : endurance vidée, vie intacte). Les machines (Gekko, tanks, véhicules, RAY…) sont quand même détruites en un coup ; les mini Gekko sont paralysés.",
+  "vitals.non_lethal_tooltip": "Un coup endort ou met K.O. quelle que soit l'arme : soldats et Gekko endormis, boss mis K.O. (endurance vidée, vie intacte). Les autres machines (tanks, véhicules, hélicoptères, RAY…) sont quand même détruites en un coup ; les mini Gekko sont paralysés.",
   "vitals.snake_group": "Snake",
   "vitals.untouchable": "Intouchable",
   "vitals.untouchable_tooltip": "Patch de code : Snake ignore tous les impacts - balles, explosions, mines, coups et attaques non létales ne lui font plus rien (ni dégâts, ni projection, ni assommage).",

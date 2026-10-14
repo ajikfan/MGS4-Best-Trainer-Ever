@@ -86,7 +86,7 @@
   "vitals.lethal": "Lethal",
   "vitals.non_lethal": "Non-lethal",
   "vitals.lethal_tooltip": "One hit kills any enemy it touches, bosses included.",
-  "vitals.non_lethal_tooltip": "A hit knocks out whatever the weapon (soldiers, bosses: stamina emptied, health untouched). Machines (Gekko, tanks, vehicles, RAY…) are still destroyed in one hit; mini Gekko are paralyzed.",
+  "vitals.non_lethal_tooltip": "A hit puts to sleep or knocks out whatever the weapon: soldiers and Gekko fall asleep, bosses are knocked out (stamina emptied, health untouched). Other machines (tanks, vehicles, helicopters, RAY…) are still destroyed in one hit; mini Gekko are paralyzed.",
   "vitals.snake_group": "Snake",
   "vitals.untouchable": "Untouchable",
   "vitals.untouchable_tooltip": "Code patch: Snake ignores every impact - bullets, explosions, mines, hits and non-lethal attacks no longer do anything to him (no damage, no knockback, no stun).",

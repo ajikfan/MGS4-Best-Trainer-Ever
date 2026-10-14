@@ -14,6 +14,11 @@ Ce que fait chaque onglet et chaque réglage, et comment utiliser les profils F1
   connaissance de cause).
 - **Rafraîchir maintenant** / **(Re)connecter** : relit tout tout de
   suite / se raccroche au jeu (après un redémarrage du jeu par exemple).
+- **Mise à jour** : cherche une nouvelle version du trainer sur GitHub
+  (le bouton passe en vert quand il y en a une). Seuls les fichiers
+  modifiés sont téléchargés, vérifiés, puis installés au redémarrage du
+  trainer (**Redémarrer maintenant** ou **Plus tard**). Une case permet
+  de désactiver la recherche au lancement.
 - **Aide** : résumé, version compatible et historique des versions.
 - **Profil** : le profil appliqué en dernier, et **Enregistrer sous Fx**
   pour ranger la configuration actuelle sous une touche (voir "Profils
@@ -64,11 +69,11 @@ L'onglet des réglages en direct, en plusieurs groupes :
   - **Silencieux illimités** : le silencieux monté ne s'use plus ;
   - **Un coup, un mort**, avec le choix **Létal / Non létal**, quelle
     que soit l'arme : en Létal, tout ennemi touché tombe en un coup ; en
-    Non létal, il est mis K.O. (endurance vidée, vie intacte). Les
-    machines (Gekko, tanks, hélicoptères, véhicules, Metal Gear RAY,
-    objets destructibles) sont détruites dans les deux modes, les mini
-    Gekko détruits en Létal et paralysés en Non létal. Boss : voir
-    [la page des boss](boss.md) ;
+    Non létal, les soldats et les Gekko sont endormis au premier coup, et
+    les boss mis K.O. (endurance vidée, vie intacte). Les autres machines
+    (tanks, hélicoptères, véhicules, Metal Gear RAY, objets destructibles)
+    sont détruites dans les deux modes, les mini Gekko détruits en Létal
+    et paralysés en Non létal. Boss : voir [la page des boss](boss.md) ;
   - **Rail Gun / Solar Gun toujours chargés** : tir chargé à fond dès
     l'appui sur la gâchette (et laser de Metal Gear REX au niveau 5).
 - **Snake** :
@@ -78,6 +83,20 @@ L'onglet des réglages en direct, en plusieurs groupes :
     plus, même debout devant eux, et un tir sans silencieux ne les fait
     plus passer en alerte (le hold-up reste possible). À combiner avec
     "Pas d'alerte" pour que rien ne déclenche l'alerte générale.
+- **Toute la zone** : agit d'un clic sur toute la zone, par les fonctions
+  du jeu lui-même, quel que soit l'état en cours (un ennemi endormi peut
+  être tué).
+  - **Cible** : **Ennemis**, **Rebelles** ou **Tous les PNJ** (les
+    civils et les boss ne sont jamais visés) ;
+  - **Tuer** : soldats, Gekko, mini Gekko, véhicules, tanks et
+    hélicoptères (les machines comptent comme ennemis) ;
+  - **Assommer** : les soldats tombent K.O., les Gekko tombent au sol,
+    les mini Gekko sont paralysés quelques secondes ;
+  - **Endormir** : soldats et Gekko (les mini Gekko ne dorment pas) ;
+  - **Rire**, **Pleurer**, **Enrager**, **Crier** : les émotions des
+    Beauty, sur les soldats éveillés, pendant une trentaine de secondes ;
+  - **Rebelles : Neutres / Hostiles** : cochée, impose l'attitude des
+    rebelles envers Snake (une alerte déjà en cours suit son cours).
 - **Jauges** : Santé, Stamina, **Grip** (suspendu à un rebord),
   **Oxygène** (sous l'eau), Stress, batterie du Solid Eye, **Drebin 893**
   (le véhicule de l'acte 2), **Van** (celui à protéger à l'acte 3), Santé

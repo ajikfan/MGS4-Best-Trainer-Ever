@@ -1,4 +1,8 @@
 {
+  "V2.5": {
+    "date": "October 14, 2026",
+    "description": "• New \"Whole area\" group (Game State tab): Kill, Knock out or Sleep the whole area in one click, targeting Enemies, Rebels or All NPCs, whatever their current state (a sleeping enemy can be killed). Kill also destroys Gekko, Dwarf Gekko, vehicles, tanks and helicopters; Knock out drops Gekko and paralyzes Dwarf Gekko. Laugh, Cry, Rage and Scream trigger the Beauties' emotions on soldiers. Knock out (soldiers) and Rage are still to be confirmed in game.\n• Rebels Neutral or Hostile, enforced while the box is checked.\n• Built-in updates: \"Update\" button (green when a new version exists); only the changed files are downloaded, checked, then installed on restart. Check at launch can be turned off. This V2.5 is still a full download.\n• One Shot, One Kill fully rewritten: in Non-lethal mode, soldiers and Gekko fall asleep on the first hit, whatever the weapon; the Mosin-Nagant also destroys Gekko.\n• Forced alert: back in Automatic, the game resumes its countdown where it is. No Reload now uses the game's own infinite magazine.\n• The trainer no longer uses any code taken from the MGS4.CT Cheat Engine table."
+  },
   "V2.4.1": {
     "date": "October 11, 2026",
     "description": "• Fix: with One Shot, One Kill in Non-lethal mode, walking over a group of mini Gekko could crash the game. They now just jump back as usual; a shot still paralyzes them.\n• Fix: OctoCamo patterns with their own colors (Corpse and special patterns) looked washed out when equipped from the trainer. They now look exactly like they do from the menu.\n• Invisible: an unsilenced shot no longer puts enemies on alert. They can still hear it and come to check, and hold-ups still work."

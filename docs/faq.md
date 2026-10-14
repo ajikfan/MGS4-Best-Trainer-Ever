@@ -79,5 +79,25 @@ masqués en mode simple.
 ### Où sont mes profils, réglages et points de téléportation ?
 
 À côté de l'exe : `profiles.json`, `settings.json` et
-`teleport_points.json`. Copie-les à côté du nouvel exe quand tu changes
-de version.
+`teleport_points.json`. La mise à jour intégrée (depuis la V2.5) n'y
+touche pas. Si tu télécharges un zip complet, copie-les à côté du nouvel
+exe.
+
+### Comment marche la mise à jour ?
+
+Depuis la V2.5, le bouton **Mise à jour** interroge GitHub (une seule
+requête, rien d'autre n'est contacté). S'il y a une nouvelle version, il
+ne télécharge que les fichiers modifiés du dossier `app/`, vérifie leur
+empreinte, puis les installe au redémarrage du trainer. Le résultat est
+noté dans `update.log`, à côté de l'exe.
+
+- Pour ne plus chercher au lancement, décoche la case dans la fenêtre de
+  mise à jour (le bouton reste utilisable).
+- Si la nouvelle version modifie la DLL injectée dans le jeu, relance le
+  jeu pour en profiter.
+- Certaines versions demandent de retélécharger le zip complet (quand
+  l'exe lui-même change) : le bouton ouvre alors la page de
+  téléchargement.
+- Lancé depuis le code source (`python live_trainer.py`), le trainer
+  signale les nouvelles versions mais ne se met pas à jour seul : utilise
+  `git pull`.

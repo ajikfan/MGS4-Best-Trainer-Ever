@@ -1,11 +1,12 @@
-# MGS4 Trainer — V2.4.1
+# MGS4 Trainer — V2.5
 
 Trainer en direct pour Metal Gear Solid 4 (portage PC Steam) : il lit et
 écrit la mémoire du jeu pendant que tu joues. Armes, objets, statistiques
 et jauges modifiables, tenue, visage, gilet, motif OctoCamo ou arme
 changés sans passer par les menus, Snake intouchable ou invisible,
-ennemis et boss en un coup, vitesse du jeu, téléportation, et toute une
-configuration rappelée d'une touche (profils F1 à F11).
+ennemis et boss en un coup, toute la zone neutralisée d'un clic, vitesse
+du jeu, téléportation, et toute une configuration rappelée d'une touche
+(profils F1 à F11).
 
 Interface en français et en anglais. Usage solo uniquement.
 
@@ -21,6 +22,8 @@ Projet frère de [MGS4-SaveStats](https://github.com/ajikfan/MGS4-SaveStats)
 2. Décompresse-le n'importe où (garde le dossier complet).
 3. Lance MGS4 (version Steam **1.4.1**) avec une partie chargée, puis
    `MGS4Trainer.exe`.
+4. Ensuite, le bouton **Mise à jour** du trainer installe les nouvelles
+   versions sans retélécharger le zip (à partir de la V2.5).
 
 L'exe n'est pas signé : voir la [FAQ](docs/faq.md) si Windows ou ton
 antivirus le signale.
@@ -45,14 +48,17 @@ des versions.
 - [Comment ça marche](docs/fonctionnement.md)
 - [Maintenance](docs/maintenance.md) (compatibilité, build, organisation du code)
 
-## Dernière version : V2.4.1
+## Dernière version : V2.5
 
-- Correctif : en "Un coup, un mort" Non létal, marcher sur un groupe de
-  mini Gekko pouvait faire planter le jeu.
-- Correctif : les motifs OctoCamo à couleurs propres (Cadavre, motifs
-  spéciaux) ne sont plus délavés quand on les équipe depuis le trainer.
-- Invisible : un tir sans silencieux ne fait plus passer en alerte, le
-  hold-up reste possible.
+- **Toute la zone** : Tuer, Assommer ou Endormir toute la zone d'un clic
+  (Ennemis, Rebelles ou Tous les PNJ), Gekko, mini Gekko, véhicules,
+  tanks et hélicoptères compris ; émotions des Beauty sur les soldats ;
+  rebelles neutres ou hostiles au choix.
+- **Mise à jour intégrée** : seuls les fichiers modifiés sont téléchargés
+  (cette V2.5 se télécharge encore en entier).
+- **Un coup, un mort** refait entièrement : en Non létal, soldats et
+  Gekko sont endormis au premier coup.
+- Plus aucun code repris de la table Cheat Engine MGS4.CT.
 
 Détail dans [Nouveautés par version](docs/nouveautes.md).
 
@@ -61,6 +67,9 @@ Détail dans [Nouveautés par version](docs/nouveautes.md).
 - **Mise à jour du jeu** : le trainer est calibré pour MGS4 Steam
   **1.4.1**. Après une mise à jour du jeu, attends une nouvelle version
   du trainer avant de l'utiliser (voir la [FAQ](docs/faq.md)).
+- **Connexion** : au lancement, le trainer interroge GitHub pour savoir
+  s'il existe une nouvelle version (rien n'est téléchargé sans ton
+  accord, désactivable dans la fenêtre **Mise à jour**).
 - **Usage solo uniquement, à tes risques.** Ce n'est pas un outil
   officiel : il lit/écrit dans la mémoire d'un autre processus, ce qu'un
   antivirus peut signaler à tort.

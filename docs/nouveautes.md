@@ -4,6 +4,51 @@
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
+## Nouveautés de la V2.5
+
+### Toute la zone
+
+Nouveau groupe dans l'onglet "État de jeu" : une action sur toute la
+zone d'un clic, par les fonctions du jeu lui-même, quel que soit l'état
+en cours (un ennemi endormi peut être tué, un Gekko endormi détruit).
+
+- **Cible** : Ennemis, Rebelles ou Tous les PNJ (jamais les civils ni les
+  boss). Les machines comptent comme ennemis.
+- **Tuer** : soldats, Gekko, mini Gekko, véhicules, tanks et
+  hélicoptères.
+- **Assommer** : soldats K.O., Gekko au sol, mini Gekko paralysés.
+- **Endormir** : soldats et Gekko (les mini Gekko ne dorment pas).
+- **Rire, Pleurer, Enrager, Crier** : les émotions des Beauty sur les
+  soldats éveillés, pendant une trentaine de secondes.
+- **Rebelles : Neutres / Hostiles** : impose l'attitude des rebelles
+  envers Snake tant que la case est cochée.
+- Réglages enregistrés dans les profils F1 à F11.
+
+À confirmer en jeu : Assommer sur les soldats, et Enrager.
+
+### Mise à jour intégrée
+
+Nouveau bouton **Mise à jour** (vert quand une version plus récente
+existe). Le trainer ne télécharge que les fichiers modifiés, quelques
+centaines de Ko au lieu du zip complet, vérifie leur empreinte, puis les
+installe au redémarrage. La recherche au lancement se désactive dans la
+même fenêtre. Pour cela, l'exe ne contient plus que le moteur (Python et
+l'interface) ; le code du trainer est à côté, dans `app/`. Cette V2.5 se
+télécharge donc encore en entier ; les suivantes non. Détails dans la
+[FAQ](faq.md#comment-marche-la-mise-à-jour-).
+
+### Un coup, un mort et alerte refaits
+
+- **Un coup, un mort** est maintenant entièrement notre propre code :
+  en Non létal, les soldats et les Gekko sont endormis au premier coup,
+  quelle que soit l'arme ; le Mosin-Nagant détruit aussi les Gekko.
+- **Alerte forcée** : revenu en Automatique, le jeu reprend son
+  décompte là où il en est (avant : retour immédiat en Normal).
+- **Pas d'alerte** et **Pas de rechargement** passent par des mécanismes
+  du jeu lui-même (le second utilise son chargeur infini).
+- Le trainer n'utilise plus aucun code repris de la table Cheat Engine
+  MGS4.CT (voir les crédits du README).
+
 ## Nouveautés de la V2.4.1
 
 - **Correctif mini Gekko** : en "Un coup, un mort" Non létal, marcher sur
