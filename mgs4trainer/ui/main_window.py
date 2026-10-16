@@ -150,6 +150,7 @@ class TrainerWindow(QMainWindow):
         vitals_tab = VitalsTab(self.live)
         self.vitals_tab = vitals_tab
         self.tabs.addTab(vitals_tab, tr("tab.game_state"))
+        self.tabs.addTab(vitals_tab.gauges_page, tr("tab.gauges"))
         self.item_tabs.append(vitals_tab)
 
         # Un seul onglet "Armes", sections empilees par categorie (meme

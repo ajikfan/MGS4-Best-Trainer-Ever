@@ -1,8 +1,8 @@
 """Onglet Etat de jeu (reglages en direct, jauges, profils)."""
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
-    QButtonGroup, QCheckBox, QComboBox, QGroupBox, QHBoxLayout,
-    QHeaderView, QLabel, QPushButton, QSlider, QTableWidget,
+    QButtonGroup, QCheckBox, QComboBox, QFrame, QGroupBox, QHBoxLayout,
+    QHeaderView, QLabel, QPushButton, QScrollArea, QSlider, QTableWidget,
     QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -206,25 +206,8 @@ class VitalsTab(QWidget):
         snake_layout.addStretch(1)
         layout.addWidget(snake_group)
 
-        # Grip, Oxygene : pas dans linkvarbuf (composant du joueur, voir
-        # MGS4Live.read_player_gauge), meme presentation que les autres jauges.
-        names = list(VITALS)
-        names[names.index("Stamina") + 1:names.index("Stamina") + 1] = ["Grip", "Oxygene"]
-        rex = names.index("Sante Metal Gear REX")
-        names[rex:rex] = ["Drebin 893", "Van"]
-        self.table = QTableWidget(len(names), 3)
-        self.table.setHorizontalHeaderLabels([tr("table.field"), tr("table.live_value"), tr("table.lock")])
-        self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.horizontalHeader().setMinimumSectionSize(90)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        layout.addWidget(self.table)
-
-        for row, name in enumerate(names):
-            self._build_row(row, name)
-
-        self.table.resizeColumnToContents(0)
-        self.table.resizeColumnToContents(2)
+        layout.addStretch(1)
+        self._build_gauges_page()
 
         # Minuteur dedie (AMMO_LOCK_REFRESH_MS, plus rapide que le cycle
         # general REFRESH_MS) pour "Munitions infinies"/"Pas de
@@ -274,10 +257,59 @@ class VitalsTab(QWidget):
         row.addWidget(right_btn)
         return container, left_btn, right_btn, group
 
-    def _build_row(self, row: int, name: str):
+    # Onglet "Jauges" (2026-10-16 : le tableau unique devenait trop long et
+    # cassait l'affichage d'"Etat de jeu") : toutes les jauges toujours
+    # visibles (un verrou pose a l'avance sert quand on s'agrippe, plonge...),
+    # rangees par groupe, page defilante. Grip, Oxygene, vehicules, allies :
+    # pas dans linkvarbuf (voir MGS4Live.read_player_gauge).
+    GAUGE_GROUPS = (
+        ("gauges.snake_group", ("Sante", "Stamina", "Grip", "Oxygene", "Stress", "Batterie Solid Eye")),
+        ("gauges.vehicles_group", ("Drebin 893", "Van", "Sante Metal Gear REX")),
+        ("gauges.allies_group", ("Vie de Meryl", "Endurance de Meryl", "Vie de Johnny", "Endurance de Johnny")),
+    )
+
+    def _build_gauges_page(self):
+        """Page de l'onglet "Jauges", ajoutee par la fenetre principale
+        (self.gauges_page) ; la logique reste dans cet onglet."""
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        tables = []
+        for title, names in self.GAUGE_GROUPS:
+            group = QGroupBox(tr(title))
+            group_layout = QVBoxLayout(group)
+            table = QTableWidget(len(names), 3)
+            table.setHorizontalHeaderLabels([tr("table.field"), tr("table.live_value"), tr("table.lock")])
+            table.verticalHeader().setVisible(False)
+            table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+            table.horizontalHeader().setMinimumSectionSize(90)
+            table.setEditTriggers(QTableWidget.NoEditTriggers)
+            table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            for row, name in enumerate(names):
+                self._build_row(table, row, name)
+            group_layout.addWidget(table)
+            content_layout.addWidget(group)
+            tables.append(table)
+        content_layout.addStretch(1)
+        # Memes largeurs de colonnes d'un groupe a l'autre ; chaque tableau a
+        # la hauteur de ses lignes (c'est la page qui defile, pas lui).
+        name_width = max(t.sizeHintForColumn(0) for t in tables) + 16
+        lock_width = max(t.horizontalHeader().sectionSizeHint(2) for t in tables)
+        for table in tables:
+            table.setColumnWidth(0, name_width)
+            table.setColumnWidth(2, lock_width)
+            table.setFixedHeight(table.horizontalHeader().sizeHint().height()
+                                 + sum(table.rowHeight(r) for r in range(table.rowCount()))
+                                 + 2 * table.frameWidth())
+        self.gauges_page = QScrollArea()
+        self.gauges_page.setWidgetResizable(True)
+        self.gauges_page.setFrameShape(QFrame.NoFrame)
+        self.gauges_page.setWidget(content)
+
+    def _build_row(self, table: QTableWidget, row: int, name: str):
         name_item = QTableWidgetItem(vital_display_name(name))
         name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
-        self.table.setItem(row, 0, name_item)
+        table.setItem(row, 0, name_item)
 
         control = QWidget()
         control_layout = QHBoxLayout(control)
@@ -293,7 +325,7 @@ class VitalsTab(QWidget):
         control_layout.addWidget(value_label)
         self.value_labels[name] = value_label
         control.setLayout(control_layout)
-        self.table.setCellWidget(row, 1, control)
+        table.setCellWidget(row, 1, control)
 
         lock = QCheckBox()
         lock.toggled.connect(lambda checked, n=name: self._on_lock_toggled(n, checked))
@@ -302,13 +334,15 @@ class VitalsTab(QWidget):
         lock_layout.setContentsMargins(0, 0, 0, 0)
         lock_layout.addWidget(lock)
         lock_layout.setAlignment(Qt.AlignCenter)
-        self.table.setCellWidget(row, 2, lock_wrap)
+        table.setCellWidget(row, 2, lock_wrap)
         self.lock_checks[name] = lock
 
     # Lignes du tableau -> jauge MGS4Live.PLAYER_GAUGES (actives seulement
     # suspendu / sous l'eau). Maximum : 2000 (valeur de depart constatee,
     # et des champs voisins), ou la plus haute valeur vue si plus grande.
-    PLAYER_GAUGE_ROWS = {"Grip": "grip", "Oxygene": "oxygen", "Drebin 893": "drebin", "Van": "van"}
+    PLAYER_GAUGE_ROWS = {"Grip": "grip", "Oxygene": "oxygen", "Drebin 893": "drebin", "Van": "van",
+                         "Vie de Meryl": "meryl", "Endurance de Meryl": "meryl_stamina",
+                         "Vie de Johnny": "johnny", "Endurance de Johnny": "johnny_stamina"}
     PLAYER_GAUGE_MAX = 2000
 
     def _on_lock_toggled(self, name: str, checked: bool):
@@ -504,7 +538,16 @@ class VitalsTab(QWidget):
             return True
         return value is None or value < 0
 
+    # Les deux jauges d'un allie verrouillees : le jeu ignore ses coups (plus
+    # aucune ecriture, voir MGS4Live.set_allies_invulnerable) ; une seule :
+    # reecriture comme les autres jauges (le coup est ignore en entier, on ne
+    # peut pas n'en garder qu'une partie).
+    ALLY_LOCK_ROWS = {"meryl": ("Vie de Meryl", "Endurance de Meryl"),
+                      "johnny": ("Vie de Johnny", "Endurance de Johnny")}
+
     def _reassert_player_gauges(self):
+        self.live.set_allies_invulnerable({ally for ally, rows in self.ALLY_LOCK_ROWS.items()
+                                           if all(name in self.locked_percents for name in rows)})
         for name, gauge in self.PLAYER_GAUGE_ROWS.items():
             label = self.value_labels[name]
             slider = self.sliders[name]

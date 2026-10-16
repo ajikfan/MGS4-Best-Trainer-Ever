@@ -4,6 +4,30 @@
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
+## Nouveautés de la V2.5.1
+
+### Onglet Jauges
+
+Les jauges quittent l'onglet "État de jeu", devenu trop long, pour un
+onglet à elles, rangées par groupe (Snake, Véhicules, Alliés), toujours
+visibles et sur une page qui défile.
+
+### Alliés : Meryl et Johnny
+
+- Vie et endurance de **Meryl** et de **Johnny** (actes 1 et 5), "absent"
+  quand ils ne sont pas là.
+- Leurs deux jauges verrouillées : le jeu ignore les coups qu'ils
+  reçoivent. Seuls eux sont protégés, les soldats autour prennent leurs
+  dégâts normalement.
+- Vie à 0 : ils meurent (à l'acte 5, la mort de Meryl fait échouer la
+  mission). Endurance à 0 : K.O. aussitôt, sans attendre un coup.
+
+### Divers
+
+- Toute la zone : Assommer (soldats) et Enrager confirmés en jeu.
+- Première mise à jour par petits fichiers : depuis la V2.5, le bouton
+  "Mise à jour" installe cette version sans tout retélécharger.
+
 ## Nouveautés de la V2.5
 
 ### Toute la zone

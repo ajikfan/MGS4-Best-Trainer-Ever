@@ -94,6 +94,8 @@ kernel32.VirtualQueryEx.argtypes = [
 kernel32.VirtualQueryEx.restype = ctypes.c_size_t
 
 MEM_COMMIT = 0x1000
+MEM_RESERVE = 0x2000
+MEM_FREE = 0x10000
 MEM_PRIVATE = 0x20000
 PAGE_READWRITE = 0x04
 PAGE_EXECUTE_READWRITE = 0x40
@@ -164,6 +166,58 @@ class ProcessHandle:
         if self.handle:
             kernel32.CloseHandle(self.handle)
             self.handle = None
+
+    def alloc_near(self, target: int, size: int = 0x1000) -> int:
+        """Memoire executable a moins de ~2 Go de `target` (pour un saut
+        rel32 depuis le code du jeu) ; 0 si aucune place libre."""
+        kernel32.VirtualAllocEx.argtypes = [wintypes.HANDLE, wintypes.LPVOID, ctypes.c_size_t,
+                                            wintypes.DWORD, wintypes.DWORD]
+        kernel32.VirtualAllocEx.restype = wintypes.LPVOID
+        granularity = 0x10000
+        reach = 0x7F000000
+        mbi = MEMORY_BASIC_INFORMATION()
+        # D'abord au-dessus de `target` (juste apres le module), puis en
+        # dessous : la place la plus proche, loin de la limite du saut.
+        for start, stop in ((target, target + reach), (max(target - reach, granularity), target)):
+            address = start & ~(granularity - 1)
+            while address < stop - size:
+                if not kernel32.VirtualQueryEx(self.handle, ctypes.c_void_p(address), ctypes.byref(mbi),
+                                               ctypes.sizeof(mbi)):
+                    break
+                region = mbi.BaseAddress or 0
+                end = region + (mbi.RegionSize or granularity)
+                if mbi.State == MEM_FREE:
+                    candidate = (max(region, address) + granularity - 1) & ~(granularity - 1)
+                    if candidate + size <= min(end, stop):
+                        result = kernel32.VirtualAllocEx(self.handle, candidate, size, MEM_COMMIT | MEM_RESERVE,
+                                                         PAGE_EXECUTE_READWRITE)
+                        if result:
+                            return result
+                address = end
+        return 0
+
+    def allocation_blocks(self, address: int):
+        """Contenu (adresse, octets) des plages commises et accessibles en
+        ecriture de l'allocation qui contient `address` (un tas du jeu) -
+        bien plus rapide que _writable_regions sur toute la memoire."""
+        mbi = MEMORY_BASIC_INFORMATION()
+        size = ctypes.sizeof(mbi)
+        if not kernel32.VirtualQueryEx(self.handle, ctypes.c_void_p(address), ctypes.byref(mbi), size):
+            return
+        allocation = mbi.AllocationBase
+        address = allocation
+        while kernel32.VirtualQueryEx(self.handle, ctypes.c_void_p(address), ctypes.byref(mbi), size):
+            if mbi.AllocationBase != allocation:
+                break
+            base = mbi.BaseAddress or 0
+            region_size = mbi.RegionSize or 0x1000
+            if (mbi.State == MEM_COMMIT
+                    and (mbi.Protect & WRITABLE_PROTECT) and not (mbi.Protect & PAGE_GUARD)):
+                try:
+                    yield base, self.read_bytes(base, region_size)
+                except OSError:
+                    pass
+            address = base + region_size
 
     def _writable_regions(self):
         """Enumere les plages memoire commises, accessibles en ecriture

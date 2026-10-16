@@ -97,16 +97,31 @@ L'onglet des réglages en direct, en plusieurs groupes :
     Beauty, sur les soldats éveillés, pendant une trentaine de secondes ;
   - **Rebelles : Neutres / Hostiles** : cochée, impose l'attitude des
     rebelles envers Snake (une alerte déjà en cours suit son cours).
-- **Jauges** : Santé, Stamina, **Grip** (suspendu à un rebord),
-  **Oxygène** (sous l'eau), Stress, batterie du Solid Eye, **Drebin 893**
-  (le véhicule de l'acte 2), **Van** (celui à protéger à l'acte 3), Santé
-  de Metal Gear REX. Pour chacune : un curseur en pourcentage pour la
-  régler, et une case **Verrouiller** qui la maintient à ce niveau
-  (Santé verrouillée à 100 % = vie infinie, Grip à 100 % = grip
-  infini...). Une jauge verrouillée ne bouge plus du tout : le jeu
-  n'écrit plus dedans. Grip, oxygène, Drebin 893 et Van affichent "pas
-  suspendu", "hors de l'eau" ou "absent" quand ils ne sont pas actifs ;
-  les verrouiller à ce moment-là les verrouille à 100 %.
+
+### Jauges
+
+Toutes les jauges, toujours visibles, rangées par groupe (la page défile
+si la fenêtre est petite) :
+
+- **Snake** : Santé, Stamina, **Grip** (suspendu à un rebord),
+  **Oxygène** (sous l'eau), Stress, batterie du Solid Eye ;
+- **Véhicules** : **Drebin 893** (le véhicule de l'acte 2), **Van**
+  (celui à protéger à l'acte 3), Santé de Metal Gear REX ;
+- **Alliés** : vie et endurance de **Meryl** et de **Johnny** (actes 1
+  et 5).
+
+Pour chacune : un curseur en pourcentage pour la régler, et une case
+**Verrouiller** qui la maintient à ce niveau (Santé verrouillée à 100 % =
+vie infinie, Grip à 100 % = grip infini...). Une jauge verrouillée ne
+bouge plus du tout : le jeu n'écrit plus dedans. Les jauges absentes
+affichent "pas suspendu", "hors de l'eau" ou "absent" ; les verrouiller à
+ce moment-là les verrouille à 100 %, prêtes pour le moment où elles
+servent.
+
+Alliés : leurs deux jauges verrouillées, le jeu ignore les coups qu'ils
+reçoivent (les soldats autour prennent leurs dégâts normalement). Leur
+vie à 0 les tue (la mort de Meryl à l'acte 5 fait échouer la mission),
+leur endurance à 0 les met K.O. aussitôt.
 
 ### Armes
 
