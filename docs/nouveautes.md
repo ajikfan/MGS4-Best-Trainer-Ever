@@ -4,6 +4,29 @@
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
+## Nouveautés de la V2.5.2
+
+### Pas de mal de dos
+
+Nouvelle case dans le groupe Snake : Snake ne se tient plus le dos, ni à
+la réception d'une chute de haut (réception normale, les dégâts de la
+chute restent), ni après être resté longtemps accroupi. Enregistrée dans
+les profils F1 à F11.
+
+### Déclencher une action
+
+Nouvelle liste dans le groupe Snake, avec un bouton **Déclencher** :
+
+- **Tomber de haut**, **Mal de dos accroupi** (seulement accroupi et
+  immobile) et **Vomir** (debout ou accroupi selon la posture) ;
+- puis 214 animations du jeu, avec leur numéro : coups, CQC, chutes,
+  réveils, échelles, suspendu, électrocuté, « ça sent mauvais »…
+
+Les actions partent dans n'importe quelle posture, sans dégâts ni son, et
+Snake reprend ensuite sa posture (accroupi, allongé, face contre le sol,
+sur le dos). Les animations prévues pour une autre posture peuvent donner
+un résultat étrange.
+
 ## Nouveautés de la V2.5.1
 
 ### Onglet Jauges

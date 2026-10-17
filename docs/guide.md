@@ -82,7 +82,20 @@ L'onglet des réglages en direct, en plusieurs groupes :
   - **Invisible** : les soldats, les Gekko et les mini Gekko ne le voient
     plus, même debout devant eux, et un tir sans silencieux ne les fait
     plus passer en alerte (le hold-up reste possible). À combiner avec
-    "Pas d'alerte" pour que rien ne déclenche l'alerte générale.
+    "Pas d'alerte" pour que rien ne déclenche l'alerte générale ;
+  - **Pas de mal de dos** : Snake ne se tient plus le dos, ni après une
+    chute de haut (réception normale, les dégâts de la chute restent), ni
+    après être resté longtemps accroupi ;
+  - **Déclencher** : choisis une action dans la liste et clique sur
+    **Déclencher** pour que Snake la joue. En tête : **Tomber de haut**,
+    **Mal de dos accroupi** (seulement accroupi et immobile) et **Vomir**
+    (version debout ou accroupie selon la posture), puis 214 animations
+    du jeu (coups, CQC, chutes, réveils, échelles, suspendu, électrocuté,
+    « ça sent mauvais »…), chacune avec son numéro. Les actions partent
+    dans n'importe quelle posture, sans dégâts ni son ; Snake reprend
+    ensuite sa posture (accroupi, allongé, face contre le sol, sur le
+    dos). Les animations prévues pour une autre posture (échelle,
+    suspendu…) peuvent donner un résultat étrange.
 - **Toute la zone** : agit d'un clic sur toute la zone, par les fonctions
   du jeu lui-même, quel que soit l'état en cours (un ennemi endormi peut
   être tué).
@@ -213,7 +226,7 @@ touche du clavier, de F1 à F11.
 Ce qui est enregistré : la vitesse, la difficulté, l'alerte forcée,
 toutes les cases (Pas d'alerte, Munitions infinies, Pas de rechargement,
 Silencieux illimités, Un coup un mort, Rail Gun / Solar Gun toujours
-chargés, Intouchable, Invisible), le choix Létal / Non létal, le verrou
+chargés, Intouchable, Invisible, Pas de mal de dos), le choix Létal / Non létal, le verrou
 et le niveau de chaque jauge, et les accessoires montés sur chaque arme.
 Ce qui ne l'est pas : la pause, les objets et les armes elles-mêmes (un
 profil ne te donne pas d'arme ; à l'application, seuls les accessoires

@@ -1,4 +1,8 @@
 {
+  "V2.5.2": {
+    "date": "17 octobre 2026",
+    "description": "• Nouvelle case « Pas de mal de dos » (groupe Snake) : Snake ne se tient plus le dos, ni à la réception d'une chute de haut (réception normale, les dégâts de la chute restent), ni après être resté longtemps accroupi.\n• Nouveau « Déclencher » (groupe Snake) : fait jouer à Snake une action du jeu. En tête : Tomber de haut, Mal de dos accroupi et Vomir (debout ou accroupi selon la posture), puis 214 animations du jeu (coups, CQC, chutes, réveils, échelles, suspendu, électrocuté, « ça sent mauvais »…). Les actions partent dans n'importe quelle posture, sans dégâts ni son, et Snake reprend ensuite sa posture (accroupi, allongé, face contre le sol, sur le dos). Mal de dos accroupi : seulement accroupi et immobile."
+  },
   "V2.5.1": {
     "date": "16 octobre 2026",
     "description": "• Nouvel onglet « Jauges » : toutes les jauges y sont rangées par groupe (Snake, Véhicules, Alliés), toujours visibles, page défilante ; l'onglet État de jeu redevient lisible.\n• Nouvelles jauges Alliés : vie et endurance de Meryl et de Johnny (actes 1 et 5), « absent » hors de leur présence. Leurs deux jauges verrouillées : le jeu ignore les coups qu'ils reçoivent (seuls eux, les soldats autour prennent leurs dégâts normalement). Mettre leur vie à 0 les tue, leur endurance à 0 les met K.O. aussitôt, sans attendre un coup (mort de Meryl à l'acte 5 : échec de mission).\n• Toute la zone : Assommer (soldats) et Enrager confirmés en jeu.\n• Première mise à jour par petits fichiers : depuis la V2.5, le bouton « Mise à jour » installe cette version sans tout retélécharger."

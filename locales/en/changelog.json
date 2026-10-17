@@ -1,4 +1,8 @@
 {
+  "V2.5.2": {
+    "date": "October 17, 2026",
+    "description": "• New \"No Back Pain\" box (Snake group): Snake no longer holds his back, neither when landing from a high fall (normal landing, fall damage still applies) nor after crouching for a long time.\n• New \"Trigger\" (Snake group): makes Snake play one of the game's actions. First: High fall, Crouching back pain and Vomit (standing or crouching depending on posture), then 214 game animations (hits, CQC, falls, wake-ups, ladders, hanging, electrocuted, \"something stinks\"…). Actions work in any posture, with no damage or sound, and Snake then returns to his posture (crouching, lying, face down, on his back). Crouching back pain: only while crouching still."
+  },
   "V2.5.1": {
     "date": "October 16, 2026",
     "description": "• New \"Gauges\" tab: every gauge now lives there, grouped (Snake, Vehicles, Allies), always visible, scrollable page; the Game State tab is readable again.\n• New Allies gauges: Meryl's and Johnny's health and stamina (acts 1 and 5), \"not present\" when they are absent. With both their gauges locked, the game ignores the hits they take (only them: nearby soldiers still take damage). Setting their health to 0 kills them, their stamina to 0 knocks them out at once, without waiting for a hit (Meryl's death in act 5: mission failed).\n• Whole area: Knock out (soldiers) and Enrage confirmed in game.\n• First small-file update: from V2.5, the \"Update\" button installs this version without downloading everything again."

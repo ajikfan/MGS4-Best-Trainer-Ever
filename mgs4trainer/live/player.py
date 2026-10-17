@@ -4,6 +4,7 @@ import threading
 import time
 
 from mgs4trainer.core.gamedata import VITALS
+from mgs4trainer.core.winproc import MEM_COMMIT, PAGE_EXECUTE_READWRITE, kernel32
 
 
 class PlayerMixin:
@@ -65,6 +66,224 @@ class PlayerMixin:
     GRIP_COMPONENT_VTABLE_RVA = 0x18AF720
     PLAYER_GAUGE_STATE_OFFSET = 0x1F8
     PLAYER_GAUGES = {"grip": (0x1E8, 0x1), "oxygen": (0x1EC, 0x4)}
+
+    # Evenements de Snake (2026-10-17). Deux machines a etats a partir du
+    # composant joueur (meme disposition : vtable, etat courant +0x60, etat
+    # demande +0x68 ; le jeu y ecrit lui-meme ses transitions) :
+    #  - principale, composant+0x1210 (vtable 18B1518) : debout immobile
+    #    9E4FC0, accroupi immobile 9DF1E0 ; mal de dos accroupi = demande
+    #    9DD440 depuis 9DF1E0 (~3,5 s ; se relever ou bouger l'interrompt) ;
+    #  - actions speciales, composant+0x1BB0 (vtable 18B1EC8), en veille quand
+    #    [m+0x50] == 1. Le gestionnaire des machines (90A350(gestionnaire =
+    #    [m+0x38], machine)) appelle la surveillance de la machine en veille
+    #    (vtable+0x10, 9F35D0, qui se demande par ex. A050C0 a une chute) ; si
+    #    elle renvoie 1, il verifie les conflits, suspend les machines en
+    #    conflit (l'etat principal passe a 0) et active la machine. Ecrire la
+    #    demande seule ne fait rien : un petit code (une fois par processus)
+    #    refait le prologue de 90A350 et saute en 90A380, comme si la
+    #    surveillance avait dit oui, puis le jeu fait le reste (valide).
+    #  - mal de dos debout = A05B20 demande directement (sans A050C0 qui joue
+    #    la chute), [m+0x90] = 0 (degats de chute appliques par A05B20 : aucun).
+    #    A05B20 joue a son entree le mouvement 0x3F8F1 (impact + se tenir le
+    #    dos, ~1,9 s ; immediat de "mov qword [rsp+0x80], 0x3F8F1" en A05DDB)
+    #    et emet un bruit pour les soldats (87680).
+    #  - mouvements : meme chemin, l'immediat d'A05DDB remplace le temps de
+    #    l'animation puis remis. SNAKE_MOTIONS = mouvements que le code des
+    #    etats de Snake utilise lui-meme (immediats 0x3F000-0x40FFF releves
+    #    dans 900000-B00000), pas d'identifiants au hasard (un mouvement
+    #    absent peut planter le jeu). Joues debout ; ceux d'une autre posture
+    #    peuvent donner un resultat etrange. Releves en jeu : 0x3F8F1 mal de
+    #    dos (impact + dos), 0x3F8F2 s'accroupit et se tape le dos, 0x3F8F3
+    #    s'ecrase au sol sur le dos, 0x3F8F4 squat rapide, 0x3F8B0 passe
+    #    par-dessus une caisse, 0x3F8B1 petit saut en avant. Catalogue complet
+    #    decrit par l'utilisateur (locales "motion.0x..."). 40 de plus le
+    #    2026-10-17 (autres encodages : mov dword / registre, dans le code
+    #    des actions de Snake 900000-A50000, dont 0x1BF802/803/0x1BFC02
+    #    accroupis) a decouvrir (recherche du vomissement).
+    SNAKE_MACHINE_OFFSET = 0x1210
+    SNAKE_MACHINE_VTABLE_RVA = 0x18B1518
+    SNAKE_SPECIAL_OFFSET = 0x1BB0
+    SNAKE_SPECIAL_VTABLE_RVA = 0x18B1EC8
+    SNAKE_STAND_STATE = 0x9E4FC0
+    SNAKE_CROUCH_STATE = 0x9DF1E0
+    SNAKE_CROUCH_BACK_PAIN = 0x9DD440
+    # Posture reprise apres une action speciale (2026-10-17, valide en jeu) :
+    # A05B20 impose "debout" (9E4FC0) comme etat de reprise de la machine
+    # principale, au dernier moment (le maintenir pendant l'action ne sert a
+    # rien). On redemande donc l'etat d'avant des que le jeu rend la main
+    # debout ; transitions propres en jeu. Seulement ces postures immobiles :
+    # accroupi 9DF1E0, allonge 9D4FE0, face contre le sol 9D54D0, sur le dos
+    # (pas completement etale) 9E9850, sur le dos etale 9E9D30 (reprendre un etat en mouvement
+    # ou une transition n'a pas de sens).
+    SNAKE_RESUME_STATES = (0x9DF1E0, 0x9D4FE0, 0x9D54D0, 0x9E9850, 0x9E9D30)
+    SNAKE_STAND_BACK_PAIN = 0xA05B20
+    SNAKE_ACTIVATE = (0x90A350, "48895c241048896c2418574883ec20837a5001488bfa488be90f85")
+    SNAKE_ACTIVATE_RESUME = (0x90A380, "488b47184885c0")
+    SNAKE_MOTION_SITE = (0xA05DDB, bytes.fromhex("48c7842480000000f1f80300"))
+    # Son joue par A05B20 pendant l'animation : call 97C690(..., 7) en A05C7E
+    # (valide en jeu : coupe, plus de son ; ni l'entree 8DAFA0 0x53/0x55 ni
+    # l'animation). Coupe le temps des actions du trainer, remis ensuite ;
+    # une vraie chute garde son son.
+    SNAKE_SOUND_SITE = (0xA05C7E, bytes.fromhex("e80d6af7ff"), bytes.fromhex("0f1f440000"))
+    # "vomit" : 0x3F84C debout, 0x3F84D accroupi (choisi selon la posture).
+    SNAKE_EVENTS = ("fall_pain", "back_pain", "vomit")
+    SNAKE_VOMIT = (0x3F84C, 0x3F84D)
+    SNAKE_MOTIONS = (
+        0x3F12F, 0x3F130, 0x3F131, 0x3F403, 0x3F408, 0x3F409, 0x3F506, 0x3F801, 0x3F82F, 0x3F830,
+        0x3F831, 0x3F833, 0x3F834, 0x3F847, 0x3F848, 0x3F849, 0x3F84A, 0x3F84B, 0x3F84C, 0x3F84D,
+        0x3F855, 0x3F856, 0x3F857, 0x3F858, 0x3F859, 0x3F85A, 0x3F85B, 0x3F85D, 0x3F85E, 0x3F861,
+        0x3F862, 0x3F863, 0x3F864, 0x3F865, 0x3F866, 0x3F867, 0x3F869, 0x3F86A, 0x3F86C, 0x3F86D,
+        0x3F86E, 0x3F86F, 0x3F870, 0x3F871, 0x3F872, 0x3F873, 0x3F87C, 0x3F882, 0x3F883, 0x3F884,
+        0x3F885, 0x3F888, 0x3F889, 0x3F89E, 0x3F8A0, 0x3F8A1, 0x3F8A3, 0x3F8A8, 0x3F8AA, 0x3F8AB,
+        0x3F8B0, 0x3F8B1, 0x3F8B3, 0x3F8B4, 0x3F8B5, 0x3F8B6, 0x3F8B7, 0x3F8B9, 0x3F8BA, 0x3F8BB,
+        0x3F8BD, 0x3F8BE, 0x3F8BF, 0x3F8C0, 0x3F8C1, 0x3F8C2, 0x3F8C3, 0x3F8C4, 0x3F8C5, 0x3F8C6,
+        0x3F8C7, 0x3F8C8, 0x3F8C9, 0x3F8D2, 0x3F8D3, 0x3F8D4, 0x3F8D6, 0x3F8D7, 0x3F8D8, 0x3F8DA,
+        0x3F8DD, 0x3F8E5, 0x3F8E7, 0x3F8E8, 0x3F8EA, 0x3F8EF, 0x3F8F1, 0x3F8F2, 0x3F8F3, 0x3F8F4,
+        0x3F8F5, 0x3F8F7, 0x3F8F9, 0x3F8FA, 0x3F8FB, 0x3F8FC, 0x3F8FD, 0x3F8FE, 0x3F8FF, 0x3F900,
+        0x3F901, 0x3F902, 0x3F904, 0x3F905, 0x3F907, 0x3F909, 0x3F90A, 0x3F90B, 0x3F90C, 0x3F90D,
+        0x3F90E, 0x3F90F, 0x3F910, 0x3F913, 0x3F914, 0x3F915, 0x3F916, 0x3F917, 0x3F918, 0x3F919,
+        0x3F91A, 0x3F91B, 0x3F91C, 0x3FA03, 0x3FA04, 0x3FA05, 0x3FA06, 0x3FA07, 0x3FA08, 0x3FA09,
+        0x3FA0A, 0x3FA0B, 0x3FA8E, 0x3FA8F, 0x3FA94, 0x3FA95, 0x3FA96, 0x3FA97, 0x3FAAF, 0x3FAB3,
+        0x3FAB7, 0x3FAB9, 0x3FC01, 0x3FC26, 0x3FC28, 0x3FC51, 0x3FC52, 0x3FC53, 0x3FC54, 0x3FC62,
+        0x3FC63, 0x3FC6B, 0x3FC74, 0x3FC75, 0x3FC76, 0x3FC77, 0x3FC78, 0x3FC79, 0x3FC7A, 0x3FC7B,
+        0x3FC80, 0x3FC81, 0x3FC86, 0x3FC87, 0x3FC9F, 0x3FCA2, 0x3FCA4, 0x3FCA5, 0x3FCA6, 0x3FCA7,
+        0x3FCA9, 0x3FCB2, 0x3FCB8, 0x3FCBC, 0x3FCD5, 0x3FCD9, 0x3FCDB, 0x3FCDC, 0x3FCE6, 0x3FCE9,
+        0x3FCEB, 0x3FCEC, 0x3FCED, 0x3FCEE, 0x3FCF0, 0x3FCF6, 0x3FCF8, 0x3FD03, 0x3FD06, 0x3FD11,
+        0x3FD12, 0x3FD1D, 0x3FD1E, 0x3FD1F, 0x3FD20, 0x3FD21, 0x3FD26, 0x3FD83, 0x3FD86, 0x3FEB8,
+        0x3FEBA, 0x1BF802, 0x1BF803, 0x1BFC02,
+    )
+
+    def _snake_machines(self) -> tuple[int, int] | None:
+        """(machine principale, machine des actions speciales) de Snake."""
+        component = self._grip_component()
+        if component is None:
+            return None
+        main, special = component + self.SNAKE_MACHINE_OFFSET, component + self.SNAKE_SPECIAL_OFFSET
+        if (struct.unpack("<Q", self.proc.read_bytes(main, 8))[0] != self.base + self.SNAKE_MACHINE_VTABLE_RVA
+                or struct.unpack("<Q", self.proc.read_bytes(special, 8))[0] != self.base + self.SNAKE_SPECIAL_VTABLE_RVA):
+            return None
+        return main, special
+
+    def _snake_activate_stub(self) -> int:
+        """Code qui active la machine passee en rdx comme si sa surveillance
+        avait renvoye 1 (prologue de 90A350 puis saut en 90A380)."""
+        if getattr(self, "_snake_stub_pid", None) == self.pid and self._snake_stub_addr:
+            return self._snake_stub_addr
+        if self._live_funcs({"activate": self.SNAKE_ACTIVATE, "resume": self.SNAKE_ACTIVATE_RESUME}) is None:
+            return 0
+        stub = kernel32.VirtualAllocEx(self.proc.handle, None, 0x1000, MEM_COMMIT | 0x2000, PAGE_EXECUTE_READWRITE)
+        if not stub:
+            return 0
+        self.proc.write_bytes(stub, bytes.fromhex("48895c2410" "48896c2418" "57" "4883ec20"   # prologue de 90A350
+                                                  "488bfa" "488be9" "ff2500000000")           # mov rdi,rdx ; mov rbp,rcx ; jmp
+                              + struct.pack("<Q", self.base + self.SNAKE_ACTIVATE_RESUME[0]))
+        self._snake_stub_addr, self._snake_stub_pid = stub, self.pid
+        return stub
+
+    def _snake_restore_motion(self) -> None:
+        """Remet le mouvement et le son d'origine d'A05B20."""
+        rva, original = self.SNAKE_MOTION_SITE
+        current = self.proc.read_bytes(self.base + rva, len(original))
+        if current != original and current[:8] == original[:8]:
+            self.proc.write_bytes(self.base + rva, original)
+        rva, original, muted = self.SNAKE_SOUND_SITE
+        if self.proc.read_bytes(self.base + rva, len(original)) == muted:
+            self.proc.write_bytes(self.base + rva, original)
+
+    def _snake_play_special(self, main: int, special: int, state: int, motion: int | None) -> bool:
+        """Lance l'etat `state` sur la machine speciale en veille, par le
+        chemin d'activation du jeu ; `motion` remplace le temps de l'action
+        le mouvement joue par A05B20 (remis ensuite, dans un fil). Snake
+        reprend ensuite sa posture (SNAKE_RESUME_STATES)."""
+        # En veille et sans action en cours. Une demande peut rester en attente
+        # (ex. A050C0 laisse par le jeu au chargement d'une zone, Snake apparu
+        # un peu en l'air) : elle ne part qu'a une activation, qui l'ecrase.
+        if (struct.unpack("<i", self.proc.read_bytes(special + 0x50, 4))[0] != 1
+                or struct.unpack("<Q", self.proc.read_bytes(special + 0x60, 8))[0]):
+            return False
+        if getattr(self, "_snake_event_busy", False) or not self.speed.main_loop_hook_installed():
+            return False
+        stub = self._snake_activate_stub()
+        if not stub:
+            return False
+        rva, original = self.SNAKE_MOTION_SITE
+        sound_rva, sound_original, sound_muted = self.SNAKE_SOUND_SITE
+        if (self.proc.read_bytes(self.base + rva, len(original))[:8] != original[:8]
+                or self.proc.read_bytes(self.base + sound_rva, 5) not in (sound_original, sound_muted)):
+            return False
+        manager = struct.unpack("<Q", self.proc.read_bytes(special + 0x38, 8))[0]
+        before = struct.unpack("<Q", self.proc.read_bytes(main + 0x60, 8))[0]
+        self._snake_event_busy = True
+
+        def run():
+            try:
+                if motion is not None:
+                    self.proc.write_bytes(self.base + rva + 8, struct.pack("<I", motion))
+                self.proc.write_bytes(self.base + sound_rva, sound_muted)
+                self.proc.write_bytes(special + 0x90, struct.pack("<i", 0))
+                self.proc.write_bytes(special + 0x68, struct.pack("<Q", self.base + state))
+                self.speed.game_call(stub, manager, special)
+                # attendre la fin de l'action avant de remettre le mouvement
+                # (pas d'activation au bout d'1 s : abandon)
+                started, active = time.monotonic(), False
+                while time.monotonic() - started < 15:
+                    current = struct.unpack("<Q", self.proc.read_bytes(special + 0x60, 8))[0]
+                    active = active or bool(current)
+                    if (active and not current) or (not active and time.monotonic() - started > 1):
+                        break
+                    time.sleep(0.02)
+                if struct.unpack("<Q", self.proc.read_bytes(special + 0x68, 8))[0] == self.base + state:
+                    self.proc.write_bytes(special + 0x68, struct.pack("<Q", 0))  # demande non prise
+                elif active and before - self.base in self.SNAKE_RESUME_STATES:
+                    returned = time.monotonic()
+                    while time.monotonic() - returned < 1:
+                        current, request = struct.unpack("<QQ", self.proc.read_bytes(main + 0x60, 16))
+                        if current:
+                            if current == self.base + self.SNAKE_STAND_STATE and not request:
+                                self.proc.write_bytes(main + 0x68, struct.pack("<Q", before))
+                            break
+                        time.sleep(0.002)
+            except (OSError, AttributeError, TypeError):
+                pass
+            finally:
+                try:
+                    self._snake_restore_motion()
+                except (OSError, AttributeError, TypeError):
+                    pass
+                self._snake_event_busy = False
+        threading.Thread(target=run, daemon=True).start()
+        return True
+
+    def trigger_snake_event(self, name: str) -> bool:
+        """"fall_pain" (reception d'une chute de haut, mouvement 0x3F8F1),
+        "back_pain" (mal de dos accroupi, 9DD440 / mouvement 0x1BF801,
+        accroupi immobile seulement) ou un mouvement de SNAKE_MOTIONS
+        (entier). Actions speciales depuis n'importe quel etat principal."""
+        if not (self.connected and self.sane):
+            return False
+        machines = self._snake_machines()
+        if machines is None:
+            return False
+        main, special = machines
+        current, request = struct.unpack("<QQ", self.proc.read_bytes(main + 0x60, 16))
+        if request:
+            return False
+        if name == "back_pain":
+            if current != self.base + self.SNAKE_CROUCH_STATE:
+                return False
+            self.proc.write_bytes(main + 0x68, struct.pack("<Q", self.base + self.SNAKE_CROUCH_BACK_PAIN))
+            return True
+        # Actions speciales : depuis n'importe quel etat principal (le jeu
+        # suspend lui-meme l'etat en cours, comme pour un coup recu).
+        if not current:
+            return False
+        if name == "vomit":
+            motion = self.SNAKE_VOMIT[current == self.base + self.SNAKE_CROUCH_STATE]
+        else:
+            motion = None if name == "fall_pain" else name
+        if motion is not None and motion not in self.SNAKE_MOTIONS:
+            return False
+        return self._snake_play_special(main, special, self.SNAKE_STAND_BACK_PAIN, motion)
 
     def _grip_component(self) -> int | None:
         index = struct.unpack("<i", self.proc.read_bytes(self.base + self.PLAYER_INDEX_RVA, 4))[0]

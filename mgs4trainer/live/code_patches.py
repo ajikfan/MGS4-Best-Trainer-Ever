@@ -430,6 +430,25 @@ class CodePatchesMixin:
             (0xB5FC0D, bytes.fromhex("3bf20f4cf23be90f4ce98bcb"), bytes.fromhex("3bf29090903be9909090")),
             (0xB5FC33, bytes.fromhex("418bd833c04503d2"), bytes.fromhex("909090")),
         ],
+        # Pas de mal de dos (2026-10-17, valide en jeu). Deux animations :
+        #  - apres une chute : la reception (A050C0, action speciale de Snake
+        #    a composant joueur+0x1C10) choisit selon la hauteur (xmm6) :
+        #    >= 13000 et >= 8000 (sous 11000) -> A05B20 (mal de dos, ~2 s) ;
+        #    les deux "lea rax,[A05B20]" visent la reception normale A05490
+        #    ([rbx+0x90], degats ou duree de la chute, inchange) ;
+        #  - accroupi immobile : la mise a jour de l'etat accroupi (9DF1E0,
+        #    etat principal a composant+0x1270) choisit 9DD440 (~3,5 s,
+        #    interrompu en se relevant ou en bougeant) quand rien d'autre ne
+        #    s'applique (9DFC6F) ; on saute l'affectation (jmp 9DFC7A), Snake
+        #    reste accroupi.
+        # Le compteur d'accroupissement (composant+0x270, fonction du stress
+        # 971690) n'est PAS le declencheur (force a 19700 : rien). Aucun autre
+        # reglage du trainer ne bloque le mal de dos (teste).
+        "no_back_pain": [
+            (0xA053EB, bytes.fromhex("488d052e070000eb6a"), bytes.fromhex("488d059e000000")),
+            (0xA0543C, bytes.fromhex("488d05dd060000eb19"), bytes.fromhex("488d054d000000")),
+            (0x9DFC6F, bytes.fromhex("488d05cad7ffff48894768"), bytes.fromhex("eb099090909090")),
+        ],
         "untouchable": [(0x96C0B0, bytes.fromhex("488bc455535657488d68a1"), bytes.fromhex("c3"))],
         "invisible": [
             (0x89360, bytes.fromhex("48895c2408488974"), bytes.fromhex("0f57c0c3")),

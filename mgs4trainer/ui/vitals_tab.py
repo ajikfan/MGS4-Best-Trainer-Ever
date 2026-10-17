@@ -202,6 +202,26 @@ class VitalsTab(QWidget):
         self.invisible_check.setToolTip(tr("vitals.invisible_tooltip"))
         self.invisible_check.toggled.connect(self._on_invisible_toggled)
         snake_layout.addWidget(self.invisible_check)
+        self.no_back_pain_check = QCheckBox(tr("vitals.no_back_pain"))
+        self.no_back_pain_check.setToolTip(tr("vitals.no_back_pain_tooltip"))
+        self.no_back_pain_check.toggled.connect(self._on_no_back_pain_toggled)
+        snake_layout.addWidget(self.no_back_pain_check)
+        snake_layout.addSpacing(24)
+        # Evenements (2026-10-17) : MGS4Live.SNAKE_EVENTS, un choix par liste.
+        snake_layout.addWidget(QLabel(tr("vitals.snake_event")))
+        self.snake_event_combo = QComboBox()
+        for event in self.live.SNAKE_EVENTS:
+            self.snake_event_combo.addItem(tr(f"vitals.snake_event_{event}"), event)
+        for motion in self.live.SNAKE_MOTIONS:
+            self.snake_event_combo.addItem(tr("vitals.snake_motion", name=tr(f"motion.{motion:#x}"),
+                                              motion=f"{motion:#X}".replace("0X", "0x")), motion)
+        self.snake_event_combo.setMaxVisibleItems(20)
+        self.snake_event_combo.setToolTip(tr("vitals.snake_event_tooltip"))
+        snake_layout.addWidget(self.snake_event_combo)
+        self.snake_event_button = QPushButton(tr("vitals.snake_event_trigger"))
+        self.snake_event_button.setToolTip(tr("vitals.snake_event_tooltip"))
+        self.snake_event_button.clicked.connect(self._on_snake_event)
+        snake_layout.addWidget(self.snake_event_button)
 
         snake_layout.addStretch(1)
         layout.addWidget(snake_group)
@@ -457,6 +477,7 @@ class VitalsTab(QWidget):
         self._on_railgun_charge_toggled(self.railgun_charge_check.isChecked())
         self._on_untouchable_toggled(self.untouchable_check.isChecked())
         self._on_invisible_toggled(self.invisible_check.isChecked())
+        self._on_no_back_pain_toggled(self.no_back_pain_check.isChecked())
         self._apply_gauge_freezes()
         self._on_alert_force_changed(self.alert_force_combo.currentIndex())
         self._apply_instant_kill_mode()
@@ -590,6 +611,18 @@ class VitalsTab(QWidget):
         except OSError:
             pass
 
+    def _on_no_back_pain_toggled(self, checked: bool):
+        try:
+            self.live.set_code_patch("no_back_pain", checked)
+        except OSError:
+            pass
+
+    def _on_snake_event(self):
+        try:
+            self.live.trigger_snake_event(self.snake_event_combo.currentData())
+        except OSError:
+            pass
+
     def _on_railgun_charge_toggled(self, checked: bool):
         if not (self.live.connected and self.live.sane):
             return
@@ -605,7 +638,7 @@ class VitalsTab(QWidget):
     # chaque jauge son verrou et le niveau verrouille.
     PROFILE_CHECKS = (
         "no_alerts", "infinite_ammo", "no_reload", "infinite_silencer", "instant_kill",
-        "railgun_charge", "untouchable", "invisible", "rebels",
+        "railgun_charge", "untouchable", "invisible", "no_back_pain", "rebels",
     )
 
     def profile_settings(self) -> dict:
@@ -740,6 +773,8 @@ class VitalsTab(QWidget):
             self.railgun_charge_check.setEnabled(False)
             self.untouchable_check.setEnabled(False)
             self.invisible_check.setEnabled(False)
+            self.no_back_pain_check.setEnabled(False)
+            self.snake_event_button.setEnabled(False)
             self.alert_force_combo.setEnabled(False)
             self.difficulty_combo.setEnabled(False)
             self.instant_kill_check.setEnabled(False)
@@ -764,6 +799,8 @@ class VitalsTab(QWidget):
         self.railgun_charge_check.setEnabled(True)
         self.untouchable_check.setEnabled(True)
         self.invisible_check.setEnabled(True)
+        self.no_back_pain_check.setEnabled(True)
+        self.snake_event_button.setEnabled(True)
         self.alert_force_combo.setEnabled(True)
         self.instant_kill_check.setEnabled(True)
         self.lethal_btn.setEnabled(True)

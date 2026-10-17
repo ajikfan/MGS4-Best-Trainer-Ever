@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.5.1
+# MGS4 Trainer — V2.5.2
 
 Trainer en direct pour Metal Gear Solid 4 (portage PC Steam) : il lit et
 écrit la mémoire du jeu pendant que tu joues. Armes, objets, statistiques
@@ -48,15 +48,14 @@ des versions.
 - [Comment ça marche](docs/fonctionnement.md)
 - [Maintenance](docs/maintenance.md) (compatibilité, build, organisation du code)
 
-## Dernière version : V2.5.1
+## Dernière version : V2.5.2
 
-- **Onglet Jauges** : toutes les jauges rangées par groupe (Snake,
-  Véhicules, Alliés), toujours visibles.
-- **Alliés** : vie et endurance de Meryl et de Johnny (actes 1 et 5) ;
-  invulnérables quand leurs deux jauges sont verrouillées ; vie à 0 =
-  mort, endurance à 0 = K.O. immédiat.
-- Première version livrée par la **mise à jour intégrée** (petits
-  fichiers, depuis la V2.5).
+- **Pas de mal de dos** : ni après une chute de haut, ni après être resté
+  longtemps accroupi.
+- **Déclencher une action** : Tomber de haut, Mal de dos, Vomir et 214
+  animations du jeu, dans n'importe quelle posture, sans dégâts ni son ;
+  Snake reprend ensuite sa posture.
+- Livrée par la **mise à jour intégrée** (petits fichiers).
 
 Détail dans [Nouveautés par version](docs/nouveautes.md).
 
