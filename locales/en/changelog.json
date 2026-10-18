@@ -1,4 +1,8 @@
 {
+  "V2.5.3": {
+    "date": "October 18, 2026",
+    "description": "• Gauges tab: \"Rat Patrol Team 01\" group (Meryl, Johnny, Jonathan, Ed), one box per member with their live state (active, hit, asleep, knocked out, dead) and the Wake up, Put to sleep, Knock out, Kill actions. New: Jonathan and Ed (act 1).\n• Rat Patrol gauges: a locked gauge is no longer rewritten constantly, the game no longer writes to it at all (for that member only); health and stamina lock separately.\n• Whole area: Kill, Knock out and Sleep work on act 1 PMCs; new \"Rat Patrol\" target (Kill, Knock out, Sleep); \"All NPCs\" never targets the Rat Patrol anymore.\n• Locked Snake gauges: no more rewriting at every refresh, the game freeze is enough."
+  },
   "V2.5.2": {
     "date": "October 17, 2026",
     "description": "• New \"No Back Pain\" box (Snake group): Snake no longer holds his back, neither when landing from a high fall (normal landing, fall damage still applies) nor after crouching for a long time.\n• New \"Trigger\" (Snake group): makes Snake play one of the game's actions. First: High fall, Crouching back pain and Vomit (standing or crouching depending on posture), then 214 game animations (hits, CQC, falls, wake-ups, ladders, hanging, electrocuted, \"something stinks\"…). Actions work in any posture, with no damage or sound, and Snake then returns to his posture (crouching, lying, face down, on his back). Crouching back pain: only while crouching still."

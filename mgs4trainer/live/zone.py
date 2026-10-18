@@ -1,6 +1,7 @@
 """MGS4Live : actions sur tous les soldats de la zone (mort, K.O., sommeil, emotions)."""
 import struct
 import threading
+import time
 
 from mgs4trainer.core.winproc import MEM_COMMIT, PAGE_EXECUTE_READWRITE, kernel32
 
@@ -32,7 +33,11 @@ class ZoneMixin:
     # Camp (2026-10-13, valide en s02a30) : octet de poids fort des drapeaux
     # du soldat (+0x43D0) : 1 = ennemis (PMC), 2 = rebelles (milice).
     ZONE_REBEL_CAMP = 2
-    ZONE_TARGETS = ("enemies", "rebels", "all")
+    # "rat_patrol" (2026-10-18) : les allies (MGS4Live.ALLIES) par leurs
+    # propres actions (ally_set_state : tuer, assommer, endormir) ; pas les
+    # emotions (champs des soldats ennemis). "all" les exclut toujours.
+    ZONE_TARGETS = ("enemies", "rebels", "all", "rat_patrol")
+    ZONE_ALLY_ACTIONS = {"kill": "kill", "knockout": "knockout", "sleep": "sleep"}
     # Attitude d'un camp envers Snake (2026-10-13, valide en s02a30) : unite
     # du soldat (soldat+0x4578, type 18BB860) +0x918. Rebelles amicaux : 190,
     # PMC : -500 ; ecrire -500 rend les rebelles hostiles, 190 les calme. Sans
@@ -171,6 +176,8 @@ class ZoneMixin:
             life, life_max, stamina, _, sleep = struct.unpack("<5i", self.proc.read_bytes(life_object + 0x314, 0x14))
             if life_max <= 1:
                 continue  # civils, rats
+            if self._zone_is_ally(soldier):
+                continue  # Rat Patrol (liste du gestionnaire, camp 128) : jauges dans l'onglet Jauges
             out.append((soldier, life_object, (life, stamina, sleep)))
         return out
 
@@ -290,6 +297,26 @@ class ZoneMixin:
         if struct.unpack("<Q", self.proc.read_bytes(helicopter + self.ZONE_TASK_UPDATE, 8))[0] - self.base == self.ZONE_HELICOPTER_UPDATE_RVA:
             self.proc.write_bytes(helicopter + self.ZONE_HELICOPTER_LIFE, struct.pack("<i", 0))
 
+    def _zone_is_ally(self, actor: int) -> bool:
+        """Acteur reconnu comme allie (MGS4Live.ALLIES : classe, +0xC08)."""
+        klass = struct.unpack("<Q", self.proc.read_bytes(actor, 8))[0] - self.base
+        ident = struct.unpack("<I", self.proc.read_bytes(actor + self.ALLY_ID_OFFSET, 4))[0]
+        return any((klass, ident) in signatures for signatures in self.ALLIES.values())
+
+    # Entree de l'etat "touche" (2026-10-18) : C7EF70 chez les soldats de
+    # l'acte 2, ou une petite fonction qui l'appelle d'abord puis fait sa suite
+    # propre a la classe (SMP de l'acte 1, classe 18BFE40 : C81000 -> C7EF70
+    # puis B10CF0 ; Rat Patrol : EB13F0 -> C7EF70 puis E98D00).
+    ZONE_HIT_WRAPPER_SCAN = 0x30
+
+    def _zone_enters_hit_state(self, enter: int) -> bool:
+        target = self.base + self.ZONE_HIT_STATE_ENTER_RVA
+        if enter == target:
+            return True
+        code = self.proc.read_bytes(enter, self.ZONE_HIT_WRAPPER_SCAN)
+        return any(code[i] == 0xE8 and enter + i + 5 + struct.unpack_from("<i", code, i + 1)[0] == target
+                   for i in range(len(code) - 4))
+
     def _zone_hit_state(self, actor: int) -> tuple[int, int]:
         """(machine a etats, numero de l'etat "touche") de l'acteur si tout a
         la forme attendue (machine qui renvoie a l'acteur, etat "touche" avec
@@ -308,6 +335,8 @@ class ZoneMixin:
             return 0, 0
         vtable = struct.unpack("<Q", self.proc.read_bytes(state, 8))[0]
         enter = struct.unpack("<Q", self.proc.read_bytes(vtable + 8, 8))[0]
+        if enter_rva == self.ZONE_HIT_STATE_ENTER_RVA:
+            return (machine, index) if self._zone_enters_hit_state(enter) else (0, 0)
         return (machine, index) if enter - self.base == enter_rva else (0, 0)
 
     def _zone_camp_matches(self, soldier: int, target: str) -> bool:
@@ -362,6 +391,8 @@ class ZoneMixin:
             return False
         if getattr(self, "_zone_busy", False):
             return False
+        if target == "rat_patrol":
+            return self._zone_allies(action)
         specs = dict(self.ZONE_FUNCS)
         if action in self.ZONE_EMOTIONS:
             specs["emotion_apply"] = (self.ZONE_EMOTIONS[action][1], self.ZONE_EMOTION_SIG)
@@ -386,6 +417,31 @@ class ZoneMixin:
         self._zone_busy = True
         threading.Thread(target=self._zone_run, args=(action, funcs, targets, mini_gekkos, vehicles, helicopters),
                          daemon=True).start()
+        return True
+
+    def _zone_allies(self, action: str) -> bool:
+        """Applique `action` aux membres du Rat Patrol presents, l'un apres
+        l'autre (un seul appel au jeu a la fois)."""
+        if action not in self.ZONE_ALLY_ACTIONS:
+            return False
+        allies = [name for name in self.ALLIES if self._ally_life_object(name) is not None]
+        if not allies:
+            return False
+        self._zone_busy = True
+
+        def run():
+            try:
+                for name in allies:
+                    started = time.monotonic()
+                    while getattr(self, "_ally_reacting", False) and time.monotonic() - started < 3:
+                        time.sleep(0.02)
+                    try:
+                        self.ally_set_state(name, self.ZONE_ALLY_ACTIONS[action])
+                    except OSError:
+                        continue
+            finally:
+                self._zone_busy = False
+        threading.Thread(target=run, daemon=True).start()
         return True
 
     def _zone_run(self, action: str, funcs: dict[str, int], targets: list[tuple[int, int]],

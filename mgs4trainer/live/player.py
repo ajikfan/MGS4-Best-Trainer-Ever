@@ -328,8 +328,11 @@ class PlayerMixin:
     # - Johnny, acte 5 : classe 18E4FA8, 0x86A795 (vie 1000 ; endormi,
     #   sommeil -90000). Acte 1 : meme classe, 0xC13869 (vie 30000). Dans la
     #   liste du gestionnaire d'alerte, comme les soldats.
-    # - Acte 1, deux autres membres du Rat Patrol (Ed et Jonathan ?, vie
-    #   30000) : classes 18E5870 (0xF1379E) et 18E5EF8 (0x213715), non suivis.
+    # - Jonathan (acte 1) : classe 18E5870, 0xF1379E ; Ed (acte 1) : classe
+    #   18E5EF8, 0x213715 (2026-10-18 : vie de 18E5870 baissee a moitie, vue
+    #   en jeu sur Jonathan ; Ed par elimination). Vie 30000 ou 12000 selon
+    #   le moment. Meme machine a etats que Johnny/Meryl acte 1 (+0xE8D0,
+    #   etat 6 EB13F0).
     # Pieges : acteur+0x68 (et la fiche +0x40) est un etat (0x1C endormie, 1
     # eveillee), pas un numero de personnage ; le "Rat01" du Solid Eye est le
     # nom de l'unite ; le hache de l'objet de script [+0x38]-0x10 change a
@@ -344,11 +347,15 @@ class PlayerMixin:
     ALLIES = {
         "meryl": {(0x190EF18, 0xF13930), (0x18E65C8, 0xF13930)},
         "johnny": {(0x18E4FA8, 0x86A795), (0x18E4FA8, 0xC13869)},
+        "jonathan": {(0x18E5870, 0xF1379E)},
+        "ed": {(0x18E5EF8, 0x213715)},
     }
     ALLY_ID_OFFSET = 0xC08
     ALLY_DEATH_CLASSES = {0x190EF18}
     ALLY_GAUGES = {"meryl": ("meryl", 0x314), "meryl_stamina": ("meryl", 0x31C),
-                   "johnny": ("johnny", 0x314), "johnny_stamina": ("johnny", 0x31C)}
+                   "johnny": ("johnny", 0x314), "johnny_stamina": ("johnny", 0x31C),
+                   "jonathan": ("jonathan", 0x314), "jonathan_stamina": ("jonathan", 0x31C),
+                   "ed": ("ed", 0x314), "ed_stamina": ("ed", 0x31C)}
     ALLY_SCAN_INTERVAL = 3.0
     # Vie a 0 seule ne tue pas (2026-10-16) : le jeu ne verifie la vie
     # qu'au moment d'un coup (14B0130, ecriture 14B038D). Si vie <= 0 :
@@ -392,7 +399,7 @@ class PlayerMixin:
         "ally_class": (0x14AFBC1, bytes.fromhex("ba00001000488bcee812adf9ff85c00f85df090000"),
                        bytes.fromhex("483b35"), 0x14B05B5, b"MGS4ALLY", {0x190EF18}),
         "soldier_class": (0xC52190, bytes.fromhex("48895c240848896c241848897424205741544155"),
-                          bytes.fromhex("483b15"), None, b"MGS4SOLD", {0x18E4FA8, 0x18E65C8}),
+                          bytes.fromhex("483b15"), None, b"MGS4SOLD", {0x18E4FA8, 0x18E65C8, 0x18E5870, 0x18E5EF8}),
     }
     # Premiere version de la garde de Meryl (une place a +0, magie a +8, code
     # a +0x10) : retiree et remplacee si on la retrouve dans le jeu.
@@ -447,6 +454,105 @@ class PlayerMixin:
         self._ally_guard_cache = cache
         return guard
 
+    # Verrou d'une jauge d'allie (2026-10-18, demande utilisateur : plus de
+    # reecriture permanente) : le jeu n'ecrit plus cette jauge, pour cet allie
+    # seulement. Une garde par instruction d'ecriture : si l'objet de vie (le
+    # registre de l'instruction) figure dans la liste de la jauge, l'ecriture
+    # est sautee, sinon elle se fait. Sites (instruction deplacee dans le code
+    # de garde ; la suite ne lit pas les indicateurs : jmp, ret ou neg) :
+    #  - vie : C5244D (coups des soldats : Johnny, Ed, Jonathan, Meryl acte 1,
+    #    rdi), C528A7 (sous-fonction C52810, r9), 14B038D (coups de Meryl
+    #    acte 5, r14) ;
+    #  - endurance : B800B0 (retrait generique, r8) en B80109 et B80135 (K.O.,
+    #    valeur tres negative) et B801B3 (baisse normale), 14B0160 (Meryl
+    #    acte 5, r14).
+    # Un seul bloc pres du module : listes vie (+0x00) et endurance (+0x40),
+    # ALLY_LOCK_SLOTS objets chacune (0 = libre), magie a +0x80, codes a
+    # +0x100 (0x80 chacun, dans l'ordre d'ALLY_WRITE_SITES).
+    ALLY_LOCK_SLOTS = 8
+    ALLY_LOCK_MAGIC = b"MGS4FRZ1"
+    ALLY_WRITE_SITES = (
+        # (site, octets d'origine (instruction + suite verifiee), longueur de
+        #  l'instruction, "cmp reg,[rip+x]", liste)
+        (0xC5244D, bytes.fromhex("898f14030000e94d030000"), 6, bytes.fromhex("483b3d"), 0),
+        (0xC528A7, bytes.fromhex("41898914030000c3"), 7, bytes.fromhex("4c3b0d"), 0),
+        (0x14B038D, bytes.fromhex("41898614030000f7d8"), 7, bytes.fromhex("4c3b35"), 0),
+        (0xB80109, bytes.fromhex("4189801c030000c3"), 7, bytes.fromhex("4c3b05"), 1),
+        (0xB80135, bytes.fromhex("4189801c030000c3"), 7, bytes.fromhex("4c3b05"), 1),
+        (0xB801B3, bytes.fromhex("4189881c030000c3"), 7, bytes.fromhex("4c3b05"), 1),
+        (0x14B0160, bytes.fromhex("4189861c030000f7d8"), 7, bytes.fromhex("4c3b35"), 1),
+    )
+
+    def _ally_lock_block(self, install: bool) -> int:
+        """Bloc des gardes d'ecriture (pose une fois par processus si
+        `install`, retrouve apres un redemarrage du trainer), 0 sinon."""
+        cache = getattr(self, "_ally_lock_cache", (0, None))
+        if cache[1] == self.pid and cache[0]:
+            return cache[0]
+        block, missing = 0, []
+        for index, (rva, original, length, _compare, _list) in enumerate(self.ALLY_WRITE_SITES):
+            site = self.base + rva
+            current = self.proc.read_bytes(site, len(original))
+            if current[0] == 0xE9 and current[length:] == original[length:]:
+                found = site + 5 + struct.unpack("<i", current[1:5])[0] - (0x100 + 0x80 * index)
+                try:
+                    if self.proc.read_bytes(found + 0x80, 8) != self.ALLY_LOCK_MAGIC:
+                        return 0
+                except OSError:
+                    return 0
+                if block and found != block:
+                    return 0
+                block = found
+            elif current == original:
+                missing.append(index)
+            else:
+                return 0
+        if missing and (block or install):
+            if not block:
+                block = self.proc.alloc_near(self.base + self.ALLY_WRITE_SITES[0][0])
+                if not block:
+                    return 0
+                self.proc.write_bytes(block, bytes(0x80) + self.ALLY_LOCK_MAGIC)
+
+            def rel(source_end: int, destination: int) -> bytes:
+                return struct.pack("<i", destination - source_end)
+            for index in missing:
+                rva, original, length, compare, which = self.ALLY_WRITE_SITES[index]
+                site, code_start = self.base + rva, block + 0x100 + 0x80 * index
+                back = site + length
+                code = bytearray()
+                for slot in range(self.ALLY_LOCK_SLOTS):
+                    code += compare + rel(code_start + len(code) + 7, block + 0x40 * which + 8 * slot)  # cmp reg,[liste]
+                    code += bytes.fromhex("0f84") + rel(code_start + len(code) + 6,
+                                                      code_start + self.ALLY_LOCK_SLOTS * 13 + length + 5)  # je saute
+                code += original[:length] + b"\xe9" + rel(code_start + len(code) + length + 5, back)  # ecriture ; retour
+                code += b"\xe9" + rel(code_start + len(code) + 5, back)                            # saute : retour
+                self.proc.write_bytes(code_start, bytes(code))
+                self.proc.write_bytes(site, b"\xe9" + rel(site + 5, code_start) + b"\x90" * (length - 5))
+        if not block:
+            return 0
+        self._ally_lock_cache = (block, self.pid)
+        return block
+
+    def set_ally_write_locks(self, life: set[str], stamina: set[str]) -> bool:
+        """Le jeu n'ecrit plus la vie des allies `life` ni l'endurance des
+        allies `stamina` ; a reappeler a chaque rafraichissement (objets
+        recrees a chaque chargement de zone)."""
+        if not (self.connected and self.sane):
+            return False
+        lists = []
+        for names in (life, stamina):
+            objects = [obj for obj in (self._ally_life_object(name) for name in sorted(names)) if obj]
+            lists.append(objects[:self.ALLY_LOCK_SLOTS])
+        block = self._ally_lock_block(install=any(lists))
+        if not block:
+            return not any(lists)
+        for which, objects in enumerate(lists):
+            wanted = struct.pack(f"<{self.ALLY_LOCK_SLOTS}Q", *objects, *[0] * (self.ALLY_LOCK_SLOTS - len(objects)))
+            if self.proc.read_bytes(block + 0x40 * which, len(wanted)) != wanted:
+                self.proc.write_bytes(block + 0x40 * which, wanted)
+        return True
+
     def set_allies_invulnerable(self, allies: set[str]) -> bool:
         """Le jeu ignore les coups portes aux allies `allies` (aucune
         ecriture de leurs jauges) ; a reappeler a chaque rafraichissement
@@ -484,7 +590,7 @@ class PlayerMixin:
     # "endurance vide" de la fonction des coups (B84AB0 = endurance remise
     # au max, puis [vtable+0x370] = B4D960, vide) ne sert pas.
     # ALLY_HIT_STATES : classe -> (machine, etat, entree attendue).
-    ALLY_HIT_STATES = {0x18E4FA8: (0xE8D0, 6, 0xEB13F0), 0x18E65C8: (0xE8D0, 6, 0xEB13F0)}
+    ALLY_HIT_STATES = {klass: (0xE8D0, 6, 0xEB13F0) for klass in (0x18E4FA8, 0x18E65C8, 0x18E5870, 0x18E5EF8)}
 
     def _ally_hit_state(self, actor: int, klass: int) -> tuple[int, int]:
         """(machine, etat "touche") si tout a la forme attendue, (0, 0) sinon."""
@@ -536,6 +642,86 @@ class PlayerMixin:
             finally:
                 self._ally_reacting = False
         threading.Thread(target=run, daemon=True).start()
+
+    # Etat d'un allie (2026-10-18, Rat Patrol acte 1, releve en jeu) : objet de
+    # vie +0x78 = etat au sol : 0 ou 1 actif (1 apres un reveil), 2 endormi
+    # (fleche), 9 endormi (jauge de sommeil +0x324 videe), 5 puis 4 puis 3 assomme a mesure que la jauge remonte (5 = chute
+    # et inconscience profonde, 4 apres
+    # ~20 s ; corps a corps ; jauge +0x31C tres negative qui
+    # remonte) ; autres valeurs inconnues (le code teste les plages 2-6 et
+    # 7-10). Machine a etats en 6 = vient d'etre touche (a chaque coup).
+    # Dernier coup recu : +0x174 type, +0x180 drapeaux, +0x198 zone ; un K.O.
+    # au corps a corps de Johnny : 0x1206B / 0xA06B / 0x11. Le jeu choisit
+    # endormi ou assomme d'apres ce dernier coup quand la jauge +0x31C est
+    # vide (sans coup : endormi).
+    # Actions : reveiller = +0x31C et sommeil +0x324 au maximum (le jeu le
+    # releve seul en quelques secondes, valide) ; endormir = dernier coup
+    # +0x31C au maximum puis sommeil +0x324 vide, etat "touche" (valide : +0x78
+    # = 9, chute lente, des "Z", un equipier peut le reveiller ; vider +0x31C
+    # donnait un K.O.) ; assommer = dernier coup de
+    # corps a corps, +0x31C tres negatif, etat "touche" (valide : tombe
+    # assomme, un equipier peut le reveiller) ; tuer = vie a 0 (voir
+    # _ally_react).
+    ALLY_DOWN_OFFSET = 0x78
+    ALLY_DOWN_STATES = {0: "active", 1: "active", 2: "asleep", 3: "ko", 4: "ko", 5: "ko", 9: "asleep"}
+    ALLY_LAST_HIT = (0x174, 0x180, 0x198)
+    ALLY_KO_HIT = (0x1206B, 0xA06B, 0x11)
+    # Jauge +0x31C ecrite pour endormir / assommer : tres negative comme le
+    # jeu (Johnny assomme : -53605), sinon l'allie se releve presque aussitot.
+    ALLY_DOWN_GAUGE = -60000
+    # Sommeil (+0x324) ecrit pour endormir (Johnny endormi : -36000 ; le jeu
+    # le porte lui-meme a -90000, +0x78 = 9, chute lente comme une flechette).
+    ALLY_SLEEP_GAUGE = -36000
+    ALLY_ACTIONS = ("wake", "sleep", "knockout", "kill")
+
+    def ally_status(self, name: str) -> str:
+        """"absent", "dead", "asleep", "ko", "hit", "active" ou "state:<n>"."""
+        if not (self.connected and self.sane):
+            return "absent"
+        life = self._ally_life_object(name)
+        if life is None:
+            return "absent"
+        hp = struct.unpack("<i", self.proc.read_bytes(life + 0x314, 4))[0]
+        if hp <= 0:
+            return "dead"
+        down = struct.unpack("<I", self.proc.read_bytes(life + self.ALLY_DOWN_OFFSET, 4))[0]
+        status = self.ALLY_DOWN_STATES.get(down, f"state:{down}")
+        if status == "active":
+            actor = struct.unpack("<Q", self.proc.read_bytes(life + 8, 8))[0]
+            klass = struct.unpack("<Q", self.proc.read_bytes(actor, 8))[0] - self.base
+            if klass in self.ALLY_HIT_STATES:
+                machine, state = self._ally_hit_state(actor, klass)
+                if machine and struct.unpack("<i", self.proc.read_bytes(machine + 8, 4))[0] == state:
+                    return "hit"
+        return status
+
+    def ally_set_state(self, name: str, action: str) -> bool:
+        """Change l'etat de l'allie `name` (ALLY_ACTIONS)."""
+        if not (self.connected and self.sane):
+            return False
+        life = self._ally_life_object(name)
+        if life is None:
+            return False
+        if action == "wake":
+            for offset in (0x31C, 0x324):
+                self.proc.write_bytes(life + offset, self.proc.read_bytes(life + offset + 4, 4))
+            return True
+        if action == "kill":
+            self.proc.write_bytes(life + 0x314, struct.pack("<i", 0))
+            self._ally_react(life, 0x314)
+            return True
+        if action == "sleep":
+            # Endormi = jauge de sommeil (+0x324) videe ; la jauge +0x31C remise
+            # au maximum d'abord, sinon il garde les etoiles d'un K.O.
+            self.proc.write_bytes(life + 0x31C, self.proc.read_bytes(life + 0x320, 4))
+            self.proc.write_bytes(life + 0x324, struct.pack("<i", self.ALLY_SLEEP_GAUGE))
+            self._ally_react(life, 0x324)
+            return True
+        for offset, value in zip(self.ALLY_LAST_HIT, self.ALLY_KO_HIT):
+            self.proc.write_bytes(life + offset, struct.pack("<I", value))
+        self.proc.write_bytes(life + 0x31C, struct.pack("<i", self.ALLY_DOWN_GAUGE))
+        self._ally_react(life, 0x31C)
+        return True
 
     def _ally_life_valid(self, name: str, life: int) -> bool:
         try:

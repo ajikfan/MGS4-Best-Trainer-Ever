@@ -4,6 +4,28 @@
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
+## Nouveautés de la V2.5.3
+
+### Rat Patrol Team 01
+
+- Nouveaux : **Jonathan** et **Ed** (acte 1).
+- Un encadré par membre : son état en direct (actif, touché, endormi,
+  assommé, mort) et les actions **Réveiller**, **Endormir**,
+  **Assommer**, **Tuer**, au-dessus de sa vie et de son endurance.
+- Une jauge verrouillée n'est plus réécrite en permanence : le jeu ne
+  l'écrit plus du tout, pour ce membre seulement.
+
+### Toute la zone
+
+- Tuer, Assommer et Endormir fonctionnent sur les SMP de l'acte 1.
+- Nouvelle cible **Rat Patrol** (Tuer, Assommer, Endormir) ; **Tous les
+  PNJ** ne vise plus jamais le Rat Patrol.
+
+### Divers
+
+- Jauges de Snake verrouillées : plus de réécriture à chaque
+  rafraîchissement, le gel du jeu suffit.
+
 ## Nouveautés de la V2.5.2
 
 ### Pas de mal de dos

@@ -1,7 +1,7 @@
 """Onglet Etat de jeu (reglages en direct, jauges, profils)."""
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
-    QButtonGroup, QCheckBox, QComboBox, QFrame, QGroupBox, QHBoxLayout,
+    QButtonGroup, QCheckBox, QComboBox, QFrame, QGridLayout, QGroupBox, QHBoxLayout,
     QHeaderView, QLabel, QPushButton, QScrollArea, QSlider, QTableWidget,
     QTableWidgetItem, QVBoxLayout, QWidget,
 )
@@ -285,46 +285,116 @@ class VitalsTab(QWidget):
     GAUGE_GROUPS = (
         ("gauges.snake_group", ("Sante", "Stamina", "Grip", "Oxygene", "Stress", "Batterie Solid Eye")),
         ("gauges.vehicles_group", ("Drebin 893", "Van", "Sante Metal Gear REX")),
-        ("gauges.allies_group", ("Vie de Meryl", "Endurance de Meryl", "Vie de Johnny", "Endurance de Johnny")),
+        ("gauges.allies_group", ("Vie de Meryl", "Endurance de Meryl", "Vie de Johnny", "Endurance de Johnny",
+                                 "Vie de Jonathan", "Endurance de Jonathan", "Vie d'Ed", "Endurance d'Ed")),
     )
+
+    def _gauge_table(self, names, header: bool = True) -> QTableWidget:
+        table = QTableWidget(len(names), 3)
+        table.setHorizontalHeaderLabels([tr("table.field"), tr("table.live_value"), tr("table.lock")])
+        table.horizontalHeader().setVisible(header)
+        table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        table.horizontalHeader().setMinimumSectionSize(60)
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        for row, name in enumerate(names):
+            self._build_row(table, row, name)
+        return table
+
+    @staticmethod
+    def _fit_tables(tables, lock_width: int | None = None):
+        """Memes largeurs de colonnes ; chaque tableau a la hauteur de ses
+        lignes (c'est la page qui defile, pas lui)."""
+        name_width = max(t.sizeHintForColumn(0) for t in tables) + 16
+        lock_width = lock_width or max(t.horizontalHeader().sectionSizeHint(2) for t in tables)
+        for table in tables:
+            table.setColumnWidth(0, name_width)
+            table.setColumnWidth(2, lock_width)
+            header = 0 if table.horizontalHeader().isHidden() else table.horizontalHeader().sizeHint().height()
+            table.setFixedHeight(header + sum(table.rowHeight(r) for r in range(table.rowCount()))
+                                 + 2 * table.frameWidth())
+        return lock_width
 
     def _build_gauges_page(self):
         """Page de l'onglet "Jauges", ajoutee par la fenetre principale
         (self.gauges_page) ; la logique reste dans cet onglet."""
         content = QWidget()
         content_layout = QVBoxLayout(content)
-        tables = []
+        tables, ally_tables = [], []
         for title, names in self.GAUGE_GROUPS:
             group = QGroupBox(tr(title))
-            group_layout = QVBoxLayout(group)
-            table = QTableWidget(len(names), 3)
-            table.setHorizontalHeaderLabels([tr("table.field"), tr("table.live_value"), tr("table.lock")])
-            table.verticalHeader().setVisible(False)
-            table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-            table.horizontalHeader().setMinimumSectionSize(90)
-            table.setEditTriggers(QTableWidget.NoEditTriggers)
-            table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-            table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-            for row, name in enumerate(names):
-                self._build_row(table, row, name)
-            group_layout.addWidget(table)
+            if title == "gauges.allies_group":
+                group.setLayout(self._build_ally_boxes(ally_tables))
+            else:
+                group_layout = QVBoxLayout(group)
+                table = self._gauge_table(names)
+                group_layout.addWidget(table)
+                tables.append(table)
             content_layout.addWidget(group)
-            tables.append(table)
         content_layout.addStretch(1)
-        # Memes largeurs de colonnes d'un groupe a l'autre ; chaque tableau a
-        # la hauteur de ses lignes (c'est la page qui defile, pas lui).
-        name_width = max(t.sizeHintForColumn(0) for t in tables) + 16
-        lock_width = max(t.horizontalHeader().sectionSizeHint(2) for t in tables)
-        for table in tables:
-            table.setColumnWidth(0, name_width)
-            table.setColumnWidth(2, lock_width)
-            table.setFixedHeight(table.horizontalHeader().sizeHint().height()
-                                 + sum(table.rowHeight(r) for r in range(table.rowCount()))
-                                 + 2 * table.frameWidth())
+        lock_width = self._fit_tables(tables)
+        if ally_tables:
+            self._fit_tables(ally_tables, lock_width)
         self.gauges_page = QScrollArea()
         self.gauges_page.setWidgetResizable(True)
         self.gauges_page.setFrameShape(QFrame.NoFrame)
         self.gauges_page.setWidget(content)
+
+    # Rat Patrol (2026-10-18) : un encadre par membre en grille 2x2 : en tete
+    # son etat en direct et le changement d'etat (MGS4Live.ally_status /
+    # ally_set_state), dessous ses deux jauges ("Vie", "Endurance").
+    ALLY_NAMES = {"meryl": "Meryl", "johnny": "Johnny", "jonathan": "Jonathan", "ed": "Ed"}
+
+    def _build_ally_boxes(self, ally_tables: list) -> QGridLayout:
+        grid = QGridLayout()
+        self.ally_status_labels: dict[str, QLabel] = {}
+        self.ally_action_combos: dict[str, QComboBox] = {}
+        self.ally_action_buttons: dict[str, QPushButton] = {}
+        for index, (ally, label) in enumerate(self.ALLY_NAMES.items()):
+            box = QGroupBox(label)
+            box_layout = QVBoxLayout(box)
+            head = QHBoxLayout()
+            status = QLabel("?")
+            status.setStyleSheet("font-weight: bold;")
+            head.addWidget(status, 1)
+            combo = QComboBox()
+            for action in self.live.ALLY_ACTIONS:
+                combo.addItem(tr(f"ally.action.{action}"), action)
+            head.addWidget(combo)
+            button = QPushButton(tr("ally.apply"))
+            button.clicked.connect(lambda _checked=False, a=ally: self._on_ally_action(a))
+            head.addWidget(button)
+            box_layout.addLayout(head)
+            life_row, stamina_row = self.ALLY_LOCK_ROWS[ally]
+            table = self._gauge_table((life_row, stamina_row), header=False)
+            table.item(0, 0).setText(tr("gauges.ally_life"))
+            table.item(1, 0).setText(tr("gauges.ally_stamina"))
+            box_layout.addWidget(table)
+            ally_tables.append(table)
+            grid.addWidget(box, index // 2, index % 2)
+            self.ally_status_labels[ally], self.ally_action_combos[ally] = status, combo
+            self.ally_action_buttons[ally] = button
+        return grid
+
+    def _on_ally_action(self, ally: str):
+        try:
+            self.live.ally_set_state(ally, self.ally_action_combos[ally].currentData())
+        except OSError:
+            pass
+
+    def _refresh_ally_states(self):
+        for ally, label in self.ally_status_labels.items():
+            try:
+                status = self.live.ally_status(ally)
+            except OSError:
+                status = "absent"
+            if status.startswith("state:"):
+                label.setText(tr("ally.status.state", value=status[6:]))
+            else:
+                label.setText(tr(f"ally.status.{status}"))
+            self.ally_action_buttons[ally].setEnabled(status != "absent")
 
     def _build_row(self, table: QTableWidget, row: int, name: str):
         name_item = QTableWidgetItem(vital_display_name(name))
@@ -362,7 +432,9 @@ class VitalsTab(QWidget):
     # et des champs voisins), ou la plus haute valeur vue si plus grande.
     PLAYER_GAUGE_ROWS = {"Grip": "grip", "Oxygene": "oxygen", "Drebin 893": "drebin", "Van": "van",
                          "Vie de Meryl": "meryl", "Endurance de Meryl": "meryl_stamina",
-                         "Vie de Johnny": "johnny", "Endurance de Johnny": "johnny_stamina"}
+                         "Vie de Johnny": "johnny", "Endurance de Johnny": "johnny_stamina",
+                         "Vie de Jonathan": "jonathan", "Endurance de Jonathan": "jonathan_stamina",
+                         "Vie d'Ed": "ed", "Endurance d'Ed": "ed_stamina"}
     PLAYER_GAUGE_MAX = 2000
 
     def _on_lock_toggled(self, name: str, checked: bool):
@@ -559,16 +631,21 @@ class VitalsTab(QWidget):
             return True
         return value is None or value < 0
 
-    # Les deux jauges d'un allie verrouillees : le jeu ignore ses coups (plus
-    # aucune ecriture, voir MGS4Live.set_allies_invulnerable) ; une seule :
-    # reecriture comme les autres jauges (le coup est ignore en entier, on ne
-    # peut pas n'en garder qu'une partie).
+    # Jauge d'allie verrouillee : le jeu ne l'ecrit plus (MGS4Live.
+    # set_ally_write_locks, une garde par instruction d'ecriture). L'ancienne
+    # invulnerabilite "coup entier" (les deux cases) n'est plus utilisee ; ses
+    # listes sont videes si elle est encore posee dans le jeu.
     ALLY_LOCK_ROWS = {"meryl": ("Vie de Meryl", "Endurance de Meryl"),
-                      "johnny": ("Vie de Johnny", "Endurance de Johnny")}
+                      "johnny": ("Vie de Johnny", "Endurance de Johnny"),
+                      "jonathan": ("Vie de Jonathan", "Endurance de Jonathan"),
+                      "ed": ("Vie d'Ed", "Endurance d'Ed")}
 
     def _reassert_player_gauges(self):
-        self.live.set_allies_invulnerable({ally for ally, rows in self.ALLY_LOCK_ROWS.items()
-                                           if all(name in self.locked_percents for name in rows)})
+        self._refresh_ally_states()
+        self.live.set_allies_invulnerable(set())
+        self.live.set_ally_write_locks(
+            {ally for ally, (life, _stamina) in self.ALLY_LOCK_ROWS.items() if life in self.locked_percents},
+            {ally for ally, (_life, stamina) in self.ALLY_LOCK_ROWS.items() if stamina in self.locked_percents})
         for name, gauge in self.PLAYER_GAUGE_ROWS.items():
             label = self.value_labels[name]
             slider = self.sliders[name]
@@ -814,9 +891,14 @@ class VitalsTab(QWidget):
                 pass
 
         for name in VITALS:
+            # Jauge verrouillee : le patch de gel (GAUGE_FREEZE_PATCHES)
+            # empeche deja le jeu d'ecrire ; on n'ecrit que si la valeur s'est
+            # ecartee (2026-10-18 : plus de reecriture a chaque rafraichissement).
             if name in self.locked_percents:
                 try:
-                    self.live.write_vital_percent(name, self.locked_percents[name])
+                    target = round(self.live.read_vital_max(name) * self.locked_percents[name] / 100)
+                    if self.live.read_vital(name) != target:
+                        self.live.write_vital(name, target)
                 except OSError:
                     pass
             label = self.value_labels[name]

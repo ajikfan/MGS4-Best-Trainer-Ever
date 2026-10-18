@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.5.2
+# MGS4 Trainer — V2.5.3
 
 Trainer en direct pour Metal Gear Solid 4 (portage PC Steam) : il lit et
 écrit la mémoire du jeu pendant que tu joues. Armes, objets, statistiques
@@ -48,13 +48,13 @@ des versions.
 - [Comment ça marche](docs/fonctionnement.md)
 - [Maintenance](docs/maintenance.md) (compatibilité, build, organisation du code)
 
-## Dernière version : V2.5.2
+## Dernière version : V2.5.3
 
-- **Pas de mal de dos** : ni après une chute de haut, ni après être resté
-  longtemps accroupi.
-- **Déclencher une action** : Tomber de haut, Mal de dos, Vomir et 214
-  animations du jeu, dans n'importe quelle posture, sans dégâts ni son ;
-  Snake reprend ensuite sa posture.
+- **Rat Patrol Team 01** : Meryl, Johnny, Jonathan et Ed, avec leur état en
+  direct et les actions Réveiller, Endormir, Assommer, Tuer ; jauges
+  verrouillées sans réécriture.
+- **Toute la zone** : fonctionne sur les SMP de l'acte 1, nouvelle cible
+  Rat Patrol.
 - Livrée par la **mise à jour intégrée** (petits fichiers).
 
 Détail dans [Nouveautés par version](docs/nouveautes.md).

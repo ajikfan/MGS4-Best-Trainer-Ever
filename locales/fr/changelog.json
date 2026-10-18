@@ -1,4 +1,8 @@
 {
+  "V2.5.3": {
+    "date": "18 octobre 2026",
+    "description": "• Onglet Jauges : groupe « Rat Patrol Team 01 » (Meryl, Johnny, Jonathan, Ed), un encadré par membre avec son état en direct (actif, touché, endormi, assommé, mort) et les actions Réveiller, Endormir, Assommer, Tuer. Nouveaux : Jonathan et Ed (acte 1).\n• Jauges du Rat Patrol : une jauge verrouillée n'est plus réécrite en permanence, le jeu ne l'écrit plus du tout (pour ce membre seulement) ; vie et endurance se verrouillent séparément.\n• Toute la zone : Tuer, Assommer et Endormir fonctionnent sur les SMP de l'acte 1 ; nouvelle cible « Rat Patrol » (Tuer, Assommer, Endormir) ; « Tous les PNJ » ne vise plus jamais le Rat Patrol.\n• Jauges de Snake verrouillées : plus de réécriture à chaque rafraîchissement, le gel du jeu suffit."
+  },
   "V2.5.2": {
     "date": "17 octobre 2026",
     "description": "• Nouvelle case « Pas de mal de dos » (groupe Snake) : Snake ne se tient plus le dos, ni à la réception d'une chute de haut (réception normale, les dégâts de la chute restent), ni après être resté longtemps accroupi.\n• Nouveau « Déclencher » (groupe Snake) : fait jouer à Snake une action du jeu. En tête : Tomber de haut, Mal de dos accroupi et Vomir (debout ou accroupi selon la posture), puis 214 animations du jeu (coups, CQC, chutes, réveils, échelles, suspendu, électrocuté, « ça sent mauvais »…). Les actions partent dans n'importe quelle posture, sans dégâts ni son, et Snake reprend ensuite sa posture (accroupi, allongé, face contre le sol, sur le dos). Mal de dos accroupi : seulement accroupi et immobile."

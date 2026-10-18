@@ -99,8 +99,9 @@ L'onglet des réglages en direct, en plusieurs groupes :
 - **Toute la zone** : agit d'un clic sur toute la zone, par les fonctions
   du jeu lui-même, quel que soit l'état en cours (un ennemi endormi peut
   être tué).
-  - **Cible** : **Ennemis**, **Rebelles** ou **Tous les PNJ** (les
-    civils et les boss ne sont jamais visés) ;
+  - **Cible** : **Ennemis**, **Rebelles**, **Tous les PNJ** (les civils,
+    les boss et le Rat Patrol ne sont jamais visés) ou **Rat Patrol**
+    (Tuer, Assommer et Endormir seulement) ;
   - **Tuer** : soldats, Gekko, mini Gekko, véhicules, tanks et
     hélicoptères (les machines comptent comme ennemis) ;
   - **Assommer** : les soldats tombent K.O., les Gekko tombent au sol,
@@ -120,8 +121,11 @@ si la fenêtre est petite) :
   **Oxygène** (sous l'eau), Stress, batterie du Solid Eye ;
 - **Véhicules** : **Drebin 893** (le véhicule de l'acte 2), **Van**
   (celui à protéger à l'acte 3), Santé de Metal Gear REX ;
-- **Alliés** : vie et endurance de **Meryl** et de **Johnny** (actes 1
-  et 5).
+- **Rat Patrol Team 01** : un encadré par membre (**Meryl**, **Johnny**,
+  **Jonathan**, **Ed** ; actes 1 et 5 pour Meryl et Johnny, acte 1 pour
+  Jonathan et Ed), avec son état en direct (actif, touché, endormi,
+  assommé, mort), une liste **Réveiller / Endormir / Assommer / Tuer** et
+  le bouton **Appliquer**, puis sa vie et son endurance.
 
 Pour chacune : un curseur en pourcentage pour la régler, et une case
 **Verrouiller** qui la maintient à ce niveau (Santé verrouillée à 100 % =
@@ -131,10 +135,13 @@ affichent "pas suspendu", "hors de l'eau" ou "absent" ; les verrouiller à
 ce moment-là les verrouille à 100 %, prêtes pour le moment où elles
 servent.
 
-Alliés : leurs deux jauges verrouillées, le jeu ignore les coups qu'ils
-reçoivent (les soldats autour prennent leurs dégâts normalement). Leur
-vie à 0 les tue (la mort de Meryl à l'acte 5 fait échouer la mission),
-leur endurance à 0 les met K.O. aussitôt.
+Rat Patrol : une jauge verrouillée n'est plus écrite par le jeu, pour ce
+membre seulement (vie et endurance séparément ; les soldats autour
+prennent leurs dégâts normalement). Leur vie à 0 les tue (la mort de
+Meryl à l'acte 5 fait échouer la mission), leur endurance à 0 les met
+K.O. aussitôt. Réveiller les relève tout de suite ; Endormir les fait
+tomber lentement (des « Z ») ; Assommer les fait tomber brusquement (des
+étoiles) ; un équipier peut venir les réveiller.
 
 ### Armes
 
