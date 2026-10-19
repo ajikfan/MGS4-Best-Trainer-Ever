@@ -79,12 +79,41 @@ def fetch_latest_release() -> dict:
         raise UpdateError("reponse GitHub illisible") from exc
     manifest_url = next((asset.get("browser_download_url") for asset in release.get("assets", [])
                          if asset.get("name") == MANIFEST_ASSET), None)
+    version = release.get("tag_name", "")
     return {
-        "version": release.get("tag_name", ""),
+        "version": version,
         "notes": release.get("body") or "",
+        "changelog": fetch_changelog(version),
         "page_url": release.get("html_url") or RELEASES_PAGE_URL,
         "manifest_url": manifest_url,
     }
+
+
+def fetch_changelog(tag: str) -> dict:
+    """Changelog du trainer dans la langue choisie, au tag de la release
+    (locales/<langue>/changelog.json) : la fenetre de mise a jour l'affiche
+    a la place des notes GitHub, ecrites dans une seule langue (2026-10-18).
+    {} si indisponible (les notes GitHub servent alors)."""
+    from mgs4trainer.core.i18n import current_language
+    if not tag:
+        return {}
+    try:
+        data = json.loads(_get(RAW_FILE_URL.format(tag=tag, path=f"locales/{current_language()}/changelog.json")))
+    except (UpdateError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def changelog_markdown(changelog: dict, current: str) -> str:
+    """Les entrees du changelog plus recentes que `current`, en Markdown."""
+    blocks = []
+    for version, entry in changelog.items():
+        if not isinstance(entry, dict) or not is_newer(version, current):
+            continue
+        lines = [line.strip() for line in str(entry.get("description", "")).splitlines() if line.strip()]
+        body = "\n".join("- " + line.lstrip("•").strip() for line in lines)
+        blocks.append(f"### {version} — {entry.get('date', '')}\n\n{body}")
+    return "\n\n".join(blocks)
 
 
 def fetch_manifest(release: dict) -> dict:

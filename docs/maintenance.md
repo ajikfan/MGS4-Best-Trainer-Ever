@@ -58,6 +58,28 @@ au premier lancement ("Windows a protégé votre PC") — c'est normal pour
 un outil indépendant non signé, il suffit de cliquer "Informations
 complémentaires" → "Exécuter quand même".
 
+## Build Nexus (sans mise à jour)
+
+Nexus Mods refuse un exe qui se connecte à Internet pour se mettre à
+jour. Un seul code source, deux variantes, choisies au build :
+
+```
+set MGS4_FLAVOR=nexus
+python -m PyInstaller --noconfirm MGS4Trainer.spec
+set MGS4_FLAVOR=
+```
+
+La variante `nexus` (voir `release_files.py`) ne copie pas
+`core/updater.py` ni `ui/update_dialog.py` dans `app/`, n'embarque pas les
+modules réseau dans l'exe (`ssl`, `http.client`, `urllib.*`,
+`webbrowser`) et écrit `app/build.json` ; le trainer
+(`core/build.py`) masque alors le bouton « Mise à jour » et ne fait
+aucune vérification au lancement. Sans la variable (ou
+`MGS4_FLAVOR=github`), le build GitHub habituel. Les deux builds
+écrivent dans `dist/MGS4Trainer/` : refaire le build GitHub avant une
+release GitHub. Zipper la variante Nexus sous un autre nom (ex.
+`MGS4Trainer-V2.5.3-Nexus.zip`) ; pas de `manifest.json` pour Nexus.
+
 ## Publier une version (avec la mise à jour par petits fichiers)
 
 Le bouton « Mise à jour » du trainer (`core/updater.py`) lit la dernière

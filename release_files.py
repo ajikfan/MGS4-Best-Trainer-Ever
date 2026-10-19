@@ -19,6 +19,15 @@ APP_ENTRIES = (
     "assets",
     "native/speedhack_x64.dll",
 )
+# Variantes de build (2026-10-19) : "github" (par defaut) avec la mise a jour
+# integree ; "nexus" sans elle (Nexus Mods refuse un exe qui se connecte a
+# Internet pour se mettre a jour) : ses fichiers ne sont pas copies dans app/,
+# les modules reseau ne sont pas embarques dans l'exe, et le trainer masque
+# alors le bouton (voir mgs4trainer/core/build.py). Un seul code source :
+# rien a supprimer ni a refaire d'un build a l'autre.
+FLAVORS = ("github", "nexus")
+UPDATE_FILES = ("mgs4trainer/core/updater.py", "mgs4trainer/ui/update_dialog.py")
+NETWORK_MODULES = ("ssl", "http.client", "urllib.request", "urllib.error", "urllib.parse", "webbrowser")
 _SKIPPED_DIRS = {"__pycache__"}
 _SKIPPED_SUFFIXES = (".pyc",)
 
@@ -40,8 +49,16 @@ RUNTIME_MODULES = (
 )
 
 
-def app_files():
-    """Chemins relatifs (separateur "/") de tous les fichiers du code."""
+def runtime_modules(flavor: str = "github"):
+    """Modules a embarquer dans l'exe pour la variante `flavor`."""
+    if flavor == "nexus":
+        return tuple(m for m in RUNTIME_MODULES if m not in NETWORK_MODULES)
+    return RUNTIME_MODULES
+
+
+def app_files(flavor: str = "github"):
+    """Chemins relatifs (separateur "/") des fichiers du code de la variante
+    `flavor` (sans ceux de la mise a jour pour "nexus")."""
     out = []
     for entry in APP_ENTRIES:
         path = os.path.join(ROOT, entry)
@@ -53,4 +70,6 @@ def app_files():
             for name in sorted(files):
                 if not name.endswith(_SKIPPED_SUFFIXES):
                     out.append(os.path.relpath(os.path.join(folder, name), ROOT).replace(os.sep, "/"))
+    if flavor == "nexus":
+        out = [path for path in out if path not in UPDATE_FILES]
     return out

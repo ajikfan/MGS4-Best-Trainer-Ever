@@ -18,7 +18,7 @@ from mgs4trainer.core.i18n import (
     restart_trainer, set_language, tr, update_check_enabled, weapon_group_label,
     weapon_name,
 )
-from mgs4trainer.core import updater
+from mgs4trainer.core.build import updates_available
 from mgs4trainer.core.paths import PROFILES_FILE, TRAINER_ICON
 from mgs4trainer.live import MGS4Live
 from mgs4trainer.ui.common import (
@@ -34,7 +34,6 @@ from mgs4trainer.ui.profiles import (
 from mgs4trainer.ui.stats_tab import StatsTab
 from mgs4trainer.ui.table_tab import TableTab
 from mgs4trainer.ui.teleport_tab import TeleportTab
-from mgs4trainer.ui.update_dialog import UpdateDialog, UpdateWorker
 from mgs4trainer.ui.vitals_tab import VitalsTab
 from mgs4trainer.ui.weapons_tab import GroupedWeaponsTab
 
@@ -65,9 +64,11 @@ class TrainerWindow(QMainWindow):
         reconnect_btn = QPushButton(tr("window.reconnect"))
         reconnect_btn.clicked.connect(self.try_attach)
         top_row.addWidget(reconnect_btn)
-        self.update_btn = QPushButton(tr("update.button"))
-        self.update_btn.clicked.connect(self._open_update)
-        top_row.addWidget(self.update_btn)
+        # Mise a jour integree : absente du build Nexus (core/build.py).
+        if updates_available():
+            self.update_btn = QPushButton(tr("update.button"))
+            self.update_btn.clicked.connect(self._open_update)
+            top_row.addWidget(self.update_btn)
         self._latest_release: dict | None = None
         help_btn = QPushButton(tr("window.help"))
         help_btn.clicked.connect(lambda: HelpDialog(self).exec())
@@ -288,11 +289,16 @@ class TrainerWindow(QMainWindow):
     def start_update_check(self):
         """Recherche discrete au lancement : rien n'est telecharge, le
         bouton signale seulement une nouvelle version."""
+        if not updates_available():
+            return
+        from mgs4trainer.core import updater
+        from mgs4trainer.ui.update_dialog import UpdateWorker
         self._update_worker = UpdateWorker()
         self._update_worker.finished.connect(self._on_update_checked)
         self._update_worker.run(updater.fetch_latest_release)
 
     def _on_update_checked(self, release, error):
+        from mgs4trainer.core import updater
         if error is not None or not updater.is_newer(release["version"], TRAINER_VERSION):
             return
         self._latest_release = release
@@ -300,6 +306,7 @@ class TrainerWindow(QMainWindow):
         self.update_btn.setStyleSheet("font-weight: bold; color: #2e7d32;")
 
     def _open_update(self):
+        from mgs4trainer.ui.update_dialog import UpdateDialog
         UpdateDialog(TRAINER_VERSION, self._latest_release, restart=self._restart_after_update, parent=self).exec()
 
     def _restart_after_update(self):

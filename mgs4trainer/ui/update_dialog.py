@@ -97,7 +97,8 @@ class UpdateDialog(QDialog):
 
     def _show_release(self) -> None:
         version = self.release["version"]
-        self.notes.setMarkdown(self.release["notes"])
+        notes = updater.changelog_markdown(self.release.get("changelog") or {}, self.current_version)
+        self.notes.setMarkdown(notes or self.release["notes"])
         if not updater.is_newer(version, self.current_version):
             self._idle(tr("update.up_to_date", version=self.current_version))
             return
