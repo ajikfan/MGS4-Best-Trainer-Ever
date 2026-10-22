@@ -45,7 +45,80 @@ class PlayerMixin:
         addr = self._player_transform()
         if not addr:
             return False
+        rex = self._piloted_rex()
+        if rex and self._rex_near_player(rex, addr):
+            return self._move_rex(rex, addr, x, y, z)
         self.proc.write_bytes(addr + 0x10, struct.pack("<fff", x, y, z))
+        return True
+
+    # Metal Gear REX pilote (2026-10-22, valide dans le couloir de la fuite,
+    # acte 4) : la position du joueur n'est alors qu'un point invisible que
+    # le jeu ramene a chaque image vers REX (l'ecrire ne fait rien a
+    # l'ecran). Le vrai REX : objet de type 1908368 (squelette, ~60 os),
+    # precede d'un en-tete d'acteur de 0xC0 octets (liste chainee des
+    # acteurs : +0x00 precedent, +0x08 mise a jour, +0x20 suivant) ; mise a
+    # jour de REX 135ED40. L'en-tete de Snake est [entree joueur] (6 octets
+    # bas) et REX le suit dans la liste. Sa position de base est en 6 copies
+    # (meme X/Z, hauteurs differentes : bas, centre, haut de sa boite) ;
+    # les decaler toutes ensemble deplace REX, et Snake le suit (une seule
+    # ne suffit pas : recalculee). On ne pilote REX que dans des zones ou
+    # Snake n'est jamais a pied (fuite s04a65l, combat contre Ray) : les
+    # points y sont pris en REX, a la hauteur du cockpit. Le cockpit est
+    # pose a la hauteur du point plus une marge ; REX retombe seul au sol
+    # (gravite, ~1 s pour 3000, ~1,5 s pour 10000, sans degats ni animation).
+    # La fuite monte de ~77 m entre le debut et la sortie du tunnel : ne
+    # jamais faire descendre REX le laissait tomber de 80 m (corrige).
+    REX_UPDATE_RVA = 0x135ED40
+    REX_VTABLE_RVA = 0x1908368
+    REX_HEADER_SIZE = 0xC0
+    REX_BASE_OFFSETS = (0x210, 0x480, 0x4B0, 0x6A0, 0xD90, 0xF50)
+    REX_TELEPORT_LIFT = 1000.0
+    REX_SEARCH_NODES = 64
+
+    def _piloted_rex(self) -> int | None:
+        """Objet REX si Snake le pilote (REX dans la liste des acteurs, a
+        cote de Snake), sinon None."""
+        index = struct.unpack("<i", self.proc.read_bytes(self.base + self.PLAYER_INDEX_RVA, 4))[0]
+        entry = self.base + self.PLAYER_TABLE_RVA + (index + 1) * self.PLAYER_ENTRY_SIZE
+        start = struct.unpack("<Q", self.proc.read_bytes(entry, 8))[0] & 0xFFFFFFFFFFFF
+        for link in (0x20, 0x00):
+            node = start
+            for _ in range(self.REX_SEARCH_NODES):
+                if not node:
+                    break
+                try:
+                    head = self.proc.read_bytes(node, 0x28)
+                    update = struct.unpack_from("<Q", head, 0x08)[0]
+                    if update == self.base + self.REX_UPDATE_RVA:
+                        rex = node + self.REX_HEADER_SIZE
+                        if struct.unpack("<Q", self.proc.read_bytes(rex, 8))[0] == self.base + self.REX_VTABLE_RVA:
+                            return rex
+                    node = struct.unpack_from("<Q", head, link)[0]
+                except OSError:
+                    break
+                if node == start:
+                    break
+        return None
+
+    REX_PILOT_DISTANCE = 20000.0
+
+    def _rex_near_player(self, rex: int, transform: int) -> bool:
+        """Snake aux commandes : sa position (le cockpit) est pres de la base
+        de REX (~6500 d'ecart mesures)."""
+        px, _, pz = struct.unpack("<fff", self.proc.read_bytes(transform + 0x10, 12))
+        bx, _, bz = struct.unpack("<fff", self.proc.read_bytes(rex + self.REX_BASE_OFFSETS[0], 12))
+        return abs(px - bx) < self.REX_PILOT_DISTANCE and abs(pz - bz) < self.REX_PILOT_DISTANCE
+
+    def _move_rex(self, rex: int, transform: int, x: float, y: float, z: float) -> bool:
+        current = struct.unpack("<fff", self.proc.read_bytes(transform + 0x10, 12))
+        bases = [struct.unpack("<fff", self.proc.read_bytes(rex + offset, 12)) for offset in self.REX_BASE_OFFSETS]
+        bx, _, bz = bases[0]
+        if any(abs(px - bx) > 50 or abs(pz - bz) > 50 for px, _, pz in bases):
+            return False  # copies incoherentes : autre version du jeu ou REX en transition
+        dx, dz = x - current[0], z - current[2]
+        dy = y - current[1] + self.REX_TELEPORT_LIFT
+        for offset, (px, py, pz) in zip(self.REX_BASE_OFFSETS, bases):
+            self.proc.write_bytes(rex + offset, struct.pack("<fff", px + dx, py + dy, pz + dz))
         return True
 
     # Jauge de grip (2026-10-04) : composant du joueur (acteur joueur = 6

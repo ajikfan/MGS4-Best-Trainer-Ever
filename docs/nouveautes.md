@@ -251,7 +251,7 @@ derniers coups scénarisés ne sont pas couverts.
   d'énergie (le "x/100" du HUD) que chaque tir consomme : elle ne baisse
   plus, donc chaque tir part au niveau 5. Le rayon garde sa durée
   normale.
-- La téléportation ne déplace pas REX (seulement la caméra).
+- La téléportation ne déplaçait pas REX (seulement la caméra) : corrigé depuis, elle déplace REX lui-même.
 
 ### Invisible : les mini Gekko aussi
 

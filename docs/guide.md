@@ -214,6 +214,8 @@ les objets encore non identifiés (onglet de recherche).
   double-clic ou **Téléporter vers le point sélectionné**, **Supprimer
   le point sélectionné**, **Rattacher à la zone actuelle** (pour un
   point sans zone).
+- Aux commandes de **Metal Gear REX**, la téléportation déplace REX
+  lui-même (posé un peu au-dessus du point, il retombe au sol).
 - **Afficher les points de toutes les zones**.
 - **Exporter** / **Importer** les points en fichier JSON.
 

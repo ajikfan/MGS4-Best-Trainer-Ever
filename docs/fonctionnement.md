@@ -288,10 +288,11 @@ depuis l'instruction qui écrit l'état d'alerte (12 octobre 2026).
   "charge + vitesse, plafonnée" est remplacé par "charge = réserve" ;
   pendant le tir, la charge baisse normalement (durée du rayon) mais la
   réserve n'est plus diminuée.
-- **Pourquoi la téléportation ne marche pas avec REX** : dans REX, la
-  position que modifie le trainer est celle de Snake, que suit la
-  caméra ; au premier pas, le jeu recale Snake sur la position du corps
-  de REX, stockée ailleurs et non trouvée.
+- **Téléportation** : dans REX, la position du joueur n'est qu'un point
+  invisible que le jeu ramène à chaque image vers REX. Le trainer trouve
+  le vrai REX dans la liste des acteurs du jeu (juste après Snake) et
+  décale sa position de base (six copies, toutes ensemble) ; Snake suit.
+  Le cockpit est posé un peu au-dessus du point, REX retombe seul au sol.
 
 ### Équiper en direct, sans menu (V2.2)
 

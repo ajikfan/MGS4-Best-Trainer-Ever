@@ -65,10 +65,11 @@ Avec **Invisible**, le hold-up reste possible. S'il ne marche pas, vérifie
 qu'aucun autre réglage ne bloque la réaction des soldats, et relance le
 trainer s'il date d'avant la V2.4.1.
 
-### La téléportation ne déplace pas Metal Gear REX
+### Téléporter Metal Gear REX
 
-Dans REX, la position que modifie le trainer est celle de Snake (la
-caméra la suit) ; le corps de REX garde la sienne. Ce cas n'est pas géré.
+Aux commandes de REX, la téléportation déplace REX lui-même (Snake suit,
+dans le cockpit). Il est posé un peu au-dessus du point (enregistré en
+REX, à la hauteur du cockpit) et retombe au sol aussitôt.
 
 ### Un objet n'apparaît qu'en « Mode avancé »
 
