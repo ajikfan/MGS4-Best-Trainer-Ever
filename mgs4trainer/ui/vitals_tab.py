@@ -77,6 +77,10 @@ class VitalsTab(QWidget):
         self.pause_check = QCheckBox(tr("vitals.pause"))
         self.pause_check.toggled.connect(self._on_pause_toggled)
         speed_row.addWidget(self.pause_check)
+        self.timer_freeze_check = QCheckBox(tr("vitals.timer_freeze"))
+        self.timer_freeze_check.setToolTip(tr("vitals.timer_freeze_tooltip"))
+        self.timer_freeze_check.toggled.connect(self._on_timer_freeze_toggled)
+        speed_row.addWidget(self.timer_freeze_check)
         speed_layout.addLayout(speed_row)
 
         difficulty_row = QHBoxLayout()
@@ -527,6 +531,12 @@ class VitalsTab(QWidget):
             return
         self.live.set_paused(checked)
 
+    def _on_timer_freeze_toggled(self, checked: bool):
+        try:
+            self.live.set_code_patch("timer_freeze", checked)
+        except OSError:
+            pass
+
     def sync_to_game(self):
         """La DLL reste dans le jeu apres la fermeture du trainer, avec ses
         drapeaux (constate 2026-10-04 : "Pas de rechargement" encore actif
@@ -542,6 +552,7 @@ class VitalsTab(QWidget):
                 pass
         self._on_speed_changed(self.speed_slider.value())
         self._on_pause_toggled(self.pause_check.isChecked())
+        self._on_timer_freeze_toggled(self.timer_freeze_check.isChecked())
         self._on_no_reload_toggled(self.no_reload_check.isChecked())
         self._on_infinite_ammo_toggled(self.infinite_ammo_check.isChecked())
         self._on_infinite_silencer_toggled(self.infinite_silencer_check.isChecked())
@@ -716,6 +727,7 @@ class VitalsTab(QWidget):
     PROFILE_CHECKS = (
         "no_alerts", "infinite_ammo", "no_reload", "infinite_silencer", "instant_kill",
         "railgun_charge", "untouchable", "invisible", "no_back_pain", "rebels",
+        "timer_freeze",
     )
 
     def profile_settings(self) -> dict:
@@ -843,6 +855,7 @@ class VitalsTab(QWidget):
             self.alert_label.setText("?")
             self.speed_slider.setEnabled(False)
             self.pause_check.setEnabled(False)
+            self.timer_freeze_check.setEnabled(False)
             self.infinite_ammo_check.setEnabled(False)
             self.no_reload_check.setEnabled(False)
             self.infinite_silencer_check.setEnabled(False)
@@ -869,6 +882,7 @@ class VitalsTab(QWidget):
             self.difficulty_combo.setCurrentIndex(index)
         self.speed_slider.setEnabled(True)
         self.pause_check.setEnabled(True)
+        self.timer_freeze_check.setEnabled(True)
         self.infinite_ammo_check.setEnabled(True)
         self.no_reload_check.setEnabled(True)
         self.infinite_silencer_check.setEnabled(True)

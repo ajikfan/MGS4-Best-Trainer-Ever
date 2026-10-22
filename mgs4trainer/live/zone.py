@@ -75,6 +75,32 @@ class ZoneMixin:
     ZONE_GEKKO_HIT_STATE_ENTER_RVA = 0x10637D0
     ZONE_HIT_STATE = 6
     ZONE_HIT_STATE_ENTER_RVA = 0xC7EF70
+    # Gekko de la fuite de Metal Gear REX (2026-10-22, valide en jeu : 10
+    # detruits d'un coup) : acteur 18ED768, dans le gestionnaire d'alerte,
+    # objet de vie a +0x42B0 mais vie 1/1 (ils etaient pris pour des civils)
+    # et pas de machine a etats en +0xE910. Vider la vie ou appeler les
+    # fonctions de l'objet de vie (mort B85B30, K.O. B85A80) ne fait rien :
+    # le Gekko lui-meme ne reagit pas. Ce qui marche, c'est la demande de
+    # mise a mort de l'acteur (celle que pose le jeu quand REX en ecrase un) :
+    # +0xBD10 partie du corps, +0xBD14 type, +0xBD18 drapeaux (bit 15 =
+    # demande), +0xBD20 attaquant ; B2FB00(acteur) la traite (vie a 0, coup
+    # "mise a mort", explosion) puis l'efface. Valeurs relevees sur un vrai
+    # cas : partie 4, type 0x18, aucun attaquant. Le jeu n'appelle B2FB00
+    # que dans certaines situations : le trainer pose la demande et l'appelle.
+    # Assommer (valide en jeu, avec et sans Un coup, un mort) : un coup ecrit
+    # dans l'objet de vie, que le Gekko traite lui-meme a sa mise a jour
+    # (1046BE0, methode 2 de son controleur [acteur+0xE918]) : jauges de
+    # tranquillisant (+0x33C/+0x340) a 0, flechette du Mk.2 (+0x10C), touchee
+    # a la jambe (+0x88), zone (+0x198), puis +0x70 |= 0x10 et +0x68 |= 0x401
+    # (coup a traiter, ecrit en dernier). Le Gekko s'accroupit, marque a
+    # terre (acteur+0x45B4 bit 0x2000), et se releve seul en ~3,5 s. La
+    # vraie chute (Non letal) passe par la liste des coups (D41940), non
+    # reproduite. Endormir : pas de sommeil chez eux, ils sont ignores.
+    ZONE_ESCAPE_GEKKO_VTABLE_RVA = 0x18ED768
+    ZONE_KILL_REQUEST_OFFSET = 0xBD10
+    ZONE_KILL_REQUEST = (4, 0x18, 0x8000)
+    ZONE_ESCAPE_GEKKO_KNOCKOUT_HIT = ((0x10C, 0x10008202), (0x88, 0x400240), (0x198, 0x100650))
+    ZONE_ESCAPE_GEKKO_DOWN = (0x45B4, 0x2000)
     # Mini Gekko (2026-10-14, valide en s04a10 : 35 detruits, 36 paralyses) :
     # hors du gestionnaire d'alerte. Leur gestionnaire : [mgs4+23F82DA0]
     # (remis a 0 par le jeu a sa destruction, 11EFD45 ; parcouru par
@@ -145,6 +171,7 @@ class ZoneMixin:
         "sleep": (0xB80300, "33c04c63ca48898168010000"),
         "state_goto": (0xF61670, "48895c240848897c24104156"),
         "emotion_set": (0xB65930, "44894110e927feff"),
+        "kill_request": (0xB2FB00, "40535741564883ec50488bb9b0420000"),
     }
     # Emotion -> (type, fonction qui remplit sa jauge et la declenche).
     ZONE_EMOTIONS = {
@@ -156,9 +183,11 @@ class ZoneMixin:
     ZONE_EMOTION_SIG = "8b82d04300004c8bd9b90000"
 
     def _zone_kind(self, actor: int) -> str:
-        """"gekko" ou "soldier" selon le type de l'acteur."""
+        """"gekko", "escape_gekko" ou "soldier" selon le type de l'acteur."""
         vtable = struct.unpack("<Q", self.proc.read_bytes(actor, 8))[0] - self.base
-        return "gekko" if vtable == self.ZONE_GEKKO_VTABLE_RVA else "soldier"
+        if vtable == self.ZONE_GEKKO_VTABLE_RVA:
+            return "gekko"
+        return "escape_gekko" if vtable == self.ZONE_ESCAPE_GEKKO_VTABLE_RVA else "soldier"
 
     def _zone_soldiers(self) -> list[tuple[int, int, tuple[int, int, int]]]:
         """(acteur, objet de vie, (vie, endurance, sommeil)) des acteurs du
@@ -174,7 +203,7 @@ class ZoneMixin:
             if vtable - self.base != self.ZONE_LIFE_OBJECT_VTABLE_RVA:
                 continue
             life, life_max, stamina, _, sleep = struct.unpack("<5i", self.proc.read_bytes(life_object + 0x314, 0x14))
-            if life_max <= 1:
+            if life_max <= 1 and self._zone_kind(soldier) != "escape_gekko":
                 continue  # civils, rats
             if self._zone_is_ally(soldier):
                 continue  # Rat Patrol (liste du gestionnaire, camp 128) : jauges dans l'onglet Jauges
@@ -371,6 +400,9 @@ class ZoneMixin:
             return False
         if action == "kill":
             return True
+        if self._zone_kind(actor) == "escape_gekko":
+            offset, bit = self.ZONE_ESCAPE_GEKKO_DOWN
+            return action == "knockout" and not struct.unpack("<I", self.proc.read_bytes(actor + offset, 4))[0] & bit
         if self._zone_kind(actor) == "gekko":
             if action == "knockout":
                 life_object = struct.unpack("<Q", self.proc.read_bytes(actor + 0x42B0, 8))[0]
@@ -471,6 +503,21 @@ class ZoneMixin:
         """Une action sur un acteur ; False si l'appel au jeu a echoue."""
         call = self.speed.game_call
         kind = self._zone_kind(soldier)
+        if kind == "escape_gekko":
+            if action == "knockout":
+                for offset in self.ZONE_GEKKO_TRANQ_OFFSETS:
+                    self.proc.write_bytes(life_object + offset, struct.pack("<H", 0))
+                for offset, value in self.ZONE_ESCAPE_GEKKO_KNOCKOUT_HIT:
+                    self.proc.write_bytes(life_object + offset, struct.pack("<I", value))
+                for offset, bits in ((0x70, 0x10), (0x68, 0x401)):
+                    flags = struct.unpack("<I", self.proc.read_bytes(life_object + offset, 4))[0]
+                    self.proc.write_bytes(life_object + offset, struct.pack("<I", flags | bits))
+                return None
+            request = self.proc.read_bytes(soldier + self.ZONE_KILL_REQUEST_OFFSET, 0x18)
+            if action != "kill" or any(request):
+                return None  # demande deja en cours (le jeu ou un clic precedent)
+            self.proc.write_bytes(soldier + self.ZONE_KILL_REQUEST_OFFSET, struct.pack("<iiI", *self.ZONE_KILL_REQUEST))
+            return False if call(funcs["kill_request"], soldier) is None else None
         if action == "knockout":
             self._zone_restore(life_object, 0x324, 0x328)  # reveille d'abord
         elif action == "sleep":

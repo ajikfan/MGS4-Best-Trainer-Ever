@@ -449,6 +449,15 @@ class CodePatchesMixin:
             (0xA0543C, bytes.fromhex("488d05dd060000eb19"), bytes.fromhex("488d054d000000")),
             (0x9DFC6F, bytes.fromhex("488d05cad7ffff48894768"), bytes.fromhex("eb099090909090")),
         ],
+        # Compte a rebours (2026-10-22, fuite de Metal Gear REX, acte 4) :
+        # temps restant en ms a mgs4+23FAF6E0 (5:00 = 300000 ; seuils des
+        # bips 20000..1000 testes en 14D49EC..). Tant que [23FAF6F4] (en
+        # cours) est vrai, 14D4573 fait temps = max(temps - ecoule, 0) et
+        # l'ecrit en 14D4596 ; ecriture en NOP -> le chrono reste fige,
+        # il repart de la meme valeur une fois la case decochee.
+        "timer_freeze": [
+            (0x14D4596, bytes.fromhex("890d44b1ad2239b3ac00"), bytes.fromhex("909090909090")),
+        ],
         "untouchable": [(0x96C0B0, bytes.fromhex("488bc455535657488d68a1"), bytes.fromhex("c3"))],
         "invisible": [
             (0x89360, bytes.fromhex("48895c2408488974"), bytes.fromhex("0f57c0c3")),

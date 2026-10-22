@@ -59,6 +59,8 @@
   "language.restart_body": "Le trainer va redémarrer pour passer en {language}. Continuer ?",
   "vitals.speed_group": "Vitesse du jeu (pavé numérique + / − / 0)",
   "vitals.pause": "Pause (touche Pause)",
+  "vitals.timer_freeze": "Chrono figé",
+  "vitals.timer_freeze_tooltip": "Patch de code : le compte à rebours affiché par le jeu ne descend plus (par exemple les 5 minutes de la fuite de Metal Gear REX, à l'acte 4). Il repart de la même valeur une fois la case décochée.",
   "vitals.difficulty": "Difficulté :",
   "vitals.difficulty_tooltip": "Change la difficulté de la partie en cours, immédiatement. Effet vérifié : c'est cette difficulté qui est enregistrée à la prochaine sauvegarde (rang et écran de fin compris). Aucun changement constaté en jeu : une balle retire la même vie en Liquid et en The Boss (mesuré), et les ennemis ne semblent pas plus vigilants.",
   "difficulty.20": "Liquid (Facile)",

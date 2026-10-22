@@ -40,7 +40,9 @@ minutes, secondes). Chaque valeur se modifie directement.
 L'onglet des réglages en direct, en plusieurs groupes :
 
 - **Vitesse du jeu** : curseur de 10 % à 300 % (100 % au centre), case
-  **Pause** (gel complet du jeu), liste **Difficulté** (Liquid à The
+  **Pause** (gel complet du jeu), case **Chrono figé** (le compte à
+  rebours du jeu ne descend plus, par exemple les 5 minutes de la fuite
+  de Metal Gear REX à l'acte 4), liste **Difficulté** (Liquid à The
   Boss ; change la difficulté enregistrée à la prochaine sauvegarde).
   Au clavier, même jeu au premier plan : touche **Pause** pour la pause,
   pavé numérique **+** / **−** pour ±10 % et **0** pour revenir à 100 %
@@ -105,8 +107,10 @@ L'onglet des réglages en direct, en plusieurs groupes :
   - **Tuer** : soldats, Gekko, mini Gekko, véhicules, tanks et
     hélicoptères (les machines comptent comme ennemis) ;
   - **Assommer** : les soldats tombent K.O., les Gekko tombent au sol,
-    les mini Gekko sont paralysés quelques secondes ;
-  - **Endormir** : soldats et Gekko (les mini Gekko ne dorment pas) ;
+    les mini Gekko sont paralysés quelques secondes, les Gekko de la
+    fuite de Metal Gear REX (acte 4) s'accroupissent quelques secondes ;
+  - **Endormir** : soldats et Gekko (ni les mini Gekko ni les Gekko de
+    la fuite de REX ne dorment) ;
   - **Rire**, **Pleurer**, **Enrager**, **Crier** : les émotions des
     Beauty, sur les soldats éveillés, pendant une trentaine de secondes ;
   - **Rebelles : Neutres / Hostiles** : cochée, impose l'attitude des
