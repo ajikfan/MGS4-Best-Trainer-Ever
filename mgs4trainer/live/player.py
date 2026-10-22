@@ -46,8 +46,9 @@ class PlayerMixin:
         if not addr:
             return False
         rex = self._piloted_rex()
-        if rex and self._rex_near_player(rex, addr):
-            return self._move_rex(rex, addr, x, y, z)
+        block = self._rex_base_block(rex, addr) if rex else None
+        if block:
+            return self._move_rex(block, addr, x, y, z)
         self.proc.write_bytes(addr + 0x10, struct.pack("<fff", x, y, z))
         return True
 
@@ -71,7 +72,19 @@ class PlayerMixin:
     REX_UPDATE_RVA = 0x135ED40
     REX_VTABLE_RVA = 0x1908368
     REX_HEADER_SIZE = 0xC0
-    REX_BASE_OFFSETS = (0x210, 0x480, 0x4B0, 0x6A0, 0xD90, 0xF50)
+    # Le bloc des 6 copies n'est pas a un offset fixe : +0x210 dans la fuite,
+    # +0x2880 contre Ray (meme disposition, 0x2670 plus loin). On le cherche
+    # dans les premiers 0x4000 octets de l'objet : 6 copies au meme X/Z,
+    # ecarts relatifs ci-dessous, pres du cockpit.
+    REX_BASE_LAYOUT = (0x0, 0x270, 0x2A0, 0x490, 0xB80, 0xD40)
+    REX_SCAN_SIZE = 0x4000
+    # La 4e copie (+0x490) s'ecarte parfois des autres (~2000 en X contre
+    # Ray, REX qui tourne) : tolerance large, la disposition suffit.
+    REX_COPY_TOLERANCE = 3000.0
+    # Hors des limites (teste contre Ray : vide puis eau, ~100 m plus bas)
+    # REX reste pilotable mais la position du joueur se fige : l'ecart
+    # calcule depuis elle est alors faux. Remonter REX en decalant
+    # directement le bloc (+400000 en Y) l'a fait retomber sur le sol.
     REX_TELEPORT_LIFT = 1000.0
     REX_SEARCH_NODES = 64
 
@@ -102,23 +115,33 @@ class PlayerMixin:
 
     REX_PILOT_DISTANCE = 20000.0
 
-    def _rex_near_player(self, rex: int, transform: int) -> bool:
-        """Snake aux commandes : sa position (le cockpit) est pres de la base
-        de REX (~6500 d'ecart mesures)."""
+    def _rex_base_block(self, rex: int, transform: int) -> int | None:
+        """Adresse de la premiere des 6 copies de la position de base de REX
+        si Snake est aux commandes (cockpit a moins de REX_PILOT_DISTANCE en
+        X/Z ; ~6500 mesures), sinon None."""
         px, _, pz = struct.unpack("<fff", self.proc.read_bytes(transform + 0x10, 12))
-        bx, _, bz = struct.unpack("<fff", self.proc.read_bytes(rex + self.REX_BASE_OFFSETS[0], 12))
-        return abs(px - bx) < self.REX_PILOT_DISTANCE and abs(pz - bz) < self.REX_PILOT_DISTANCE
+        try:
+            blob = self.proc.read_bytes(rex, self.REX_SCAN_SIZE)
+        except OSError:
+            return None
+        last = self.REX_BASE_LAYOUT[-1]
+        for start in range(0, len(blob) - last - 12, 4):
+            bx, _, bz = struct.unpack_from("<fff", blob, start)
+            if not (abs(px - bx) < self.REX_PILOT_DISTANCE and abs(pz - bz) < self.REX_PILOT_DISTANCE):
+                continue
+            if all(abs(struct.unpack_from("<f", blob, start + rel)[0] - bx) < self.REX_COPY_TOLERANCE
+                   and abs(struct.unpack_from("<f", blob, start + rel + 8)[0] - bz) < self.REX_COPY_TOLERANCE
+                   for rel in self.REX_BASE_LAYOUT[1:]):
+                return rex + start
+        return None
 
-    def _move_rex(self, rex: int, transform: int, x: float, y: float, z: float) -> bool:
+    def _move_rex(self, block: int, transform: int, x: float, y: float, z: float) -> bool:
         current = struct.unpack("<fff", self.proc.read_bytes(transform + 0x10, 12))
-        bases = [struct.unpack("<fff", self.proc.read_bytes(rex + offset, 12)) for offset in self.REX_BASE_OFFSETS]
-        bx, _, bz = bases[0]
-        if any(abs(px - bx) > 50 or abs(pz - bz) > 50 for px, _, pz in bases):
-            return False  # copies incoherentes : autre version du jeu ou REX en transition
+        bases = [struct.unpack("<fff", self.proc.read_bytes(block + rel, 12)) for rel in self.REX_BASE_LAYOUT]
         dx, dz = x - current[0], z - current[2]
         dy = y - current[1] + self.REX_TELEPORT_LIFT
-        for offset, (px, py, pz) in zip(self.REX_BASE_OFFSETS, bases):
-            self.proc.write_bytes(rex + offset, struct.pack("<fff", px + dx, py + dy, pz + dz))
+        for rel, (px, py, pz) in zip(self.REX_BASE_LAYOUT, bases):
+            self.proc.write_bytes(block + rel, struct.pack("<fff", px + dx, py + dy, pz + dz))
         return True
 
     # Jauge de grip (2026-10-04) : composant du joueur (acteur joueur = 6
