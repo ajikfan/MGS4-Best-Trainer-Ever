@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.5.3
+# MGS4 Trainer — V2.5.4
 
 Trainer en direct pour Metal Gear Solid 4 (portage PC Steam) : il lit et
 écrit la mémoire du jeu pendant que tu joues. Armes, objets, statistiques
@@ -48,13 +48,13 @@ des versions.
 - [Comment ça marche](docs/fonctionnement.md)
 - [Maintenance](docs/maintenance.md) (compatibilité, build, organisation du code)
 
-## Dernière version : V2.5.3
+## Dernière version : V2.5.4
 
-- **Rat Patrol Team 01** : Meryl, Johnny, Jonathan et Ed, avec leur état en
-  direct et les actions Réveiller, Endormir, Assommer, Tuer ; jauges
-  verrouillées sans réécriture.
-- **Toute la zone** : fonctionne sur les SMP de l'acte 1, nouvelle cible
-  Rat Patrol.
+- **Metal Gear REX** : la téléportation déplace REX lui-même quand tu le
+  pilotes, et Intouchable le protège aussi.
+- **Chrono figé** : le compte à rebours du jeu ne descend plus.
+- **Toute la zone** : Tuer et Assommer marchent sur les Gekko de la fuite
+  de REX.
 - Livrée par la **mise à jour intégrée** (petits fichiers).
 
 Détail dans [Nouveautés par version](docs/nouveautes.md).

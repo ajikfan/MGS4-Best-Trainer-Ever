@@ -1,4 +1,8 @@
 {
+  "V2.5.4": {
+    "date": "22 octobre 2026",
+    "description": "• Metal Gear REX : la téléportation déplace REX lui-même quand tu le pilotes (fuite de l'acte 4, combat contre Ray) ; il retombe au sol sans dégâts.\n• Intouchable : aux commandes de REX, les attaques ne lui font plus ni dégâts ni réaction.\n• Nouvelle case « Chrono figé » (groupe Vitesse du jeu) : le compte à rebours du jeu ne descend plus, par exemple les 5 minutes de la fuite de REX.\n• Toute la zone : Tuer fait exploser les Gekko de la fuite de REX, Assommer les fait s'accroupir quelques secondes."
+  },
   "V2.5.3": {
     "date": "18 octobre 2026",
     "description": "• Onglet Jauges : groupe « Rat Patrol Team 01 » (Meryl, Johnny, Jonathan, Ed), un encadré par membre avec son état en direct (actif, touché, endormi, assommé, mort) et les actions Réveiller, Endormir, Assommer, Tuer. Nouveaux : Jonathan et Ed (acte 1).\n• Jauges du Rat Patrol : une jauge verrouillée n'est plus réécrite en permanence, le jeu ne l'écrit plus du tout (pour ce membre seulement) ; vie et endurance se verrouillent séparément.\n• Toute la zone : Tuer, Assommer et Endormir fonctionnent sur les SMP de l'acte 1 ; nouvelle cible « Rat Patrol » (Tuer, Assommer, Endormir) ; « Tous les PNJ » ne vise plus jamais le Rat Patrol.\n• Jauges de Snake verrouillées : plus de réécriture à chaque rafraîchissement, le gel du jeu suffit."

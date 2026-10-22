@@ -4,6 +4,30 @@
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
+## Nouveautés de la V2.5.4
+
+### Metal Gear REX
+
+- **Téléportation** : quand tu pilotes REX (fuite de l'acte 4, combat
+  contre Ray), elle déplace REX lui-même, Snake dans le cockpit. Il est
+  posé un peu au-dessus du point et retombe au sol, sans dégâts de chute.
+  Les points se prennent en REX : enregistre-les en le pilotant.
+- **Intouchable** : les attaques ne font plus ni dégâts ni réaction à
+  REX (seules les poussées au contact, Ray qui le bouscule, restent).
+
+### Chrono figé
+
+Nouvelle case dans le groupe Vitesse du jeu : le compte à rebours du jeu
+ne descend plus (par exemple les 5 minutes pour sortir du tunnel pendant
+la fuite de REX). Il repart de la même valeur une fois la case décochée.
+
+### Toute la zone
+
+- Les Gekko de la fuite de REX sont enfin visés : **Tuer** les fait
+  exploser, **Assommer** les fait s'accroupir quelques secondes (ils se
+  relèvent seuls, comme avec Un coup, un mort en Non létal). Ils ne
+  dorment pas : Endormir les ignore.
+
 ## Nouveautés de la V2.5.3
 
 ### Rat Patrol Team 01
