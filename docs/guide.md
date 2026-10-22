@@ -80,7 +80,8 @@ L'onglet des réglages en direct, en plusieurs groupes :
     l'appui sur la gâchette (et laser de Metal Gear REX au niveau 5).
 - **Snake** :
   - **Intouchable** : aucun impact n'a d'effet sur Snake (ni dégâts, ni
-    projection, ni assommage) ;
+    projection, ni assommage) ; aux commandes de Metal Gear REX, REX
+    ignore aussi les coups (ni dégâts, ni réaction) ;
   - **Invisible** : les soldats, les Gekko et les mini Gekko ne le voient
     plus, même debout devant eux, et un tir sans silencieux ne les fait
     plus passer en alerte (le hold-up reste possible). À combiner avec

@@ -10,6 +10,14 @@ class CodePatchesMixin:
     #    projection ; seul appelant 975232, retour ignore). "ret" a son
     #    entree : insensible a tout impact, letal ou non - valide en jeu
     #    (balles, explosions, mines, corps a corps).
+    #    Metal Gear REX (2026-10-22, valide contre Ray) : sa mise a jour
+    #    (136F3E0, table 1908A08) parcourt sa liste de coups (objet+0x58 :
+    #    premier coup D41AC0, en 136F5B6) et pour chacun cumule les degats
+    #    (+0x80, retires de linkvarbuf+0xB70), joue son, secousse et effets,
+    #    arme une invulnerabilite (+0x78) ; D41AA0 vide ensuite la liste.
+    #    "call D41AC0" -> "xor eax,eax" : aucun coup lu, liste videe quand
+    #    meme -> ni degats ni reaction (les poussees physiques, Ray qui le
+    #    bouscule, restent).
     #  - Invisible (2026-10-04) : 89360 renvoie l'exposition de Snake
     #    (0 = invisible, 1 = bien visible) a partir de l'indice de
     #    camouflage ; le Camouflage furtif (etat joueur 0xA9) la force a 0.
@@ -458,7 +466,10 @@ class CodePatchesMixin:
         "timer_freeze": [
             (0x14D4596, bytes.fromhex("890d44b1ad2239b3ac00"), bytes.fromhex("909090909090")),
         ],
-        "untouchable": [(0x96C0B0, bytes.fromhex("488bc455535657488d68a1"), bytes.fromhex("c3"))],
+        "untouchable": [
+            (0x96C0B0, bytes.fromhex("488bc455535657488d68a1"), bytes.fromhex("c3")),
+            (0x136F5B6, bytes.fromhex("e805259dff4c8bf04885"), bytes.fromhex("31c00f1f00")),
+        ],
         "invisible": [
             (0x89360, bytes.fromhex("48895c2408488974"), bytes.fromhex("0f57c0c3")),
             (0x89410, bytes.fromhex("4883ec28e8a71100"), bytes.fromhex("0f57c0c3")),

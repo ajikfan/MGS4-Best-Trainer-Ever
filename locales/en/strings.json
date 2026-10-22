@@ -110,7 +110,7 @@
   "vitals.non_lethal_tooltip": "A hit puts to sleep or knocks out whatever the weapon: soldiers and Gekko fall asleep, bosses are knocked out (stamina emptied, health untouched). Other machines (tanks, vehicles, helicopters, RAY…) are still destroyed in one hit; mini Gekko are paralyzed.",
   "vitals.snake_group": "Snake",
   "vitals.untouchable": "Untouchable",
-  "vitals.untouchable_tooltip": "Code patch: Snake ignores every impact - bullets, explosions, mines, hits and non-lethal attacks no longer do anything to him (no damage, no knockback, no stun).",
+  "vitals.untouchable_tooltip": "Code patch: Snake ignores every impact - bullets, explosions, mines, hits and non-lethal attacks no longer do anything to him (no damage, no knockback, no stun). When piloting Metal Gear REX, REX ignores hits too (no damage, no reaction).",
   "vitals.invisible": "Invisible",
   "vitals.invisible_tooltip": "Code patch: soldiers, Gekko and mini Gekko can no longer see Snake, even standing right in front of them (like the Stealth Camo, without the transparency; the camo index shows 99%), and unsilenced shots no longer put them on alert. They can still hear knocking on walls and come to check, and hold-ups still work. A switch to Caution remains if Snake stands still among mini Gekko: also check \"No Alerts\" so that nothing triggers the global alert.",
   "vitals.no_back_pain": "No Back Pain",
