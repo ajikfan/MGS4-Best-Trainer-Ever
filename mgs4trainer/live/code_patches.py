@@ -463,8 +463,14 @@ class CodePatchesMixin:
         # cours) est vrai, 14D4573 fait temps = max(temps - ecoule, 0) et
         # l'ecrit en 14D4596 ; ecriture en NOP -> le chrono reste fige,
         # il repart de la meme valeur une fois la case decochee.
+        # Combat contre une Beauty (2026-10-22, salle blanche) : le chrono a
+        # l'ecran n'est qu'une copie. Le combat a son propre compte a rebours,
+        # un flottant en secondes a boss+0x4694 ; 116CCF0 le recopie dans
+        # l'affichage (14D4DC0) puis 116CDE3 fait max(t - ecoule, 0) et
+        # l'ecrit en 116CE05 (fin du combat a 0). Ecriture en NOP.
         "timer_freeze": [
             (0x14D4596, bytes.fromhex("890d44b1ad2239b3ac00"), bytes.fromhex("909090909090")),
+            (0x116CE05, bytes.fromhex("f30f118b94460000f30f5ed0"), bytes.fromhex("0f1f840000000000")),
         ],
         "untouchable": [
             (0x96C0B0, bytes.fromhex("488bc455535657488d68a1"), bytes.fromhex("c3")),

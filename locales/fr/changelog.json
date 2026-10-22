@@ -1,7 +1,7 @@
 {
   "V2.5.4": {
     "date": "22 octobre 2026",
-    "description": "• Metal Gear REX : la téléportation déplace REX lui-même quand tu le pilotes (fuite de l'acte 4, combat contre Ray) ; il retombe au sol sans dégâts.\n• Intouchable : aux commandes de REX, les attaques ne lui font plus ni dégâts ni réaction.\n• Nouvelle case « Chrono figé » (groupe Vitesse du jeu) : le compte à rebours du jeu ne descend plus, par exemple les 5 minutes de la fuite de REX.\n• Toute la zone : Tuer fait exploser les Gekko de la fuite de REX, Assommer les fait s'accroupir quelques secondes."
+    "description": "• Metal Gear REX : la téléportation déplace REX lui-même quand tu le pilotes (fuite de l'acte 4, combat contre Ray) ; il retombe au sol sans dégâts.\n• Intouchable : aux commandes de REX, les attaques ne lui font plus ni dégâts ni réaction.\n• Nouvelle case « Chrono figé » (groupe Vitesse du jeu) : le compte à rebours du jeu ne descend plus : les 5 minutes de la fuite de REX, ou le temps limite des combats contre les Beauty (salle blanche).\n• Toute la zone : Tuer fait exploser les Gekko de la fuite de REX, Assommer les fait s'accroupir quelques secondes."
   },
   "V2.5.3": {
     "date": "18 octobre 2026",

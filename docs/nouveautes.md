@@ -18,8 +18,8 @@ Le détail des dernières versions. L'historique complet est aussi dans le bouto
 ### Chrono figé
 
 Nouvelle case dans le groupe Vitesse du jeu : le compte à rebours du jeu
-ne descend plus (par exemple les 5 minutes pour sortir du tunnel pendant
-la fuite de REX). Il repart de la même valeur une fois la case décochée.
+ne descend plus : les 5 minutes pour sortir du tunnel pendant la fuite de
+REX, ou le temps limite des combats contre les Beauty (salle blanche). Il repart de la même valeur une fois la case décochée.
 
 ### Toute la zone
 

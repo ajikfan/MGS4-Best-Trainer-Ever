@@ -60,7 +60,7 @@
   "vitals.speed_group": "Game Speed (numpad + / − / 0)",
   "vitals.pause": "Pause (Pause key)",
   "vitals.timer_freeze": "Freeze Countdown",
-  "vitals.timer_freeze_tooltip": "Code patch: the countdown shown by the game no longer goes down (for example the 5 minutes of the Metal Gear REX escape in Act 4). It resumes from the same value once unchecked.",
+  "vitals.timer_freeze_tooltip": "Code patch: the countdown shown by the game no longer goes down (the 5 minutes of the Metal Gear REX escape in Act 4, the time limit of the Beauty fights in the white room). It resumes from the same value once unchecked.",
   "vitals.difficulty": "Difficulty:",
   "vitals.difficulty_tooltip": "Changes the difficulty of the current game, immediately. Verified effect: this is the difficulty recorded on the next save (rank and ending screen included). No change observed in-game: a bullet removes the same life on Liquid and on The Boss (measured), and enemies don't seem more alert.",
   "difficulty.20": "Liquid (Easy)",
