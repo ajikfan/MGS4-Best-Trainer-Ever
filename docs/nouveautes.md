@@ -30,6 +30,14 @@ la forme Bête, le combat passe tout de suite dans la salle blanche, sans
 attendre les 3 minutes. Dans la salle blanche elle-même, il ne fait rien
 (le même compteur y sert de chrono : le mettre à 0 tuerait la Beauty). Il repart de la même valeur une fois la case décochée.
 
+### Menu principal
+
+Nouveau bouton dans le groupe Vitesse du jeu : retour au menu principal
+du jeu à tout moment de la partie, même pendant une cinématique, comme le
+« Oui » du menu pause. Une confirmation rappelle que tout ce qui n'a pas
+été sauvegardé sera perdu ; hors d'une partie (menu principal,
+chargement), le bouton ne fait rien.
+
 ### Toute la zone
 
 - Les Gekko de la fuite de REX sont enfin visés : **Tuer** les fait

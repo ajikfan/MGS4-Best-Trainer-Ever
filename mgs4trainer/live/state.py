@@ -53,6 +53,34 @@ class GameStateMixin:
         progress = struct.unpack("<I", self.proc.read_bytes(self.linkvarbuf + self.PROGRESS_OFFSET, 4))[0]
         return code, progress
 
+    # Retour au menu principal (2026-10-23, valide en jeu et en cinematique) :
+    # 5BCB0(1) est ce qu'appelle le "Oui" du menu pause (gestionnaire E374F0,
+    # bit 4 de ses drapeaux) : elle charge la zone de sortie, nom copie par
+    # 5C0E0 dans le tampon mgs4+1B00DF0, qui vaut "title" pendant une partie.
+    # 5BCB0(0) = l'autre sortie de ce menu (bit 2). Appelee dans le fil du
+    # jeu (game_call) ; seulement en partie (lieu lisible) et si le tampon
+    # vaut bien "title".
+    RETURN_TO_TITLE = (0x5BCB0, "48895c240848896c24104889")
+    EXIT_STAGE_RVA = 0x1B00DF0
+
+    def in_game(self) -> bool:
+        try:
+            return self.connected and self.sane and self.read_location() is not None
+        except OSError:
+            return False
+
+    def return_to_title(self) -> bool:
+        """Retour au menu principal, comme le menu pause ; faux hors partie
+        ou si la fonction du jeu n'est pas celle attendue."""
+        if not self.in_game() or not (self.pid and self.speed.ensure_injected(self.pid)):
+            return False
+        funcs = self._live_funcs({"title": self.RETURN_TO_TITLE})
+        if funcs is None:
+            return False
+        if self.proc.read_bytes(self.base + self.EXIT_STAGE_RVA, 6) != b"title\0":
+            return False
+        return self.speed.game_call(funcs["title"], 1) is not None
+
     def read_difficulty(self) -> int:
         return struct.unpack("<h", self.proc.read_bytes(self.linkvarbuf + self.DIFFICULTY_OFFSET, 2))[0]
 

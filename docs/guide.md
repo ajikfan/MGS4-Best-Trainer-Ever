@@ -44,7 +44,9 @@ L'onglet des réglages en direct, en plusieurs groupes :
   rebours du jeu ne descend plus : les 5 minutes de la fuite de Metal
   Gear REX à l'acte 4, le temps limite des combats contre les Beauty),
   bouton **Salle blanche** (contre une Beauty, après la forme Bête :
-  passage immédiat dans la salle blanche), liste **Difficulté** (Liquid à The
+  passage immédiat dans la salle blanche), bouton **Menu principal**
+  (retour au menu principal à tout moment de la partie, après
+  confirmation : la progression non sauvegardée est perdue), liste **Difficulté** (Liquid à The
   Boss ; change la difficulté enregistrée à la prochaine sauvegarde).
   Au clavier, même jeu au premier plan : touche **Pause** pour la pause,
   pavé numérique **+** / **−** pour ±10 % et **0** pour revenir à 100 %

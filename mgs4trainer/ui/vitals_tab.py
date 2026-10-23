@@ -2,7 +2,7 @@
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QFrame, QGridLayout, QGroupBox, QHBoxLayout,
-    QHeaderView, QLabel, QPushButton, QScrollArea, QSlider, QTableWidget,
+    QHeaderView, QLabel, QMessageBox, QPushButton, QScrollArea, QSlider, QTableWidget,
     QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -86,6 +86,11 @@ class VitalsTab(QWidget):
         self.white_room_btn.setToolTip(tr("vitals.white_room_tooltip"))
         self.white_room_btn.clicked.connect(self._on_white_room)
         speed_row.addWidget(self.white_room_btn)
+        # Retour au menu principal (2026-10-23) : MGS4Live.return_to_title.
+        self.title_btn = QPushButton(tr("vitals.return_to_title"))
+        self.title_btn.setToolTip(tr("vitals.return_to_title_tooltip"))
+        self.title_btn.clicked.connect(self._on_return_to_title)
+        speed_row.addWidget(self.title_btn)
         speed_layout.addLayout(speed_row)
 
         difficulty_row = QHBoxLayout()
@@ -550,6 +555,26 @@ class VitalsTab(QWidget):
         if not done:
             warn_dialog(self, tr("vitals.white_room"), tr("vitals.white_room_none"))
 
+    def _on_return_to_title(self):
+        if not self.live.in_game():
+            warn_dialog(self, tr("vitals.return_to_title"), tr("vitals.return_to_title_not_in_game"))
+            return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle(tr("vitals.return_to_title"))
+        box.setText(tr("vitals.return_to_title_confirm"))
+        yes = box.addButton(tr("button.yes"), QMessageBox.AcceptRole)
+        box.addButton(tr("button.no"), QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is not yes:
+            return
+        try:
+            done = self.live.return_to_title()
+        except OSError:
+            done = False
+        if not done:
+            warn_dialog(self, tr("vitals.return_to_title"), tr("vitals.return_to_title_failed"))
+
     def sync_to_game(self):
         """La DLL reste dans le jeu apres la fermeture du trainer, avec ses
         drapeaux (constate 2026-10-04 : "Pas de rechargement" encore actif
@@ -870,6 +895,7 @@ class VitalsTab(QWidget):
             self.pause_check.setEnabled(False)
             self.timer_freeze_check.setEnabled(False)
             self.white_room_btn.setEnabled(False)
+            self.title_btn.setEnabled(False)
             self.infinite_ammo_check.setEnabled(False)
             self.no_reload_check.setEnabled(False)
             self.infinite_silencer_check.setEnabled(False)
@@ -898,6 +924,7 @@ class VitalsTab(QWidget):
         self.pause_check.setEnabled(True)
         self.timer_freeze_check.setEnabled(True)
         self.white_room_btn.setEnabled(True)
+        self.title_btn.setEnabled(True)
         self.infinite_ammo_check.setEnabled(True)
         self.no_reload_check.setEnabled(True)
         self.infinite_silencer_check.setEnabled(True)
