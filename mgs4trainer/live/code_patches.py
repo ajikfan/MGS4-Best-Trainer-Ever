@@ -467,10 +467,15 @@ class CodePatchesMixin:
         # l'ecran n'est qu'une copie. Le combat a son propre compte a rebours,
         # un flottant en secondes a boss+0x4694 ; 116CCF0 le recopie dans
         # l'affichage (14D4DC0) puis 116CDE3 fait max(t - ecoule, 0) et
-        # l'ecrit en 116CE05 (fin du combat a 0). Ecriture en NOP.
+        # l'ecrit en 116CE05 (fin du combat a 0). Le meme compteur sert avant,
+        # dans l'arene, au delai invisible de 3 minutes qui mene a la salle
+        # blanche : seul le chemin de la salle blanche ([boss+0x4720] != 0,
+        # chrono affiche par 14D4E30 puis "jmp 116CDDB" en 116CDC8) est
+        # devie vers 116CE35, qui relit le compteur sans le decompter
+        # (2026-10-23) ; l'arene continue de decompter.
         "timer_freeze": [
             (0x14D4596, bytes.fromhex("890d44b1ad2239b3ac00"), bytes.fromhex("909090909090")),
-            (0x116CE05, bytes.fromhex("f30f118b94460000f30f5ed0"), bytes.fromhex("0f1f840000000000")),
+            (0x116CDC8, bytes.fromhex("eb114533c033d2"), bytes.fromhex("eb6b")),
         ],
         "untouchable": [
             (0x96C0B0, bytes.fromhex("488bc455535657488d68a1"), bytes.fromhex("c3")),

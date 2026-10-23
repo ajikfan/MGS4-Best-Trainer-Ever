@@ -19,7 +19,16 @@ Le détail des dernières versions. L'historique complet est aussi dans le bouto
 
 Nouvelle case dans le groupe Vitesse du jeu : le compte à rebours du jeu
 ne descend plus : les 5 minutes pour sortir du tunnel pendant la fuite de
-REX, ou le temps limite des combats contre les Beauty (salle blanche). Il repart de la même valeur une fois la case décochée.
+REX, ou le temps limite des combats contre les Beauty (salle blanche).
+Le délai invisible de 3 minutes qui mène à la salle blanche, lui, continue
+de s'écouler.
+
+### Salle blanche
+
+Nouveau bouton dans le groupe Vitesse du jeu : contre une Beauty, après
+la forme Bête, le combat passe tout de suite dans la salle blanche, sans
+attendre les 3 minutes. Dans la salle blanche elle-même, il ne fait rien
+(le même compteur y sert de chrono : le mettre à 0 tuerait la Beauty). Il repart de la même valeur une fois la case décochée.
 
 ### Toute la zone
 

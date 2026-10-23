@@ -11,7 +11,7 @@ import mgs4save
 from mgs4trainer.core.gamedata import ALERT_STATE_NAMES, VITALS
 from mgs4trainer.core.i18n import alert_state_name, tr, vital_display_name
 from mgs4trainer.live import MGS4Live
-from mgs4trainer.ui.common import AMMO_LOCK_REFRESH_MS
+from mgs4trainer.ui.common import AMMO_LOCK_REFRESH_MS, warn_dialog
 
 
 class VitalsTab(QWidget):
@@ -81,6 +81,11 @@ class VitalsTab(QWidget):
         self.timer_freeze_check.setToolTip(tr("vitals.timer_freeze_tooltip"))
         self.timer_freeze_check.toggled.connect(self._on_timer_freeze_toggled)
         speed_row.addWidget(self.timer_freeze_check)
+        # Salle blanche (2026-10-23) : MGS4Live.beauty_to_white_room.
+        self.white_room_btn = QPushButton(tr("vitals.white_room"))
+        self.white_room_btn.setToolTip(tr("vitals.white_room_tooltip"))
+        self.white_room_btn.clicked.connect(self._on_white_room)
+        speed_row.addWidget(self.white_room_btn)
         speed_layout.addLayout(speed_row)
 
         difficulty_row = QHBoxLayout()
@@ -537,6 +542,14 @@ class VitalsTab(QWidget):
         except OSError:
             pass
 
+    def _on_white_room(self):
+        try:
+            done = self.live.beauty_to_white_room()
+        except OSError:
+            done = False
+        if not done:
+            warn_dialog(self, tr("vitals.white_room"), tr("vitals.white_room_none"))
+
     def sync_to_game(self):
         """La DLL reste dans le jeu apres la fermeture du trainer, avec ses
         drapeaux (constate 2026-10-04 : "Pas de rechargement" encore actif
@@ -856,6 +869,7 @@ class VitalsTab(QWidget):
             self.speed_slider.setEnabled(False)
             self.pause_check.setEnabled(False)
             self.timer_freeze_check.setEnabled(False)
+            self.white_room_btn.setEnabled(False)
             self.infinite_ammo_check.setEnabled(False)
             self.no_reload_check.setEnabled(False)
             self.infinite_silencer_check.setEnabled(False)
@@ -883,6 +897,7 @@ class VitalsTab(QWidget):
         self.speed_slider.setEnabled(True)
         self.pause_check.setEnabled(True)
         self.timer_freeze_check.setEnabled(True)
+        self.white_room_btn.setEnabled(True)
         self.infinite_ammo_check.setEnabled(True)
         self.no_reload_check.setEnabled(True)
         self.infinite_silencer_check.setEnabled(True)

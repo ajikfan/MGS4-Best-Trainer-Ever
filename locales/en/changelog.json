@@ -1,7 +1,8 @@
 {
   "V2.5.4": {
     "date": "October 22, 2026",
-    "description": "• Metal Gear REX: teleporting now moves REX itself while you pilot it (act 4 escape, fight against Ray); it lands back on the ground with no damage.\n• Untouchable: when piloting REX, attacks no longer cause it any damage or reaction.\n• New \"Freeze Countdown\" checkbox (Game Speed group): the game's countdown no longer goes down: the 5 minutes of the REX escape, or the time limit of the Beauty fights (white room).\n• Whole area: Kill blows up the Gekko of the REX escape, Knock out makes them crouch for a few seconds."
+    "description": "• Metal Gear REX: teleporting now moves REX itself while you pilot it (act 4 escape, fight against Ray); it lands back on the ground with no damage.\n• Untouchable: when piloting REX, attacks no longer cause it any damage or reaction.\n• New \"Freeze Countdown\" checkbox (Game Speed group): the game's countdown no longer goes down: the 5 minutes of the REX escape, or the time limit of the Beauty fights (white room).
+• New \"White Room\" button: against a Beauty, after the Beast form, the fight moves to the white room right away, without waiting 3 minutes.\n• Whole area: Kill blows up the Gekko of the REX escape, Knock out makes them crouch for a few seconds."
   },
   "V2.5.3": {
     "date": "October 18, 2026",

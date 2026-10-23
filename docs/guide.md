@@ -42,7 +42,9 @@ L'onglet des réglages en direct, en plusieurs groupes :
 - **Vitesse du jeu** : curseur de 10 % à 300 % (100 % au centre), case
   **Pause** (gel complet du jeu), case **Chrono figé** (le compte à
   rebours du jeu ne descend plus : les 5 minutes de la fuite de Metal
-  Gear REX à l'acte 4, le temps limite des combats contre les Beauty), liste **Difficulté** (Liquid à The
+  Gear REX à l'acte 4, le temps limite des combats contre les Beauty),
+  bouton **Salle blanche** (contre une Beauty, après la forme Bête :
+  passage immédiat dans la salle blanche), liste **Difficulté** (Liquid à The
   Boss ; change la difficulté enregistrée à la prochaine sauvegarde).
   Au clavier, même jeu au premier plan : touche **Pause** pour la pause,
   pavé numérique **+** / **−** pour ±10 % et **0** pour revenir à 100 %

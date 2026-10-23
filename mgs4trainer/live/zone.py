@@ -326,6 +326,61 @@ class ZoneMixin:
         if struct.unpack("<Q", self.proc.read_bytes(helicopter + self.ZONE_TASK_UPDATE, 8))[0] - self.base == self.ZONE_HELICOPTER_UPDATE_RVA:
             self.proc.write_bytes(helicopter + self.ZONE_HELICOPTER_LIFE, struct.pack("<i", 0))
 
+    # Salle blanche des Beauty (2026-10-23, valide sur Crying Wolf et une
+    # autre Beauty) : apres la Bete, la Beauty est une tache de la liste des
+    # taches en cours, objet a tache+0xC0. Chaque Beauty a sa classe
+    # (18FA670 Crying Wolf, 18FC0D0 Laughing Octopus...), on la reconnait a
+    # sa machine a etats dans l'etat de cette phase (mise a jour 116CCF0 ;
+    # machines : nombre +0x34, tableau [+0x38], 0x130 octets chacune, mise a
+    # jour de l'etat courant +0x80). Cette machine decompte un flottant en
+    # secondes a +0x4694 (duree +0x4670 = 180, invisible dans l'arene) ; a 0
+    # le jeu passe dans la salle blanche. Le mettre a 0 y entre tout de
+    # suite (valide). +0x4850 = 1 pendant cette phase. Le meme compteur sert
+    # ensuite au chrono de la salle blanche ([+0x4720] passe de 0 a 1 quand
+    # il s'affiche) : a 0 la, la Beauty meurt. Le bouton n'agit donc que
+    # dans l'arene ([+0x4720] == 0).
+    BEAUTY_STATE_UPDATE_RVA = 0x116CCF0
+    MACHINE_COUNT, MACHINE_ARRAY, MACHINE_SIZE, MACHINE_UPDATE = 0x34, 0x38, 0x130, 0x80
+    BEAUTY_TASK_OBJECT = 0xC0
+    BEAUTY_COUNTDOWN = 0x4694
+    BEAUTY_DURATION = 0x4670
+    BEAUTY_PHASE = 0x4850
+    BEAUTY_WHITE_ROOM = 0x4720
+
+    def beauty_to_white_room(self) -> bool:
+        """Envoie la Beauty en cours dans la salle blanche ; faux si aucune
+        Beauty n'est dans la phase qui y mene."""
+        if not (self.connected and self.sane):
+            return False
+        head = self.base + self.ZONE_TASK_LIST_RVA
+        task = struct.unpack("<Q", self.proc.read_bytes(head + self.ZONE_TASK_NEXT, 8))[0]
+        for _ in range(0x1000):
+            if not task or task == head:
+                break
+            try:
+                obj = task + self.BEAUTY_TASK_OBJECT
+                if self._in_beauty_phase(obj):
+                    duration = struct.unpack("<i", self.proc.read_bytes(obj + self.BEAUTY_DURATION, 4))[0]
+                    countdown = struct.unpack("<f", self.proc.read_bytes(obj + self.BEAUTY_COUNTDOWN, 4))[0]
+                    phase = struct.unpack("<i", self.proc.read_bytes(obj + self.BEAUTY_PHASE, 4))[0]
+                    in_room = self.proc.read_bytes(obj + self.BEAUTY_WHITE_ROOM, 1)[0]
+                    if phase == 1 and not in_room and 0 < duration <= 1000 and 0 < countdown <= duration:
+                        self.proc.write_bytes(obj + self.BEAUTY_COUNTDOWN, struct.pack("<f", 0.0))
+                        return True
+                task = struct.unpack("<Q", self.proc.read_bytes(task + self.ZONE_TASK_NEXT, 8))[0]
+            except OSError:
+                break
+        return False
+
+    def _in_beauty_phase(self, obj: int) -> bool:
+        count = struct.unpack("<i", self.proc.read_bytes(obj + self.MACHINE_COUNT, 4))[0]
+        if not 0 < count <= 8:
+            return False
+        machines = struct.unpack("<Q", self.proc.read_bytes(obj + self.MACHINE_ARRAY, 8))[0]
+        update = self.base + self.BEAUTY_STATE_UPDATE_RVA
+        return any(struct.unpack("<Q", self.proc.read_bytes(machines + i * self.MACHINE_SIZE + self.MACHINE_UPDATE, 8))[0] == update
+                   for i in range(count))
+
     def _zone_is_ally(self, actor: int) -> bool:
         """Acteur reconnu comme allie (MGS4Live.ALLIES : classe, +0xC08)."""
         klass = struct.unpack("<Q", self.proc.read_bytes(actor, 8))[0] - self.base
