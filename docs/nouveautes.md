@@ -1,6 +1,6 @@
 # Nouveautés par version
 
-[← Retour au README](../README.md)
+[← Retour au README](../README.md) · *[English version](en/whats-new.md)*
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
@@ -8,9 +8,10 @@ Le détail des dernières versions. L'historique complet est aussi dans le bouto
 
 ### Mode photo
 
-Nouvelle case dans le groupe Vitesse du jeu, ou **\*** du pavé numérique :
-une caméra libre, pilotée avec les commandes du jeu, à la manette comme au
-clavier et à la souris :
+Nouvelle case dans le groupe **Outils de partie**, ou **\*** du pavé
+numérique : une caméra libre, pilotée avec les commandes du jeu, à la
+manette comme au clavier et à la souris (le bouton **Commandes du mode
+photo…** les rappelle) :
 
 - **stick gauche** (ZQSD) : se déplacer ;
 - **stick droit** (souris) : orienter la caméra ;
@@ -29,8 +30,8 @@ Le temps est figé à l'entrée dans le mode (le monde s'arrête mais la
 caméra bouge) ; Y le relance pour photographier une scène en mouvement,
 y compris pendant les cinématiques. À la sortie, la case Pause reprend
 son état d'avant. Tant que le mode est actif, Snake ne reçoit plus
-aucune commande et le HUD du jeu (vie, radar, armes, objets) est masqué. La caméra est déplacée par la
-DLL du trainer, à chaque image du jeu : après la mise à jour, relancer
+aucune commande et le HUD du jeu (vie, radar, armes, objets) est masqué.
+La caméra est déplacée par la DLL du trainer, à chaque image du jeu : après la mise à jour, relancer
 le jeu pour charger la nouvelle DLL.
 
 ### Pause
@@ -63,19 +64,19 @@ dessine le mot par-dessus).
 Nouvelle case dans le groupe Vitesse du jeu : le compte à rebours du jeu
 ne descend plus : les 5 minutes pour sortir du tunnel pendant la fuite de
 REX, ou le temps limite des combats contre les Beauty (salle blanche).
-Le délai invisible de 3 minutes qui mène à la salle blanche, lui, continue
-de s'écouler.
+Il repart de la même valeur une fois la case décochée. Le délai invisible
+de 3 minutes qui mène à la salle blanche, lui, continue de s'écouler.
 
 ### Salle blanche
 
-Nouveau bouton dans le groupe Vitesse du jeu : contre une Beauty, après
+Nouveau bouton dans le groupe Outils de partie : contre une Beauty, après
 la forme Bête, le combat passe tout de suite dans la salle blanche, sans
 attendre les 3 minutes. Dans la salle blanche elle-même, il ne fait rien
-(le même compteur y sert de chrono : le mettre à 0 tuerait la Beauty). Il repart de la même valeur une fois la case décochée.
+(le même compteur y sert de chrono : le mettre à 0 tuerait la Beauty).
 
 ### Menu principal
 
-Nouveau bouton dans le groupe Vitesse du jeu : retour au menu principal
+Nouveau bouton dans le groupe Outils de partie : retour au menu principal
 du jeu à tout moment de la partie, même pendant une cinématique, comme le
 « Oui » du menu pause. Une confirmation rappelle que tout ce qui n'a pas
 été sauvegardé sera perdu ; hors d'une partie (menu principal,

@@ -1,6 +1,6 @@
 # Comment ça marche
 
-[← Retour au README](../README.md)
+[← Retour au README](../README.md) · *[English version](en/how-it-works.md)*
 
 Comment chaque fonction agit sur le jeu, ses limites, et ce qui a été vérifié en jeu.
 
@@ -25,8 +25,11 @@ Onglet "État de jeu" : curseur centré sur la vitesse normale (100%),
 glissable vers la gauche pour ralentir (jusqu'à 10%) ou vers la droite
 pour accélérer (jusqu'à 300%), plus une case "Pause" indépendante.
 
-- **Pause** : gel complet du process (`NtSuspendProcess`), pas juste le
-  menu pause du jeu — fiable, ne nécessite aucune injection.
+- **Pause** : en partie (V2.6.0), la pause interne du jeu, celle qu'il
+  utilise lui-même pour recharger le modèle de Snake, appelée par la DLL :
+  le monde est figé mais le jeu continue de dessiner chaque image (le
+  mode photo reste utilisable). Dans les menus, ou si elle échoue, gel
+  complet du process (`NtSuspendProcess`), comme avant.
 - **Ralenti/accéléré** : nécessite d'injecter une petite DLL
   (`native/speedhack_x64.dll`, déjà compilée et fournie dans ce dépôt —
   aucun compilateur requis pour l'utiliser telle quelle) dans `mgs4.exe`,
@@ -342,6 +345,44 @@ Limites connues : le nombre de places du sous-menu des armes ne peut
 pas être augmenté (le menu plante à l'affichage au-delà de 5) ; forcer
 dans la main une arme dont le modèle n'est pas chargé fait planter le
 jeu, d'où le passage par la 5e place.
+
+### Mode photo (V2.6.0)
+
+- **Caméra** : la fonction du jeu qui règle la caméra recopie sa
+  position et son orientation à chaque image ; le trainer neutralise
+  cette copie, et c'est la DLL qui déplace la caméra, une fois par image
+  dans le fil du jeu (une boucle dans le trainer était interrompue par le
+  reste de l'interface, d'où des saccades).
+- **Commandes** : le jeu remplit une manette virtuelle (au format PS3) à
+  partir de la manette et du clavier/souris. Pendant le mode, ses
+  écritures sont redirigées vers une copie que lit la DLL : Snake ne
+  reçoit plus rien, et la caméra se pilote avec les commandes habituelles.
+  Pendant certaines cinématiques, le jeu ne met plus le clavier ni la
+  souris dans cette manette : la DLL les lit alors elle-même (la souris
+  par une accroche de bas niveau, la position du curseur n'étant pas
+  fiable).
+- **Temps figé** : la pause interne du jeu (voir la Pause plus haut),
+  relancée ou refigée par Y / E / Pause.
+- **Zoom** : la fonction de caméra reçoit le zoom en argument ; un
+  détour le remplace par une valeur du trainer, que la croix et la
+  molette modifient. Les zooms des cinématiques sont ainsi neutralisés.
+- **HUD** : chaque élément du HUD teste un mot de drapeaux global ; la
+  DLL l'impose à chaque image, puis le trainer le remet comme avant.
+- **Téléportation** : la position de la caméra est écrite comme position
+  de Snake (refusé en cinématique).
+
+### Menu pause des cinématiques : ligne QUITTER (V2.6.0)
+
+Le menu est une tâche du jeu dont le nombre d'entrées (2) est écrit en
+dur dans son code. Le trainer le passe à 3, lui donne une table de
+surbrillance à trois entrées (la troisième ne lance aucune animation) et
+détourne la validation : la troisième entrée ramène au menu principal.
+L'interface du menu vient d'un fichier du jeu, compressé dans une
+archive : plutôt que de le modifier, le trainer dessine le mot dans une
+fenêtre transparente par-dessus le jeu. Quand le curseur est dessus, il
+descend la barre de sélection du jeu d'une ligne et grise les deux autres
+textes, directement dans la scène d'interface en mémoire. Les patchs sont
+retirés à la fermeture du trainer.
 
 ### Téléportation
 

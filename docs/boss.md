@@ -1,6 +1,6 @@
 # Un coup, un mort : les boss
 
-[← Retour au README](../README.md)
+[← Retour au README](../README.md) · *[English version](en/boss.md)*
 
 La règle générale de "Un coup, un mort" : en **Létal**, tout coup tue ; en
 **Non létal**, tout coup met K.O. en vidant l'endurance, sans toucher à la

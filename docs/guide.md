@@ -1,6 +1,6 @@
 # Guide des onglets et des profils
 
-[← Retour au README](../README.md)
+[← Retour au README](../README.md) · *[English version](en/guide.md)*
 
 Ce que fait chaque onglet et chaque réglage, et comment utiliser les profils F1 à F11.
 
@@ -46,6 +46,9 @@ L'onglet des réglages en direct, en plusieurs groupes :
   Metal Gear REX à l'acte 4, le temps limite des combats contre les
   Beauty), liste **Difficulté** (Liquid à The Boss ; change la
   difficulté enregistrée à la prochaine sauvegarde).
+  Au clavier, même jeu au premier plan : touche **Pause** pour la pause,
+  pavé numérique **+** / **−** pour ±10 % et **0** pour revenir à 100 %
+  (bandeau "Vitesse : x %" par-dessus le jeu).
 - **Outils de partie** : case **Mode photo** (ou * du pavé numérique :
   caméra libre, voir le bouton **Commandes du mode photo…** et les
   nouveautés de la V2.6.0), bouton **Salle blanche** (contre une Beauty,
@@ -54,9 +57,6 @@ L'onglet des réglages en direct, en plusieurs groupes :
   partie, après confirmation : la progression non sauvegardée est
   perdue). Le menu pause des cinématiques gagne aussi une ligne
   **QUITTER** tant que le trainer est ouvert.
-  Au clavier, même jeu au premier plan : touche **Pause** pour la pause,
-  pavé numérique **+** / **−** pour ±10 % et **0** pour revenir à 100 %
-  (bandeau "Vitesse : x %" par-dessus le jeu).
 - **Alerte** :
   - **État réel** : l'état d'alerte en cours (Normal, Alerte, Évasion,
     Prudence) ;
@@ -289,8 +289,10 @@ créé au premier enregistrement.
 ## Raccourcis clavier
 
 
-- **Pause** (la touche du clavier) : coche ou décoche la case Pause (gel
-  complet du jeu).
+- **Pause** (la touche du clavier) : coche ou décoche la case Pause (en
+  partie, pause du jeu ; dans les menus, gel complet).
 - **Pavé numérique +** / **−** : vitesse du jeu +10 % / −10 % (de 10 % à
   300 % ; touche maintenue = répétée). **Pavé numérique 0** : retour à
   100 %. Le même bandeau affiche "Vitesse : x %" par-dessus le jeu.
+- **Pavé numérique \*** : active ou coupe le mode photo (les commandes
+  sont dans la fenêtre **Commandes du mode photo…**).

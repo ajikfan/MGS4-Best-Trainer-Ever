@@ -69,6 +69,7 @@
   "vitals.photo_mode_tooltip": "Free camera driven with the game's controls (controller, or keyboard and mouse); time starts frozen (Y on the controller, E or Pause on the keyboard to resume or freeze it again) and Snake receives nothing while the mode is on. Numpad * to leave it. The game's HUD is hidden during the mode.",
   "vitals.tools_group": "Game Tools",
   "vitals.photo_controls": "Photo Mode Controls…",
+  "help.guide": "Online guide (README)",
   "photo_help.title": "Photo Mode Controls",
   "photo_help.kbm": "Keyboard and Mouse",
   "photo_help.pad": "Controller",

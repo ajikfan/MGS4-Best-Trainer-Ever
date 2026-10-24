@@ -1,6 +1,6 @@
 # FAQ et problèmes courants
 
-[← Retour au README](../README.md)
+[← Retour au README](../README.md) · *[English version](en/faq.md)*
 
 ### Windows affiche « Windows a protégé votre PC »
 

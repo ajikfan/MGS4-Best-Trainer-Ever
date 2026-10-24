@@ -1,15 +1,24 @@
 """Version, aide et historique des versions."""
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QDialog, QFrame, QLabel, QPushButton, QScrollArea,
+    QDialog, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea,
     QVBoxLayout, QWidget,
 )
 
-from mgs4trainer.core.i18n import CHANGELOG_STRINGS, tr
+from mgs4trainer.core.i18n import CHANGELOG_STRINGS, current_language, tr
 
 
 TRAINER_VERSION = "V2.6.0"
 
 TRAINER_HELP_TEXT = tr("help.text")
+
+# Guide en ligne dans la langue du trainer (README.md / README.en.md, 2026-10-24).
+# Ouvert par Qt : le module webbrowser n'est pas dans le build Nexus.
+GUIDE_URLS = {
+    "fr": "https://github.com/ajikfan/MGS4-Best-Trainer-Ever/blob/main/README.md",
+    "en": "https://github.com/ajikfan/MGS4-Best-Trainer-Ever/blob/main/README.en.md",
+}
 
 # Chargelog charge depuis locales/<langue>/changelog.json (dict {version:
 # {date, description}}) plutot que code en dur - meme structure
@@ -72,6 +81,13 @@ class HelpDialog(QDialog):
         scroll.setWidget(content)
         layout.addWidget(scroll, 1)
 
+        buttons = QHBoxLayout()
+        guide_btn = QPushButton(tr("help.guide"))
+        guide_btn.clicked.connect(lambda: QDesktopServices.openUrl(
+            QUrl(GUIDE_URLS.get(current_language(), GUIDE_URLS["en"]))))
+        buttons.addWidget(guide_btn)
+        buttons.addStretch(1)
         close_btn = QPushButton(tr("button.close"))
         close_btn.clicked.connect(self.accept)
-        layout.addWidget(close_btn)
+        buttons.addWidget(close_btn)
+        layout.addLayout(buttons)

@@ -1,6 +1,6 @@
 # Maintenance
 
-[← Retour au README](../README.md)
+[← Retour au README](../README.md) · *[English version](en/maintenance.md)*
 
 Pour faire évoluer le trainer : compatibilité avec les versions du jeu, build, organisation du code, débogage.
 
@@ -88,7 +88,9 @@ fichiers du code dont l'empreinte diffère, **depuis le dépôt au tag de la
 release** (raw.githubusercontent.com). D'où l'ordre :
 
 1. Mettre `TRAINER_VERSION` (`mgs4trainer/ui/help.py`) et le changelog à
-   jour, puis commiter. Tout le code doit être commité : `make_manifest.py`
+   jour (`locales/fr/` et `locales/en/`), ainsi que la documentation dans
+   les deux langues (`README.md` / `README.en.md`, `docs/` / `docs/en/`),
+   puis commiter. Tout le code doit être commité : `make_manifest.py`
    refuse sinon.
 2. `python -m PyInstaller --noconfirm MGS4Trainer.spec`, puis zipper
    `dist/MGS4Trainer/`.
@@ -117,9 +119,13 @@ code est dans le paquet `mgs4trainer/` :
   (`hooks.py`), joueur et jauges (`player.py`), armes
   et accessoires (`weapons.py`), **patchs de code** (`code_patches.py`,
   la liste `CODE_PATCHES`), son et alerte (`sound_alert.py`),
-  statistiques et lieu (`state.py`), équipement en direct (`equip.py`) ;
+  statistiques et lieu (`state.py`), équipement en direct (`equip.py`),
+  Toute la zone (`zone.py`), caméra et mode photo (`camera.py`), ligne
+  QUITTER du menu pause des cinématiques (`cutscene_menu.py`) ;
 - `ui/` : un fichier par onglet, plus l'aide, les profils et le bandeau,
-  et la fenêtre principale (`main_window.py`).
+  les commandes du mode photo (`photo_help.py`), la ligne QUITTER dessinée
+  par-dessus le jeu (`cutscene_menu_overlay.py`) et la fenêtre principale
+  (`main_window.py`).
 
 ## Recompiler la DLL
 

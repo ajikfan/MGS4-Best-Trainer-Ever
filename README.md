@@ -1,5 +1,7 @@
 # MGS4 Trainer — V2.6.0
 
+*[English version](README.en.md)*
+
 Trainer en direct pour Metal Gear Solid 4 (portage PC Steam) : il lit et
 écrit la mémoire du jeu pendant que tu joues. Armes, objets, statistiques
 et jauges modifiables, tenue, visage, gilet, motif OctoCamo ou arme

@@ -69,6 +69,7 @@
   "vitals.photo_mode_tooltip": "Caméra libre pilotée avec les commandes du jeu (manette, ou clavier et souris) ; le temps est figé au départ (Y à la manette, E ou Pause au clavier pour le relancer ou le refiger) et Snake ne reçoit plus rien tant que le mode est actif. * du pavé numérique pour en sortir. Le HUD du jeu est masqué pendant le mode.",
   "vitals.tools_group": "Outils de partie",
   "vitals.photo_controls": "Commandes du mode photo…",
+  "help.guide": "Guide en ligne (README)",
   "photo_help.title": "Commandes du mode photo",
   "photo_help.kbm": "Clavier et souris",
   "photo_help.pad": "Manette",
