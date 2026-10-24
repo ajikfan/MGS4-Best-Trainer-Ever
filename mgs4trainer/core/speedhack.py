@@ -210,6 +210,69 @@ class SpeedController:
         ctypes.cast(addr, ctypes.POINTER(ctypes.c_uint8))[0] = value
         return True
 
+    # Mode photo (2026-10-23) : champs de la memoire partagee lus par
+    # photo_frame (native/speedhack.c), appelee a chaque image dans le fil
+    # du jeu. La vue couvre des pages entieres : avec une ancienne DLL, ces
+    # octets valent 0 (photo_version = 0, mode non disponible).
+    PHOTO_ACTIVE, PHOTO_VERSION, PHOTO_PAD, PHOTO_CAMERA = 393, 394, 400, 408
+    PHOTO_PARAMS = 416  # step, fast, turn, deadzone (4 flottants)
+    PHOTO_FRAMES = 432
+    PHOTO_HUD_MASK, PHOTO_HUD = 436, 440
+    PHOTO_REQUIRED_VERSION = 9  # 2 : HUD ; 3 : commandes ; 4 : Shift ; 5 : triangle ; 6-7 : cinematiques ; 8 : zoom ; 9 : TP
+    PHOTO_TOGGLES, PHOTO_DIRECT, PHOTO_MOUSE = 448, 452, 456
+    PHOTO_ZOOM_RATE, PHOTO_ZOOM = 460, 464
+    PHOTO_TELEPORTS = 472
+
+    def photo_supported(self) -> bool:
+        return (self._read_u8_at(self.PHOTO_VERSION) or 0) >= self.PHOTO_REQUIRED_VERSION
+
+    def set_photo(self, active: bool, pad: int = 0, camera: int = 0,
+                  step: float = 0.0, fast: float = 1.0, turn: float = 0.0, deadzone: float = 0.0,
+                  hud: int = 0, hud_mask: int = 0) -> bool:
+        if not self.shm_view or not self.photo_supported():
+            return False
+        base = ctypes.cast(self.shm_view, ctypes.c_void_p).value
+        if not active:
+            self._write_u8_at(self.PHOTO_ACTIVE, 0)
+            return True
+        ctypes.cast(base + self.PHOTO_PAD, ctypes.POINTER(ctypes.c_uint64))[0] = pad
+        ctypes.cast(base + self.PHOTO_CAMERA, ctypes.POINTER(ctypes.c_uint64))[0] = camera
+        params = ctypes.cast(base + self.PHOTO_PARAMS, ctypes.POINTER(ctypes.c_float))
+        params[0], params[1], params[2], params[3] = step, fast, turn, deadzone
+        ctypes.cast(base + self.PHOTO_HUD, ctypes.POINTER(ctypes.c_uint64))[0] = hud
+        self._write_u32_at(self.PHOTO_HUD_MASK, hud_mask)
+        self._write_u8_at(self.PHOTO_ACTIVE, 1)
+        return True
+
+    def photo_frames(self) -> int | None:
+        return self._read_u32_at(self.PHOTO_FRAMES)
+
+    def set_photo_direct(self, direct: bool, mouse: float = 0.0, turn: float | None = None) -> None:
+        """Cinematique : la DLL lit elle-meme le clavier et la souris."""
+        if not self.shm_view:
+            return
+        base = ctypes.cast(self.shm_view, ctypes.c_void_p).value
+        ctypes.cast(base + self.PHOTO_MOUSE, ctypes.POINTER(ctypes.c_float))[0] = mouse
+        if turn is not None:
+            ctypes.cast(base + self.PHOTO_PARAMS, ctypes.POINTER(ctypes.c_float))[2] = turn
+        self._write_u8_at(self.PHOTO_DIRECT, int(direct))
+
+    def set_photo_zoom(self, address: int, rate: float) -> None:
+        """Zoom du mode photo : adresse du zoom fige, facteur par image."""
+        if not self.shm_view:
+            return
+        base = ctypes.cast(self.shm_view, ctypes.c_void_p).value
+        ctypes.cast(base + self.PHOTO_ZOOM, ctypes.POINTER(ctypes.c_uint64))[0] = address
+        ctypes.cast(base + self.PHOTO_ZOOM_RATE, ctypes.POINTER(ctypes.c_float))[0] = rate
+
+    def photo_teleports(self) -> int | None:
+        """Appuis sur croix (A) comptes par la DLL en mode photo."""
+        return self._read_u32_at(self.PHOTO_TELEPORTS)
+
+    def photo_toggles(self) -> int | None:
+        """Appuis sur triangle (Y) comptes par la DLL en mode photo."""
+        return self._read_u32_at(self.PHOTO_TOGGLES)
+
     def _read_u64_at(self, offset: int) -> int | None:
         if not self.shm_view:
             return None

@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.5.4
+# MGS4 Trainer — V2.6.0
 
 Trainer en direct pour Metal Gear Solid 4 (portage PC Steam) : il lit et
 écrit la mémoire du jeu pendant que tu joues. Armes, objets, statistiques
@@ -48,8 +48,11 @@ des versions.
 - [Comment ça marche](docs/fonctionnement.md)
 - [Maintenance](docs/maintenance.md) (compatibilité, build, organisation du code)
 
-## Dernière version : V2.5.4
+## Dernière version : V2.6.0
 
+- **Mode photo** : caméra libre pilotée à la manette ou au clavier et à
+  la souris, Snake immobile.
+- **Salle blanche** et **Menu principal** : deux nouveaux boutons.
 - **Metal Gear REX** : la téléportation déplace REX lui-même quand tu le
   pilotes, et Intouchable le protège aussi.
 - **Chrono figé** : le compte à rebours du jeu ne descend plus.

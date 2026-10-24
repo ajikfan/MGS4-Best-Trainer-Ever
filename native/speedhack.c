@@ -32,6 +32,7 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #include <string.h>
+#include <math.h>
 
 /* Memoire partagee : [0] double vitesse (1.0 = normal), [8] uint32
  * bitmask diagnostic des hooks effectivement poses (bit0=QPC,
@@ -204,10 +205,60 @@ typedef struct {
      * install_tank_flags_hook), separe de one_shot_kill (humains) pour
      * rester actif en mode Non letal (2026-10-10). */
     UINT8 machine_kill;
+    /* [393] Mode photo (2026-10-23) : la camera libre est pilotee ici, une
+     * fois par image dans le fil du jeu (photo_frame, appelee par le
+     * crochet de boucle principale) - une boucle Python dans le trainer
+     * etait bloquee 1 s toutes les 3-4 s par le reste du trainer. Le
+     * trainer pose les patchs (camera libre, manette detournee vers une
+     * copie) et remplit ces champs ; photo_version = 1 indique une DLL qui
+     * sait le faire. */
+    UINT8 photo_active;
+    UINT8 photo_version;
+    UINT8 photo_reserved[5];
+    UINT64 photo_pad;     /* [400] copie de la manette B (format PS3) */
+    UINT64 photo_camera;  /* [408] matrice monde de la camera du jeu */
+    float photo_step;     /* [416] unites par image, stick a fond */
+    float photo_fast;     /* [420] facteur avec carre (X) maintenu */
+    float photo_turn;     /* [424] radians par image, stick droit a fond */
+    float photo_deadzone; /* [428] */
+    UINT32 photo_frames;  /* [432] images traitees (diagnostic) */
+    /* [436] HUD masque pendant le mode photo (2026-10-24, valide en jeu) :
+     * mot de drapeaux global (mgs4+1D77AA8) teste par chaque element du
+     * HUD (bit 4 : radar et indice de camouflage, autres bits : le reste).
+     * Le jeu efface certains bits lui-meme : ils sont reimposes a chaque
+     * image. 0 = HUD laisse tel quel. */
+    UINT32 photo_hud_mask;
+    UINT64 photo_hud;     /* [440] adresse du mot de drapeaux */
+    /* [448] Appuis sur triangle (Y, touche E) pendant le mode photo : le
+     * trainer les lit et fige ou relance le temps (2026-10-24). */
+    UINT32 photo_toggles;
+    /* [452] Cinematique en cours (le trainer le signale) : le jeu n'y met
+     * plus ZQSD ni la souris dans la manette virtuelle (seuls quelques
+     * boutons passent) ; la DLL les lit alors elle-meme (2026-10-24). */
+    UINT8 photo_direct;
+    UINT8 photo_direct_reserved[3];
+    float photo_mouse;    /* [456] radians par pixel de souris */
+    /* [460] Zoom du mode photo (2026-10-24) : le trainer fige le zoom du jeu
+     * (camera+0x380, voir MGS4Live._freeze_zoom) ; la DLL le modifie avec la
+     * croix haut/bas (la molette y arrive en partie) et la molette lue par
+     * l'accroche souris en cinematique. Facteur par image, 0 = pas de zoom. */
+    float photo_zoom_rate;
+    UINT64 photo_zoom;    /* [464] adresse du zoom (float) */
+    /* [472] Appuis sur croix (A) : le trainer teleporte Snake a la camera. */
+    UINT32 photo_teleports;
 } SharedState;
 #pragma pack(pop)
 _Static_assert(offsetof(SharedState, rpc_result) == 384 && offsetof(SharedState, machine_kill) == 392,
                "offsets lus par live_trainer.py");
+_Static_assert(offsetof(SharedState, photo_active) == 393 && offsetof(SharedState, photo_pad) == 400 &&
+                   offsetof(SharedState, photo_step) == 416 && offsetof(SharedState, photo_frames) == 432,
+               "offsets lus par mgs4trainer/core/speedhack.py (mode photo)");
+_Static_assert(offsetof(SharedState, photo_hud_mask) == 436 && offsetof(SharedState, photo_hud) == 440,
+               "offsets lus par mgs4trainer/core/speedhack.py (HUD du mode photo)");
+_Static_assert(offsetof(SharedState, photo_toggles) == 448 && offsetof(SharedState, photo_direct) == 452 &&
+                   offsetof(SharedState, photo_mouse) == 456 && offsetof(SharedState, photo_zoom_rate) == 460 &&
+                   offsetof(SharedState, photo_zoom) == 464 && offsetof(SharedState, photo_teleports) == 472,
+               "offsets lus par mgs4trainer/core/speedhack.py (temps du mode photo)");
 
 #define HOOK_QPC 0x1
 #define HOOK_TIMEGETTIME 0x2
@@ -1097,6 +1148,209 @@ static BOOL install_octocamo_hide_hook(void) {
  *   rpc_result = rax ; rpc_done = 1
  *  DONE:
  *   add rsp,38h ; jmp <gestionnaire de taches> */
+/* Mode photo : une image de camera libre. Manette au format PS3 (boutons
+ * du 2e octet : L1 04, R1 08, croix 40 ; sticks +4/+5 droit, +6/+7 gauche,
+ * 0x80 au centre). Camera : 4 lignes de 4 flottants (droite, bas, regard,
+ * position). Meme calcul que MGS4Live.move_photo_camera. */
+static float photo_axis(BYTE raw, float deadzone) {
+    float v = ((float)raw - 128.0f) / 127.0f;
+    if (v > 1.0f) v = 1.0f;
+    if (v < -1.0f) v = -1.0f;
+    return (v < deadzone && v > -deadzone) ? 0.0f : v;
+}
+
+static void photo_normalize(float *v) {
+    float n = sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    if (n > 0.0f) { v[0] /= n; v[1] /= n; v[2] /= n; }
+}
+
+static void photo_cross(const float *a, const float *b, float *out) {
+    out[0] = a[1] * b[2] - a[2] * b[1];
+    out[1] = a[2] * b[0] - a[0] * b[2];
+    out[2] = a[0] * b[1] - a[1] * b[0];
+}
+
+static void photo_rotate(float *v, const float *axis, float angle) {
+    float c = cosf(angle), sn = sinf(angle);
+    float dot = v[0] * axis[0] + v[1] * axis[1] + v[2] * axis[2];
+    float cr[3];
+    photo_cross(axis, v, cr);
+    for (int i = 0; i < 3; i++) v[i] = v[i] * c + cr[i] * sn + axis[i] * dot * (1.0f - c);
+}
+
+/* Souris en cinematique (2026-10-24) : lire la position du curseur ne
+ * marchait pas (le jeu le recentre lui-meme : mouvements vus par a-coups).
+ * Une accroche souris de bas niveau recoit chaque mouvement physique ; dans
+ * le rappel, le curseur n'a pas encore bouge, d'ou l'ecart. Installee par un
+ * fil dedie seulement pendant le mode photo en cinematique. */
+static HINSTANCE g_hinst = NULL;
+static volatile LONG g_mouse_dx = 0, g_mouse_dy = 0, g_mouse_wheel = 0;
+
+static LRESULT CALLBACK photo_mouse_hook(int code, WPARAM wp, LPARAM lp) {
+    if (code == HC_ACTION && wp == WM_MOUSEMOVE) {
+        const MSLLHOOKSTRUCT *m = (const MSLLHOOKSTRUCT *)lp;
+        POINT cur;
+        if (!(m->flags & LLMHF_INJECTED) && GetCursorPos(&cur)) {
+            InterlockedExchangeAdd(&g_mouse_dx, m->pt.x - cur.x);
+            InterlockedExchangeAdd(&g_mouse_dy, m->pt.y - cur.y);
+        }
+    } else if (code == HC_ACTION && wp == WM_MOUSEWHEEL) {
+        const MSLLHOOKSTRUCT *m = (const MSLLHOOKSTRUCT *)lp;
+        if (!(m->flags & LLMHF_INJECTED)) InterlockedExchangeAdd(&g_mouse_wheel, (SHORT)HIWORD(m->mouseData));
+    }
+    return CallNextHookEx(NULL, code, wp, lp);
+}
+
+static DWORD WINAPI photo_mouse_thread(LPVOID param) {
+    (void)param;
+    HHOOK hook = NULL;
+    MSG msg;
+    for (;;) {
+        BOOL want = g_shared && g_shared->photo_active && g_shared->photo_direct;
+        if (want && !hook) {
+            InterlockedExchange(&g_mouse_dx, 0);
+            InterlockedExchange(&g_mouse_dy, 0);
+            InterlockedExchange(&g_mouse_wheel, 0);
+            hook = SetWindowsHookExW(WH_MOUSE_LL, photo_mouse_hook, g_hinst, 0);
+        } else if (!want && hook) {
+            UnhookWindowsHookEx(hook);
+            hook = NULL;
+        }
+        MsgWaitForMultipleObjects(0, NULL, FALSE, 100, QS_ALLINPUT);
+        while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+    return 0;
+}
+
+static void photo_frame(void) {
+    volatile SharedState *sh = g_shared;
+    if (!sh || !sh->photo_active || !sh->photo_pad || !sh->photo_camera) return;
+    const BYTE *pad = (const BYTE *)(UINT64)sh->photo_pad;
+    float *cam = (float *)(UINT64)sh->photo_camera;
+    sh->photo_frames++;
+    if (sh->photo_hud && sh->photo_hud_mask) *(volatile UINT32 *)(UINT64)sh->photo_hud |= sh->photo_hud_mask;
+    float dz = sh->photo_deadzone;
+    float lx = photo_axis(pad[6], dz), ly = photo_axis(pad[7], dz);
+    float rx = photo_axis(pad[4], dz), ry = photo_axis(pad[5], dz);
+    /* La souris arrive dans le stick droit par petites valeurs : racine
+     * carree pour les amplifier (stick a fond inchange). */
+    rx = rx < 0.0f ? -sqrtf(-rx) : sqrtf(rx);
+    ry = ry < 0.0f ? -sqrtf(-ry) : sqrtf(ry);
+    /* Monter : R1/R2 (RB/RT, clic gauche) ; descendre : L1/L2 (LB/LT, clic
+     * droit) ; rapide : carre (X, touche A). Espace (croix) est lu par le
+     * jeu en dehors de la manette virtuelle : le trainer le reserve. */
+    BYTE buttons = pad[1];
+    /* Triangle (Y, touche E) : figer ou relancer le temps, fait par le
+     * trainer (case Pause) ; ici on compte seulement les appuis. */
+    static BYTE prev_buttons = 0;
+    if ((buttons & 0x10) && !(prev_buttons & 0x10)) sh->photo_toggles++;
+    if ((buttons & 0x40) && !(prev_buttons & 0x40)) sh->photo_teleports++; /* croix (A) */
+    prev_buttons = buttons;
+    /* Clavier lu directement (Maj toujours, le reste en cinematique),
+     * seulement quand la fenetre du jeu est au premier plan. */
+    DWORD fg_pid = 0;
+    HWND fg = GetForegroundWindow();
+    if (fg) GetWindowThreadProcessId(fg, &fg_pid);
+    BOOL focused = fg && fg_pid == GetCurrentProcessId();
+    BOOL shift = focused && (GetAsyncKeyState(VK_SHIFT) & 0x8000);
+    float mouse_x = 0.0f, mouse_y = 0.0f;
+    static BOOL direct_before = FALSE;
+    BOOL direct = focused && sh->photo_direct;
+    if (direct) {
+        /* Touches par position (scancodes), quelle que soit la disposition :
+         * Z/W 0x11, Q/A 0x1E, S 0x1F, D 0x20, A/Q 0x10 (rapide). */
+#define PHOTO_KEY(sc) ((GetAsyncKeyState(MapVirtualKeyW((sc), MAPVK_VSC_TO_VK)) & 0x8000) ? 1.0f : 0.0f)
+        float kx = PHOTO_KEY(0x20) - PHOTO_KEY(0x1E), ky = PHOTO_KEY(0x1F) - PHOTO_KEY(0x11);
+        if (GetAsyncKeyState(VK_CONTROL) & 0x8000) { kx *= 0.5f; ky *= 0.5f; }
+        if (lx == 0.0f && ly == 0.0f) { lx = kx; ly = ky; }
+        if (PHOTO_KEY(0x10)) buttons |= 0x80;
+#undef PHOTO_KEY
+        if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) buttons |= 0x02;
+        if (GetAsyncKeyState(VK_RBUTTON) & 0x8000) buttons |= 0x01;
+        /* Souris : mouvements recus par photo_mouse_hook depuis l'image
+         * precedente ; curseur garde au centre pour ne pas buter au bord
+         * (SetCursorPos ne passe pas par l'accroche). */
+        LONG dx = InterlockedExchange(&g_mouse_dx, 0), dy = InterlockedExchange(&g_mouse_dy, 0);
+        if (direct_before) {
+            mouse_x = (float)dx * sh->photo_mouse;
+            mouse_y = (float)dy * sh->photo_mouse;
+        }
+        RECT rc;
+        POINT center;
+        if (GetClientRect(fg, &rc)) {
+            center.x = (rc.left + rc.right) / 2;
+            center.y = (rc.top + rc.bottom) / 2;
+            ClientToScreen(fg, &center);
+            SetCursorPos(center.x, center.y);
+        }
+    }
+    direct_before = direct;
+    /* Zoom : croix haut (avant) / bas (arriere), maintenue = progressif ;
+     * molette en cinematique : 8 images de zoom par cran. Une molette
+     * recente fait ignorer la croix (la molette peut aussi y arriver). */
+    static int wheel_frames = 0, wheel_idle = 1000;
+    LONG wheel = InterlockedExchange(&g_mouse_wheel, 0);
+    if (direct && wheel) {
+        wheel_frames += (wheel / WHEEL_DELTA) * 8;
+        if (wheel_frames == 0) wheel_frames = wheel > 0 ? 8 : -8;
+        wheel_idle = 0;
+    } else if (wheel_idle < 1000) {
+        wheel_idle++;
+    }
+    float zoom_dir = 0.0f;
+    if (wheel_frames > 0) { zoom_dir = 1.0f; wheel_frames--; }
+    else if (wheel_frames < 0) { zoom_dir = -1.0f; wheel_frames++; }
+    else if (wheel_idle > 30) zoom_dir = ((pad[0] & 0x10) ? 1.0f : 0.0f) - ((pad[0] & 0x40) ? 1.0f : 0.0f);
+    if (zoom_dir != 0.0f && sh->photo_zoom && sh->photo_zoom_rate > 0.0f) {
+        volatile float *zoom = (volatile float *)(UINT64)sh->photo_zoom;
+        float z = *zoom * (zoom_dir > 0.0f ? 1.0f + sh->photo_zoom_rate : 1.0f / (1.0f + sh->photo_zoom_rate));
+        if (z < 0.5f) z = 0.5f;
+        if (z > 20.0f) z = 20.0f;
+        *zoom = z;
+    }
+    float vertical = ((buttons & 0x0A) ? 1.0f : 0.0f) - ((buttons & 0x05) ? 1.0f : 0.0f);
+    if (lx == 0.0f && ly == 0.0f && rx == 0.0f && ry == 0.0f && vertical == 0.0f && mouse_x == 0.0f &&
+        mouse_y == 0.0f)
+        return;
+    float step = sh->photo_step * (((buttons & 0x80) || shift) ? sh->photo_fast : 1.0f);
+
+    float r[3] = {cam[0], cam[1], cam[2]}, down[3] = {cam[4], cam[5], cam[6]};
+    float look[3] = {cam[8], cam[9], cam[10]}, pos[3] = {cam[12], cam[13], cam[14]};
+    float yaw = -rx * sh->photo_turn - mouse_x, pitch = -ry * sh->photo_turn - mouse_y;
+    if (yaw != 0.0f) {
+        const float up[3] = {0.0f, 1.0f, 0.0f};
+        photo_rotate(r, up, yaw); photo_rotate(down, up, yaw); photo_rotate(look, up, yaw);
+    }
+    if (pitch != 0.0f) {
+        /* Inclinaison bloquee avant la verticale : au-dela, les axes se
+         * retournaient (commandes inversees). */
+        float axis[3] = {r[0], r[1], r[2]};
+        photo_normalize(axis);
+        float nd2[3] = {down[0], down[1], down[2]}, nl2[3] = {look[0], look[1], look[2]};
+        photo_rotate(nd2, axis, pitch); photo_rotate(nl2, axis, pitch);
+        photo_normalize(nl2);
+        if (fabsf(nl2[1]) < 0.97f || fabsf(nl2[1]) < fabsf(look[1])) {
+            for (int i = 0; i < 3; i++) { down[i] = nd2[i]; look[i] = nl2[i]; }
+        }
+    }
+    photo_normalize(look);
+    float updir[3] = {-down[0], -down[1], -down[2]}, nr[3], nd[3];
+    photo_cross(look, updir, nr); photo_normalize(nr);
+    photo_cross(look, nr, nd); photo_normalize(nd);
+    /* garder le sens d'origine des axes */
+    if (nd[0] * cam[4] + nd[1] * cam[5] + nd[2] * cam[6] < 0.0f) { nd[0] = -nd[0]; nd[1] = -nd[1]; nd[2] = -nd[2]; }
+    if (nr[0] * cam[0] + nr[1] * cam[1] + nr[2] * cam[2] < 0.0f) { nr[0] = -nr[0]; nr[1] = -nr[1]; nr[2] = -nr[2]; }
+    float right = lx * step, upm = vertical * step, forward = -ly * step;
+    for (int i = 0; i < 3; i++) {
+        pos[i] += nr[i] * right - nd[i] * upm + look[i] * forward;
+        cam[i] = nr[i]; cam[4 + i] = nd[i]; cam[8 + i] = look[i]; cam[12 + i] = pos[i];
+    }
+    cam[3] = cam[7] = cam[11] = 0.0f; cam[15] = 1.0f;
+}
+
 static BOOL install_main_loop_hook(void) {
     HMODULE base = GetModuleHandle(NULL);
     PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)base;
@@ -1128,6 +1382,14 @@ static BOOL install_main_loop_hook(void) {
     SIZE_T p = 0;
 
     code[p++] = 0x48; code[p++] = 0x83; code[p++] = 0xEC; code[p++] = 0x38; /* sub rsp,38h */
+    {
+        /* Mode photo : call photo_frame (rsp aligne sur 16, 20h d'espace
+         * reserve deja dans les 38h). Registres volatils ecrases, comme
+         * l'appel generique ci-dessous. */
+        UINT64 photoFn = (UINT64)&photo_frame;
+        code[p++] = 0x48; code[p++] = 0xB8; memcpy(&code[p], &photoFn, 8); p += 8; /* mov rax,photo_frame */
+        code[p++] = 0xFF; code[p++] = 0xD0; /* call rax */
+    }
     {
         UINT64 rpcAddr = (UINT64)&g_shared->rpc_pending;
         UINT64 rpcResultAddr = (UINT64)&g_shared->rpc_result;
@@ -1483,6 +1745,7 @@ static DWORD WINAPI InitThread(LPVOID param) {
         g_shared = (SharedState *)MapViewOfFile(g_map, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(SharedState));
         if (g_shared) {
             g_shared->speed = 1.0;
+            g_shared->photo_version = 9; /* 2 : HUD ; 3 : commandes ; 4 : Shift ; 5 : triangle ; 6-7 : clavier/souris en cinematique ; 8 : zoom ; 9 : teleportation */
             g_shared->patched_mask = 0;
             g_shared->qpc_hit_count = 0;
             g_shared->timegettime_hit_count = 0;
@@ -1571,6 +1834,9 @@ static DWORD WINAPI InitThread(LPVOID param) {
     if (g_shared && install_main_loop_hook()) {
         g_shared->main_loop_hook_installed = 1;
     }
+    if (g_shared) {
+        CreateThread(NULL, 0, photo_mouse_thread, NULL, 0, NULL);
+    }
 
     if (g_shared && install_combat_array_hook()) {
         g_shared->combat_array_hook_installed = 1;
@@ -1613,6 +1879,7 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID reserved) {
     (void)reserved;
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hinst);
+        g_hinst = hinst;
         /* Pas de travail lourd directement dans DllMain (loader lock) -
          * delegue a un thread dedie, comme recommande par Microsoft. */
         CreateThread(NULL, 0, InitThread, NULL, 0, NULL);

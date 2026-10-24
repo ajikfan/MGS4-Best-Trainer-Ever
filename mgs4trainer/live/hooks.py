@@ -17,10 +17,58 @@ class HooksMixin:
             return False
         return self.speed.set_speed(multiplier)
 
+    # Pause (2026-10-24, validee en jeu) : la pause interne du jeu
+    # (pause_set(2), celle du changement de visage, voir
+    # EquipMixin.MODEL_LIVE_FUNCS) fige le monde mais le jeu continue de
+    # dessiner la scene a chaque image (camera libre du mode photo
+    # utilisable). Partagee par la touche Pause et le mode photo : levee
+    # quand plus personne ne la demande. Si un menu a deja mis le jeu en
+    # pause, on n'y touche pas.
+    def set_game_pause(self, owner: str, paused: bool) -> bool:
+        if getattr(self, "_game_pause_pid", None) != self.pid:
+            self._game_pause_pid, self._game_pause_owners = self.pid, set()
+        owners = self._game_pause_owners
+        if paused:
+            if owners:
+                owners.add(owner)
+                return True
+            funcs = self._live_funcs(self.MODEL_LIVE_FUNCS)
+            if funcs is None:
+                return False
+            call = self.speed.game_call
+            state = call(funcs["state"])
+            if state is None or state & 6:
+                return False
+            if call(funcs["pause_set"], self.MODEL_PAUSE_FLAG) is None:
+                return False
+            owners.add(owner)
+            return True
+        if owner not in owners:
+            return False
+        owners.discard(owner)
+        if owners:
+            return True
+        funcs = self._live_funcs(self.MODEL_LIVE_FUNCS)
+        return funcs is not None and self.speed.game_call(funcs["pause_clear"], self.MODEL_PAUSE_FLAG) is not None
+
     def set_paused(self, paused: bool) -> bool:
+        """Touche Pause : pause du jeu en partie ; ailleurs (menus, ou
+        si elle echoue), gel du processus comme avant."""
         if not (self.connected and self.sane and self.pid):
             return False
-        return SpeedController.set_paused(self.pid, paused)
+        if paused:
+            try:
+                if self.in_game() and self.speed.ensure_injected(self.pid) and self.set_game_pause("key", True):
+                    return True
+            except OSError:
+                pass
+            return SpeedController.set_paused(self.pid, True)
+        try:
+            if self.set_game_pause("key", False):
+                return True
+        except OSError:
+            pass
+        return SpeedController.set_paused(self.pid, False)
 
     def set_one_shot_kill(self, enabled: bool) -> bool:
         """Injecte la DLL au premier appel (paresseux, comme set_game_speed) -

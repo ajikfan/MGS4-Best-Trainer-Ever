@@ -4,7 +4,42 @@
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
-## Nouveautés de la V2.5.4
+## Nouveautés de la V2.6.0
+
+### Mode photo
+
+Nouvelle case dans le groupe Vitesse du jeu, ou **\*** du pavé numérique :
+une caméra libre, pilotée avec les commandes du jeu, à la manette comme au
+clavier et à la souris :
+
+- **stick gauche** (ZQSD) : se déplacer ;
+- **stick droit** (souris) : orienter la caméra ;
+- **RB ou RT** (clic gauche) : monter ;
+- **LB ou LT** (clic droit) : descendre ;
+- **X** maintenu (**A** ou **Maj** au clavier) : aller vite ;
+- **Ctrl** + ZQSD : aller lentement ;
+- **croix haut / bas** (molette) : zoomer, les zooms des cinématiques
+  étant neutralisés pendant le mode ;
+- **Y** (**E** ou **Pause** au clavier) : figer ou relancer le temps ;
+- **A** (**Espace** au clavier) : téléporter Snake à la position de la
+  caméra, sans quitter le mode photo, temps figé ou non (pas pendant
+  les cinématiques).
+
+Le temps est figé à l'entrée dans le mode (le monde s'arrête mais la
+caméra bouge) ; Y le relance pour photographier une scène en mouvement,
+y compris pendant les cinématiques. À la sortie, la case Pause reprend
+son état d'avant. Tant que le mode est actif, Snake ne reçoit plus
+aucune commande et le HUD du jeu (vie, radar, armes, objets) est masqué. La caméra est déplacée par la
+DLL du trainer, à chaque image du jeu : après la mise à jour, relancer
+le jeu pour charger la nouvelle DLL.
+
+### Pause
+
+En partie, la touche **Pause** (ou la case du même nom) utilise
+maintenant la pause du jeu lui-même au lieu de geler tout le processus :
+le monde est figé, mais le jeu reste affiché et réactif, et le mode
+photo marche pendant la pause. Dans les menus, le jeu est gelé comme
+avant.
 
 ### Metal Gear REX
 

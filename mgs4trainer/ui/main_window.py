@@ -23,7 +23,7 @@ from mgs4trainer.core.paths import PROFILES_FILE, TRAINER_ICON
 from mgs4trainer.live import MGS4Live
 from mgs4trainer.ui.common import (
     GENERAL_ITEM_QUANTITY_IDS, ITEM_CATEGORIES, REFRESH_MS, _FACECAMO_IDS_ORDERED,
-    _FACECAMO_NAMES_VISIBLE, _VEST_NAMES_VISIBLE, item_unclassified_format,
+    _FACECAMO_NAMES_VISIBLE, _VEST_NAMES_VISIBLE, item_unclassified_format, warn_dialog,
 )
 from mgs4trainer.ui.help import HelpDialog, TRAINER_VERSION
 from mgs4trainer.ui.items_tab import OctoCamoTab
@@ -150,6 +150,17 @@ class TrainerWindow(QMainWindow):
 
         vitals_tab = VitalsTab(self.live)
         self.vitals_tab = vitals_tab
+        vitals_tab.photo_check.toggled.connect(self._on_photo_mode)
+        vitals_tab.pause_check.toggled.connect(self._on_pause_overlay)
+        # Mode photo : temps fige au depart (case Pause cochee), triangle (Y,
+        # touche E) ou la touche Pause le relancent ou le refigent ; a la
+        # sortie, la case Pause reprend son etat d'avant.
+        self._photo_pause_before = False
+        self._photo_toggles = 0
+        self._photo_teleports = 0
+        self._photo_timer = QTimer(self)
+        self._photo_timer.setInterval(50)
+        self._photo_timer.timeout.connect(self._photo_tick)
         self.tabs.addTab(vitals_tab, tr("tab.game_state"))
         self.tabs.addTab(vitals_tab.gauges_page, tr("tab.gauges"))
         self.item_tabs.append(vitals_tab)
@@ -397,6 +408,17 @@ class TrainerWindow(QMainWindow):
     HOTKEY_ID_PAUSE = 0xB100
     # Pave numerique + / - / 0 : vitesse du jeu +10 %, -10 %, 100 %.
     SPEED_HOTKEYS = {0xB101: (0x6B, +1), 0xB102: (0x6D, -1), 0xB103: (0x60, 0)}
+    # Mode photo (2026-10-23) : * du pave numerique l'active ou le coupe.
+    # La camera se pilote avec les commandes du jeu (manette virtuelle
+    # detournee, voir live/camera.py) ; c'est la DLL qui la deplace a chaque
+    # image (une boucle Python etait bloquee par le reste du trainer).
+    HOTKEY_ID_PHOTO = 0xB110
+    VK_MULTIPLY = 0x6A
+    # Touches que le jeu lit directement (hors manette virtuelle) : prises
+    # par le trainer pendant le mode photo (une touche reservee par
+    # RegisterHotKey n'arrive plus au jeu). Espace : Snake reagissait ; elle
+    # sert a teleporter Snake a la camera (comme croix/A a la manette).
+    PHOTO_BLOCKED_KEYS = {0xB111: 0x20}
 
     def register_profile_hotkeys(self):
         user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -414,6 +436,8 @@ class TrainerWindow(QMainWindow):
         for hotkey_id, (vk, _step) in self.SPEED_HOTKEYS.items():
             if user32.RegisterHotKey(hwnd, hotkey_id, 0, vk):  # repetition autorisee (touche maintenue)
                 self._hotkeys.append(hotkey_id)
+        if user32.RegisterHotKey(hwnd, self.HOTKEY_ID_PHOTO, self.MOD_NOREPEAT, self.VK_MULTIPLY):
+            self._hotkeys.append(self.HOTKEY_ID_PHOTO)
 
     def nativeEvent(self, event_type, message):
         if event_type == b"windows_generic_MSG" or event_type == "windows_generic_MSG":
@@ -421,6 +445,14 @@ class TrainerWindow(QMainWindow):
             if msg.message == self.WM_HOTKEY:
                 if msg.wParam in self.SPEED_HOTKEYS:
                     self._on_speed_hotkey(self.SPEED_HOTKEYS[msg.wParam][1])
+                    return True, 0
+                if msg.wParam in self.PHOTO_BLOCKED_KEYS:
+                    self._photo_teleport()  # Espace, gardee loin du jeu pendant le mode photo
+                    return True, 0
+                if msg.wParam == self.HOTKEY_ID_PHOTO:
+                    photo = self.vitals_tab.photo_check
+                    if photo.isEnabled():
+                        photo.setChecked(not photo.isChecked())
                     return True, 0
                 if msg.wParam == self.HOTKEY_ID_PAUSE:
                     pause = self.vitals_tab.pause_check
@@ -432,6 +464,71 @@ class TrainerWindow(QMainWindow):
                     self.apply_profile(PROFILE_KEYS[index], from_hotkey=True)
                     return True, 0
         return super().nativeEvent(event_type, message)
+
+    def _on_photo_mode(self, enabled: bool):
+        vitals = self.vitals_tab
+        in_game = not enabled or self.live.in_game()
+        try:
+            ok = in_game and self.live.set_photo_mode(enabled)
+        except OSError:
+            ok = False
+        if enabled and not ok:
+            vitals.photo_check.blockSignals(True)
+            vitals.photo_check.setChecked(False)
+            vitals.photo_check.blockSignals(False)
+            if not in_game:
+                key = "vitals.photo_mode_not_in_game"
+            elif self.live.photo_mode_available():
+                key = "vitals.photo_mode_failed"
+            else:
+                key = "vitals.photo_mode_restart"
+            warn_dialog(self, tr("vitals.photo_mode"), tr(key))
+            return
+        pause = vitals.pause_check
+        if enabled:
+            self._photo_pause_before = pause.isChecked()
+            self._photo_toggles = self.live.speed.photo_toggles() or 0
+            self._photo_teleports = self.live.speed.photo_teleports() or 0
+            pause.setChecked(True)
+            self._photo_timer.start()
+        else:
+            self._photo_timer.stop()
+            pause.setChecked(self._photo_pause_before)
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        hwnd = wintypes.HWND(int(self.winId()))
+        for hotkey_id, vk in self.PHOTO_BLOCKED_KEYS.items():
+            user32.UnregisterHotKey(hwnd, hotkey_id)
+            if hotkey_id in self._hotkeys:
+                self._hotkeys.remove(hotkey_id)
+            if enabled and user32.RegisterHotKey(hwnd, hotkey_id, 0, vk):
+                self._hotkeys.append(hotkey_id)
+        self.overlay.show_message(tr("overlay.photo_on" if enabled else "overlay.photo_off"), not enabled, self.live.pid)
+
+    def _on_pause_overlay(self, paused: bool):
+        self.overlay.show_message(tr("overlay.pause_on" if paused else "overlay.pause_off"), not paused, self.live.pid)
+
+    def _photo_teleport(self):
+        photo = self.vitals_tab.photo_check
+        if not photo.isChecked():
+            return
+        if self.live.teleport_to_camera():
+            self.overlay.show_message(tr("overlay.photo_teleport"), True, self.live.pid)
+        else:
+            self.overlay.show_message(tr("overlay.photo_teleport_failed"), False, self.live.pid)
+
+    def _photo_tick(self):
+        teleports = self.live.speed.photo_teleports()
+        if teleports is not None and teleports != self._photo_teleports:
+            self._photo_teleports = teleports
+            self._photo_teleport()
+        self.live.update_photo_direct()
+        toggles = self.live.speed.photo_toggles()
+        if toggles is None or toggles == self._photo_toggles:
+            return
+        if (toggles - self._photo_toggles) % 2:
+            pause = self.vitals_tab.pause_check
+            pause.setChecked(not pause.isChecked())
+        self._photo_toggles = toggles
 
     def _on_speed_hotkey(self, step: int):
         vitals = self.vitals_tab
@@ -537,6 +634,10 @@ class TrainerWindow(QMainWindow):
         self._update_profile_label()
 
     def closeEvent(self, event):
+        if self.vitals_tab.photo_check.isChecked():
+            self.vitals_tab.photo_check.setChecked(False)
+        if self.vitals_tab.pause_check.isChecked():  # sinon le jeu resterait en pause
+            self.vitals_tab.pause_check.setChecked(False)
         user32 = ctypes.WinDLL("user32", use_last_error=True)
         for hotkey_id in self._hotkeys:
             user32.UnregisterHotKey(wintypes.HWND(int(self.winId())), hotkey_id)

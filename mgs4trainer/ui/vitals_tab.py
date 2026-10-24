@@ -12,6 +12,7 @@ from mgs4trainer.core.gamedata import ALERT_STATE_NAMES, VITALS
 from mgs4trainer.core.i18n import alert_state_name, tr, vital_display_name
 from mgs4trainer.live import MGS4Live
 from mgs4trainer.ui.common import AMMO_LOCK_REFRESH_MS, warn_dialog
+from mgs4trainer.ui.photo_help import PhotoControlsDialog
 
 
 class VitalsTab(QWidget):
@@ -81,16 +82,6 @@ class VitalsTab(QWidget):
         self.timer_freeze_check.setToolTip(tr("vitals.timer_freeze_tooltip"))
         self.timer_freeze_check.toggled.connect(self._on_timer_freeze_toggled)
         speed_row.addWidget(self.timer_freeze_check)
-        # Salle blanche (2026-10-23) : MGS4Live.beauty_to_white_room.
-        self.white_room_btn = QPushButton(tr("vitals.white_room"))
-        self.white_room_btn.setToolTip(tr("vitals.white_room_tooltip"))
-        self.white_room_btn.clicked.connect(self._on_white_room)
-        speed_row.addWidget(self.white_room_btn)
-        # Retour au menu principal (2026-10-23) : MGS4Live.return_to_title.
-        self.title_btn = QPushButton(tr("vitals.return_to_title"))
-        self.title_btn.setToolTip(tr("vitals.return_to_title_tooltip"))
-        self.title_btn.clicked.connect(self._on_return_to_title)
-        speed_row.addWidget(self.title_btn)
         speed_layout.addLayout(speed_row)
 
         difficulty_row = QHBoxLayout()
@@ -104,6 +95,36 @@ class VitalsTab(QWidget):
         difficulty_row.addStretch(1)
         speed_layout.addLayout(difficulty_row)
         layout.addWidget(speed_group)
+
+        # Outils de partie (2026-10-24) : mode photo et boutons d'action,
+        # sortis du groupe Vitesse (trop charge).
+        tools_group = QGroupBox(tr("vitals.tools_group"))
+        tools_row = QHBoxLayout(tools_group)
+        # Mode photo (2026-10-23) : la case est pilotee par TrainerWindow
+        # (raccourcis clavier, camera libre ; voir live/camera.py) ; ses
+        # commandes sont dans une fenetre a part (ui/photo_help.py).
+        self.photo_check = QCheckBox(tr("vitals.photo_mode"))
+        self.photo_check.setToolTip(tr("vitals.photo_mode_tooltip"))
+        tools_row.addWidget(self.photo_check)
+        photo_help_btn = QPushButton(tr("vitals.photo_controls"))
+        photo_help_btn.clicked.connect(lambda: PhotoControlsDialog(self).exec())
+        tools_row.addWidget(photo_help_btn)
+        tools_separator = QFrame()
+        tools_separator.setFrameShape(QFrame.VLine)
+        tools_separator.setFrameShadow(QFrame.Sunken)
+        tools_row.addWidget(tools_separator)
+        # Salle blanche (2026-10-23) : MGS4Live.beauty_to_white_room.
+        self.white_room_btn = QPushButton(tr("vitals.white_room"))
+        self.white_room_btn.setToolTip(tr("vitals.white_room_tooltip"))
+        self.white_room_btn.clicked.connect(self._on_white_room)
+        tools_row.addWidget(self.white_room_btn)
+        # Retour au menu principal (2026-10-23) : MGS4Live.return_to_title.
+        self.title_btn = QPushButton(tr("vitals.return_to_title"))
+        self.title_btn.setToolTip(tr("vitals.return_to_title_tooltip"))
+        self.title_btn.clicked.connect(self._on_return_to_title)
+        tools_row.addWidget(self.title_btn)
+        tools_row.addStretch(1)
+        layout.addWidget(tools_group)
 
         alert_group = QGroupBox(tr("vitals.alert_group"))
         alert_layout = QVBoxLayout(alert_group)
@@ -896,6 +917,7 @@ class VitalsTab(QWidget):
             self.timer_freeze_check.setEnabled(False)
             self.white_room_btn.setEnabled(False)
             self.title_btn.setEnabled(False)
+            self.photo_check.setEnabled(False)
             self.infinite_ammo_check.setEnabled(False)
             self.no_reload_check.setEnabled(False)
             self.infinite_silencer_check.setEnabled(False)
@@ -925,6 +947,7 @@ class VitalsTab(QWidget):
         self.timer_freeze_check.setEnabled(True)
         self.white_room_btn.setEnabled(True)
         self.title_btn.setEnabled(True)
+        self.photo_check.setEnabled(True)
         self.infinite_ammo_check.setEnabled(True)
         self.no_reload_check.setEnabled(True)
         self.infinite_silencer_check.setEnabled(True)

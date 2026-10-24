@@ -477,6 +477,16 @@ class CodePatchesMixin:
             (0x14D4596, bytes.fromhex("890d44b1ad2239b3ac00"), bytes.fromhex("909090909090")),
             (0x116CDC8, bytes.fromhex("eb114533c033d2"), bytes.fromhex("eb6b")),
         ],
+        # Mode photo (2026-10-23) : B9B70 (regler la camera) recopie la
+        # matrice calculee par le controleur dans la camera du jeu
+        # (mgs4+1DDDC70) ; ses 4 recopies en NOP, la camera garde ce que le
+        # trainer y ecrit (voir live/camera.py).
+        "free_camera": [
+            (0xB9C03, bytes.fromhex("0f1101"), bytes.fromhex("909090")),
+            (0xB9C0A, bytes.fromhex("0f114910"), bytes.fromhex("90909090")),
+            (0xB9C12, bytes.fromhex("0f114120"), bytes.fromhex("90909090")),
+            (0xB9C2C, bytes.fromhex("0f114930"), bytes.fromhex("90909090")),
+        ],
         "untouchable": [
             (0x96C0B0, bytes.fromhex("488bc455535657488d68a1"), bytes.fromhex("c3")),
             (0x136F5B6, bytes.fromhex("e805259dff4c8bf04885"), bytes.fromhex("31c00f1f00")),
