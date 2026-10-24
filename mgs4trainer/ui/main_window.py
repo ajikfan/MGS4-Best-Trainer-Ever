@@ -21,6 +21,7 @@ from mgs4trainer.core.i18n import (
 from mgs4trainer.core.build import updates_available
 from mgs4trainer.core.paths import PROFILES_FILE, TRAINER_ICON
 from mgs4trainer.live import MGS4Live
+from mgs4trainer.ui.cutscene_menu_overlay import CutsceneQuitOverlay
 from mgs4trainer.ui.common import (
     GENERAL_ITEM_QUANTITY_IDS, ITEM_CATEGORIES, REFRESH_MS, _FACECAMO_IDS_ORDERED,
     _FACECAMO_NAMES_VISIBLE, _VEST_NAMES_VISIBLE, item_unclassified_format, warn_dialog,
@@ -82,6 +83,14 @@ class TrainerWindow(QMainWindow):
         self._saved_state: dict | None = None
         self._pending_accessories: dict[int, int] | None = None
         self.overlay = ProfileOverlay()
+        # Ligne QUITTER du menu pause des cinematiques (live/cutscene_menu.py) :
+        # patchs poses tant que le trainer est accroche, texte dessine par
+        # CutsceneQuitOverlay ; sondage rapide, independant du rafraichissement.
+        self.cutscene_overlay = CutsceneQuitOverlay()
+        self._cutscene_timer = QTimer(self)
+        self._cutscene_timer.setInterval(50)
+        self._cutscene_timer.timeout.connect(self._cutscene_tick)
+        self._cutscene_timer.start()
         self._hotkeys: list[int] = []
         self.profile_label = QLabel()
         self.profile_label.setToolTip(tr("profile.label_tooltip"))
@@ -507,6 +516,23 @@ class TrainerWindow(QMainWindow):
     def _on_pause_overlay(self, paused: bool):
         self.overlay.show_message(tr("overlay.pause_on" if paused else "overlay.pause_off"), not paused, self.live.pid)
 
+    def _cutscene_tick(self):
+        live = self.live
+        if not (live.connected and live.sane):
+            self.cutscene_overlay.hide()
+            return
+        try:
+            if not live.cutscene_quit_install():
+                self.cutscene_overlay.hide()
+                return
+            menu_open, cursor, quit_requested = live.cutscene_menu_poll()
+            if quit_requested:
+                live.return_to_title()
+        except OSError:
+            self.cutscene_overlay.hide()
+            return
+        self.cutscene_overlay.update_menu(live.pid, menu_open, cursor)
+
     def _photo_teleport(self):
         photo = self.vitals_tab.photo_check
         if not photo.isChecked():
@@ -641,6 +667,9 @@ class TrainerWindow(QMainWindow):
         user32 = ctypes.WinDLL("user32", use_last_error=True)
         for hotkey_id in self._hotkeys:
             user32.UnregisterHotKey(wintypes.HWND(int(self.winId())), hotkey_id)
+        self._cutscene_timer.stop()
+        self.live.cutscene_quit_remove()
+        self.cutscene_overlay.close()
         self.overlay.close()
         self.live.detach()
         super().closeEvent(event)

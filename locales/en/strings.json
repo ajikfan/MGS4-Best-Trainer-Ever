@@ -106,6 +106,7 @@
   "vitals.photo_mode_not_in_game": "Photo mode only works in game, not in the menus.",
   "vitals.photo_mode_restart": "The trainer DLL loaded in the game is too old for photo mode: restart the game, then the trainer.",
   "vitals.photo_mode_failed": "Could not free the camera (different game version?).",
+  "cutscene_menu.quit": "QUIT",
   "overlay.pause_on": "Game paused",
   "overlay.pause_off": "Game resumed",
   "overlay.photo_teleport": "Snake teleported to the camera",

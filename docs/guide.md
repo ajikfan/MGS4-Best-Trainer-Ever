@@ -40,14 +40,20 @@ minutes, secondes). Chaque valeur se modifie directement.
 L'onglet des réglages en direct, en plusieurs groupes :
 
 - **Vitesse du jeu** : curseur de 10 % à 300 % (100 % au centre), case
-  **Pause** (gel complet du jeu), case **Chrono figé** (le compte à
-  rebours du jeu ne descend plus : les 5 minutes de la fuite de Metal
-  Gear REX à l'acte 4, le temps limite des combats contre les Beauty),
-  bouton **Salle blanche** (contre une Beauty, après la forme Bête :
-  passage immédiat dans la salle blanche), bouton **Menu principal**
-  (retour au menu principal à tout moment de la partie, après
-  confirmation : la progression non sauvegardée est perdue), liste **Difficulté** (Liquid à The
-  Boss ; change la difficulté enregistrée à la prochaine sauvegarde).
+  **Pause** (en partie, pause du jeu : le monde est figé mais le jeu
+  reste affiché ; dans les menus, gel complet), case **Chrono figé** (le
+  compte à rebours du jeu ne descend plus : les 5 minutes de la fuite de
+  Metal Gear REX à l'acte 4, le temps limite des combats contre les
+  Beauty), liste **Difficulté** (Liquid à The Boss ; change la
+  difficulté enregistrée à la prochaine sauvegarde).
+- **Outils de partie** : case **Mode photo** (ou * du pavé numérique :
+  caméra libre, voir le bouton **Commandes du mode photo…** et les
+  nouveautés de la V2.6.0), bouton **Salle blanche** (contre une Beauty,
+  après la forme Bête : passage immédiat dans la salle blanche), bouton
+  **Menu principal** (retour au menu principal à tout moment de la
+  partie, après confirmation : la progression non sauvegardée est
+  perdue). Le menu pause des cinématiques gagne aussi une ligne
+  **QUITTER** tant que le trainer est ouvert.
   Au clavier, même jeu au premier plan : touche **Pause** pour la pause,
   pavé numérique **+** / **−** pour ±10 % et **0** pour revenir à 100 %
   (bandeau "Vitesse : x %" par-dessus le jeu).

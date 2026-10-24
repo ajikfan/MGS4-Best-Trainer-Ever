@@ -52,6 +52,9 @@ des versions.
 
 - **Mode photo** : caméra libre pilotée à la manette ou au clavier et à
   la souris, Snake immobile.
+- **Pause** : la touche Pause utilise la pause du jeu (le mode photo
+  marche pendant la pause).
+- **Menu pause des cinématiques** : nouvelle ligne QUITTER.
 - **Salle blanche** et **Menu principal** : deux nouveaux boutons.
 - **Metal Gear REX** : la téléportation déplace REX lui-même quand tu le
   pilotes, et Intouchable le protège aussi.

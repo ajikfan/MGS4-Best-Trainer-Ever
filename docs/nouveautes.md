@@ -41,6 +41,14 @@ le monde est figé, mais le jeu reste affiché et réactif, et le mode
 photo marche pendant la pause. Dans les menus, le jeu est gelé comme
 avant.
 
+### Menu pause des cinématiques
+
+Le menu pause des cinématiques (PASSER / CONTINUER) gagne une ligne
+**QUITTER** : la valider ramène au menu principal. Aucun fichier du jeu
+n'est modifié : le trainer ajoute la ligne en mémoire tant qu'il est
+ouvert (le jeu gère la navigation et la barre de sélection, le trainer
+dessine le mot par-dessus).
+
 ### Metal Gear REX
 
 - **Téléportation** : quand tu pilotes REX (fuite de l'acte 4, combat
