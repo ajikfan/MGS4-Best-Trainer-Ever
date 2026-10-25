@@ -54,6 +54,17 @@ class CutsceneMenuMixin:
     }
     CSM_HIGHLIGHTS = (0x4A2371, 0x4AA371, 0)
     CSM_OPEN_DELAY = 0.3  # s sans mise a jour du menu -> ferme
+    # Etat du menu (+0xB0) : 1 deplacement, 2 validation, 3 annulation. En
+    # validation ou annulation, le jeu fait disparaitre le menu en fondu : la
+    # ligne du trainer disparait aussitot (2026-10-25 : elle restait visible
+    # pendant le fondu, et parfois pendant un appel Codec).
+    CSM_STATE = 0xB0
+    CSM_CLOSING_STATES = (2, 3)
+    # CONTINUER (+0xA8) ou PASSER (+0xAC) demande : menu ferme, meme si sa
+    # tache continue de tourner (vu pendant un Codec apres PASSER : tache
+    # mise a jour a chaque image, +0xAC = 1, ligne restee affichee).
+    CSM_CLOSE_REQUESTS = (0xA8, 0xAC)
+    CSM_TASK_UPDATE_RVA = 0x4C0B80
     # Enregistrement du texte PASSER dans la scene (type 0x0A, cle, noeud
     # 0x17, parent 0x16) ; decalages relatifs a sa cle.
     CSM_TEXT_RECORD = bytes.fromhex("0a004e0345155800" "17001600")
@@ -233,6 +244,10 @@ class CutsceneMenuMixin:
         # Tache du menu terminee a sa fermeture : le texte disparait tout de
         # suite (le delai ne sert que si elle survivait).
         alive = bool(task) and self._csm_alive(struct.unpack("<Q", self.proc.read_bytes(task + 0x30, 8))[0])
+        # Toujours la tache du menu des cinematiques (memoire non reutilisee
+        # par une autre tache, le Codec par exemple) : sa mise a jour 4C0B80.
+        update = struct.unpack("<Q", self.proc.read_bytes(task + 0x08, 8))[0] if alive else 0
+        alive = alive and update == self.base + self.CSM_TASK_UPDATE_RVA
         menu_open = alive and now - state["seen"] <= self.CSM_OPEN_DELAY
         if confirm:
             # Pas de delai ici : jeu sans le focus = boucle arretee, compteur
@@ -250,6 +265,10 @@ class CutsceneMenuMixin:
                 self._csm_confirm_start(state, task, now)
                 return True, 2, False
             state["title"] = True
+        if struct.unpack("<i", self.proc.read_bytes(task + self.CSM_STATE, 4))[0] in self.CSM_CLOSING_STATES:
+            return False, None, False  # fondu de fermeture du jeu
+        if any(struct.unpack("<i", self.proc.read_bytes(task + offset, 4))[0] for offset in self.CSM_CLOSE_REQUESTS):
+            return False, None, False  # CONTINUER ou PASSER deja choisi
         cursor = struct.unpack("<i", self.proc.read_bytes(task + 0xA0, 4))[0]
         if cursor == 2:
             self._csm_highlight_quit(state, task)
