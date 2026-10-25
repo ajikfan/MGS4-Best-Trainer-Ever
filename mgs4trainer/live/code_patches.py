@@ -436,6 +436,14 @@ class CodePatchesMixin:
         # (112717A) puis endurance = max(endurance - coup, plancher) (1127255) ;
         # les deux "sub" -> "xor" : vie et endurance au plancher au premier
         # coup, le suivant lance la phase suivante (transitions par le jeu).
+        # Poupees de Screaming Mantis (2026-10-25) : F00EA0 applique un coup a
+        # la poupee (objet NPC_PLG_DAMAGE, vie +0x314, 1000 ; 200 par balle) ;
+        # degat 0x7FFFFFFF = mise a mort ; a 0, EE7700(Mantis, 0x35B) : elle
+        # la lache. "jne" (F00F0D) neutralise : lachee au premier tir. Pose
+        # dans les deux modes (une poupee n'a pas d'endurance).
+        "mantis_puppet_one_hit": [
+            (0xF00F0D, bytes.fromhex("7503448bc0412bc0"), bytes.fromhex("9090")),
+        ],
         "liquid_final_kill": [
             (0x112717A, bytes.fromhex("2bd74963c84863c2"), bytes.fromhex("31d2")),
             (0x1127255, bytes.fromhex("2bd74863ce4863c2"), bytes.fromhex("31d2")),

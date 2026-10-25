@@ -786,6 +786,7 @@ class VitalsTab(QWidget):
             for name in wanted:
                 self.live.set_code_patch(name, True)
             self.live.set_code_patch("destructibles_one_shot_kill", active)
+            self.live.set_code_patch("mantis_puppet_one_hit", active)
         except OSError:
             pass
 
