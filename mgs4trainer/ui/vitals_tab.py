@@ -862,6 +862,8 @@ class VitalsTab(QWidget):
                 continue
             real_max = self.live.player_gauge_max(gauge)
             maxi = self._gauge_max[name] = real_max or max(self._gauge_max[name], value)
+            if getattr(self.live, "boss_finishing", None) == gauge:
+                value = 0  # vie remise un instant a 5 % pour que le coup compte
             if name in self.locked_percents:
                 target = round(self.locked_percents[name] / 100 * maxi)
                 if value < target:

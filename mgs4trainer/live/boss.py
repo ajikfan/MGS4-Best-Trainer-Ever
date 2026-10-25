@@ -44,10 +44,10 @@ class BossGaugeMixin:
     BOSS_HUD_SCAN = 0x1000
     BOSS_HUD_WINDOW = 0x40000
     # Plancher a 1 (2026-10-25, choix de l'utilisateur) pour les boss dont la
-    # vie rythme des phases ou des scripts : vie ou endurance a 0 ecrite de
-    # l'exterieur n'y est pas traitee comme un coup. Ailleurs, 0 = le coup
-    # suivant l'acheve par le chemin normal du jeu.
-    BOSS_FLOOR_ONE = {"octopus_beast", "mantis_beast", "vamp", "liquid"}
+    # vie rythme des phases ou des scripts non encore maitrises : jauge a 0 =
+    # pas d'achevement (boss_kill). Ailleurs, 0 = achevement par un tir de
+    # Snake (bete d'Octopus : phases sautees d'abord, voir _boss_skip_phases).
+    BOSS_FLOOR_ONE = {"mantis_beast", "vamp", "liquid"}
 
     # Toucher le boss (2026-10-25) : une jauge mise a 0 de l'exterieur n'a
     # aucun effet avant un coup (le jeu ne juge la vie qu'a un impact), et le
@@ -313,15 +313,19 @@ class BossGaugeMixin:
         block = self._boss_touch_block()
         if not block:
             return False
+        if key == "octopus_beast":
+            self._boss_skip_phases(boss)  # sinon le coup s'arrete au palier de la phase
         wanted_patch, opposite_patch = self.BOSS_FINISH_PATCHES[which]
         initial = {name: self._code_patch_applied(name) for name in (wanted_patch, opposite_patch)}
         offset = self.BOSS_GAUGES[which]
         gauge_max = struct.unpack("<i", self.proc.read_bytes(damage + offset + 4, 4))[0]
         finish_value = max(2, math.ceil(gauge_max * self.BOSS_KILL_LIFE))
         # Le curseur a pu mettre la jauge a 0 en glissant : le jeu ignorerait
-        # le coup (et la boucle croirait le resultat atteint).
-        self.write_boss_gauge(gauge, finish_value)
+        # le coup (et la boucle croirait le resultat atteint). La barre a
+        # l'ecran reste a 0 (le jeu la recopie au coup).
+        self.write_boss_gauge(gauge, finish_value, hud=False)
         self._boss_killing = True
+        self.boss_finishing = gauge  # l'onglet affiche 0 pendant l'achevement
 
         def pending() -> bool:
             slots = struct.unpack(f"<{self.BOSS_TOUCH_SLOTS}Q", self.proc.read_bytes(block, 8 * self.BOSS_TOUCH_SLOTS))
@@ -345,7 +349,7 @@ class BossGaugeMixin:
                     if not self._code_patch_applied(wanted_patch):
                         self.set_code_patch(wanted_patch, True)
                     if value > finish_value:
-                        self.write_boss_gauge(gauge, finish_value)
+                        self.write_boss_gauge(gauge, finish_value, hud=False)
                     self.boss_touch(gauge)
                     time.sleep(0.1)  # coup consomme puis traite a l'image suivante
                 if pending():
@@ -366,6 +370,7 @@ class BossGaugeMixin:
                             self.set_code_patch(name, True)
                 except OSError:
                     pass
+                self.boss_finishing = None
                 self._boss_killing = False
         threading.Thread(target=run, daemon=True).start()
         return True
@@ -384,12 +389,42 @@ class BossGaugeMixin:
         if not one_hit:
             return
         boss = self._boss()
-        if not boss or boss[0] != "octopus_beast":
-            return
+        if boss and boss[0] == "octopus_beast":
+            self._boss_skip_phases(boss[1])
+
+    def _boss_skip_phases(self, boss: int) -> None:
+        """Phases de la bete de Laughing Octopus marquees jouees."""
         for offset, count in self.OCTOPUS_PHASE_FLAGS:
             wanted = struct.pack(f"<{count}i", *[1] * count)
-            if self.proc.read_bytes(boss[1] + offset, 4 * count) != wanted:
-                self.proc.write_bytes(boss[1] + offset, wanted)
+            if self.proc.read_bytes(boss + offset, 4 * count) != wanted:
+                self.proc.write_bytes(boss + offset, wanted)
+
+    # Ficelles de Screaming Mantis : composant PL_PLG_MANTIS de Snake, dans la
+    # liste des composants du joueur (tete au composant joueur +0x1F50,
+    # suivant +0x08) ; drapeau "attache" +0x60 bit 0 (voir CODE_PATCHES
+    # "untouchable"). L'effacer fait comme la seringue (seul champ change).
+    MANTIS_STRINGS_VTABLE_RVA = 0x1904DA0
+    PLAYER_PLUGIN_HEAD = 0x1F50
+    MANTIS_STRINGS_FLAG = (0x60, 1)
+
+    def mantis_strings_tick(self, free: bool) -> None:
+        """A appeler souvent : avec Intouchable, Snake ne reste pas attache
+        par les ficelles de Mantis."""
+        if not free:
+            return
+        component = self._grip_component()
+        plugin = struct.unpack("<Q", self.proc.read_bytes(component + self.PLAYER_PLUGIN_HEAD, 8))[0] if component else 0
+        vtable = self.base + self.MANTIS_STRINGS_VTABLE_RVA
+        for _ in range(64):
+            if not plugin:
+                return
+            if struct.unpack("<Q", self.proc.read_bytes(plugin, 8))[0] == vtable:
+                offset, bit = self.MANTIS_STRINGS_FLAG
+                flags = struct.unpack("<I", self.proc.read_bytes(plugin + offset, 4))[0]
+                if flags & bit:
+                    self.proc.write_bytes(plugin + offset, struct.pack("<I", flags & ~bit))
+                return
+            plugin = struct.unpack("<Q", self.proc.read_bytes(plugin + 8, 8))[0]
 
     def _rtti_name(self, vtable: int) -> str | None:
         """Nom de classe (sans .?AV ni @@) d'une vtable du module, sinon None."""
@@ -538,8 +573,8 @@ class BossGaugeMixin:
             return None
         return struct.unpack("<i", self.proc.read_bytes(found[1] + self.BOSS_GAUGES[found[2]] + 4, 4))[0] or None
 
-    def write_boss_gauge(self, gauge: str, value: int) -> bool:
-        """Ecrit la jauge (au moins 1 pour BOSS_FLOOR_ONE) et sa barre."""
+    def write_boss_gauge(self, gauge: str, value: int, hud: bool = True) -> bool:
+        """Ecrit la jauge (au moins 1 pour BOSS_FLOOR_ONE) et, si `hud`, sa barre."""
         found = self._boss_for(gauge)
         if not found:
             return False
@@ -547,7 +582,7 @@ class BossGaugeMixin:
         floor = 1 if gauge.split(":")[1] in self.BOSS_FLOOR_ONE else 0
         value = struct.pack("<i", max(floor, value))
         self.proc.write_bytes(damage + self.BOSS_GAUGES[which], value)
-        hud = self._boss_hud(boss, damage)
-        if hud:
-            self.proc.write_bytes(hud + self.BOSS_HUD[which][1], value)
+        bars = self._boss_hud(boss, damage) if hud else 0
+        if bars:
+            self.proc.write_bytes(bars + self.BOSS_HUD[which][1], value)
         return True

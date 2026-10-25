@@ -184,7 +184,7 @@
   "vitals.non_lethal_tooltip": "Un coup endort ou met K.O. quelle que soit l'arme : soldats et Gekko endormis, boss mis K.O. (endurance vidée, vie intacte). Les autres machines (tanks, véhicules, hélicoptères, RAY…) sont quand même détruites en un coup ; les Gekko nains sont paralysés.",
   "vitals.snake_group": "Snake",
   "vitals.untouchable": "Intouchable",
-  "vitals.untouchable_tooltip": "Patch de code : Snake ignore tous les impacts - balles, explosions, mines, coups et attaques non létales ne lui font plus rien (ni dégâts, ni projection, ni assommage). Aux commandes de Metal Gear REX, REX ignore aussi les coups (ni dégâts, ni réaction).",
+  "vitals.untouchable_tooltip": "Patch de code : Snake ignore tous les impacts - balles, explosions, mines, coups et attaques non létales ne lui font plus rien (ni dégâts, ni projection, ni assommage). Aux commandes de Metal Gear REX, REX ignore aussi les coups (ni dégâts, ni réaction). Contre Screaming Mantis, ses ficelles ne retiennent plus Snake (comme après la seringue).",
   "vitals.invisible": "Invisible",
   "vitals.invisible_tooltip": "Patch de code : les soldats, les Gekko et les Gekko nains ne voient plus Snake, même debout devant eux (comme le Camouflage furtif, sans la transparence ; l'indice de camouflage affiche 99 %), et les tirs sans silencieux ne les font plus passer en alerte. Ils peuvent encore entendre les coups contre un mur et venir voir, et le hold-up reste possible. Il reste un passage en Prudence si Snake reste immobile au milieu des Gekko nains : cocher aussi « Pas d'alerte » pour que rien ne déclenche l'alerte générale.",
   "vitals.no_back_pain": "Pas de mal de dos",

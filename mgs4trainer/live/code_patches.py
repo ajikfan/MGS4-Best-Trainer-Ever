@@ -10,6 +10,12 @@ class CodePatchesMixin:
     #    projection ; seul appelant 975232, retour ignore). "ret" a son
     #    entree : insensible a tout impact, letal ou non - valide en jeu
     #    (balles, explosions, mines, corps a corps).
+    #    Ficelles de Screaming Mantis (2026-10-25) : le composant joueur
+    #    PL_PLG_MANTIS (12B3A90, ses messages) pose son drapeau "attache"
+    #    (+0x60 bit 0) au message 0x440001 et a sa creation ; la seringue
+    #    (0x2D0018, 0x11) l'efface. Attache, Snake est manipule et ses balles
+    #    ne touchent plus les poupees. "or [rcx+60h],1" (12B3AB6) neutralise ;
+    #    le trainer efface aussi le drapeau tant qu'Intouchable est coche.
     #    Metal Gear REX (2026-10-22, valide contre Ray) : sa mise a jour
     #    (136F3E0, table 1908A08) parcourt sa liste de coups (objet+0x58 :
     #    premier coup D41AC0, en 136F5B6) et pour chacun cumule les degats
@@ -490,6 +496,9 @@ class CodePatchesMixin:
         "untouchable": [
             (0x96C0B0, bytes.fromhex("488bc455535657488d68a1"), bytes.fromhex("c3")),
             (0x136F5B6, bytes.fromhex("e805259dff4c8bf04885"), bytes.fromhex("31c00f1f00")),
+            # Ficelles de Screaming Mantis : le message 0x440001 ne pose plus
+            # le drapeau "attache" (voir BossGaugeMixin.mantis_strings_tick).
+            (0x12B3AB6, bytes.fromhex("8349600133c0c3"), bytes.fromhex("90909090")),
         ],
         "invisible": [
             (0x89360, bytes.fromhex("48895c2408488974"), bytes.fromhex("0f57c0c3")),
