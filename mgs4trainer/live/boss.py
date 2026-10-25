@@ -318,8 +318,12 @@ class BossGaugeMixin:
         "boss:<cle>:stamina" (K.O.) par le chemin du jeu (fil a part : un coup
         de Snake a la fois, jusqu'au resultat ou BOSS_KILL_TIMEOUT) ; faux si
         impossible."""
-        found = self._boss_for(gauge)
         key = gauge.split(":")[1]
+        if key == "vamp":
+            # Son endurance a 0 ne declenche rien (valide en jeu) : comme sa
+            # vie, a terre puis seringue.
+            gauge = f"boss:{key}:life"
+        found = self._boss_for(gauge)
         if not found or key in self.BOSS_FLOOR_ONE or getattr(self, "_boss_killing", False):
             return False
         boss, damage, which = found
@@ -337,6 +341,8 @@ class BossGaugeMixin:
         # le coup (et la boucle croirait le resultat atteint). La barre a
         # l'ecran reste a 0 (le jeu la recopie au coup).
         self.write_boss_gauge(gauge, finish_value, hud=False)
+        if key == "vamp":  # a terre puis seringue (vamp_one_hit_tick)
+            self._vamp_syringe_until = time.monotonic() + self.VAMP_GAUGE_SYRINGE_WINDOW
         self._boss_killing = True
         self.boss_finishing = gauge  # l'onglet affiche 0 pendant l'achevement
 
@@ -353,6 +359,8 @@ class BossGaugeMixin:
                     value = struct.unpack("<i", self.proc.read_bytes(damage + offset, 4))[0]
                     if value <= 0:
                         break
+                    if key == "vamp" and struct.unpack("<i", self.proc.read_bytes(damage + 0x314, 4))[0] <= 0:
+                        break  # a terre (son coup Non letal vide la vie) : la seringue suit
                     if pending():
                         time.sleep(0.01)
                         continue
@@ -535,11 +543,13 @@ class BossGaugeMixin:
     VAMP_DOWN_STATES = (69, 79)
     VAMP_SYRINGE = (2, 80)
     VAMP_FUNCS = {"machine_goto": (0xB0F9B0, "448b51344533c9488b49384585d27e17")}
+    VAMP_GAUGE_SYRINGE_WINDOW = 15.0  # s apres une jauge relachee a 0 (onglet Boss)
 
     def vamp_one_hit_tick(self, one_hit: bool) -> None:
         """A appeler souvent : avec Un coup, un mort, Vamp a terre est vaincu
         comme par la seringue."""
-        boss = self._boss() if one_hit else None
+        forced = time.monotonic() < getattr(self, "_vamp_syringe_until", 0.0)
+        boss = self._boss() if one_hit or forced else None
         if not boss or boss[0] != "vamp" or getattr(self, "_vamp_syringe", False):
             return
         vamp = boss[1]
