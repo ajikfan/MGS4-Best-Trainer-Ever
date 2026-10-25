@@ -10,7 +10,7 @@ gérées par le jeu.
 
 | Boss | Létal | Non létal |
 |---|---|---|
-| Laughing Octopus | un coup par phase (arme létale : confirmé ; arme non létale : préparé, à confirmer) | endurance vidée, un coup par phase, toute arme (confirmé) |
+| Laughing Octopus | un coup : ses phases sont sautées, le premier tir met fin au combat (confirmé) | endurance vidée, un coup par phase, toute arme (confirmé) |
 | Laughing Beauty | un coup (confirmé) | endurance vidée (confirmé) |
 | Raging Raven | un coup (arme létale : confirmé ; arme non létale : préparé, à confirmer) | endurance vidée, toute arme (confirmé) |
 | Raging Beauty | un coup, toute arme (confirmé) | endurance vidée (confirmé) |

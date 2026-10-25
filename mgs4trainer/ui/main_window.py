@@ -546,6 +546,10 @@ class TrainerWindow(QMainWindow):
         except OSError:
             pass
         try:
+            live.boss_one_hit_tick(self.vitals_tab.instant_kill_check.isChecked())
+        except OSError:
+            pass
+        try:
             if not live.cutscene_quit_install():
                 self.cutscene_overlay.hide()
                 return

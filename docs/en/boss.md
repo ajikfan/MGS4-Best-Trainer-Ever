@@ -10,7 +10,7 @@ are still handled by the game.
 
 | Boss | Lethal | Non-lethal |
 |---|---|---|
-| Laughing Octopus | one hit per phase (lethal weapon: confirmed; non-lethal weapon: prepared, to be confirmed) | stamina drained, one hit per phase, any weapon (confirmed) |
+| Laughing Octopus | one hit: her phases are skipped, the first shot ends the fight (confirmed) | stamina drained, one hit per phase, any weapon (confirmed) |
 | Laughing Beauty | one hit (confirmed) | stamina drained (confirmed) |
 | Raging Raven | one hit (lethal weapon: confirmed; non-lethal weapon: prepared, to be confirmed) | stamina drained, any weapon (confirmed) |
 | Raging Beauty | one hit, any weapon (confirmed) | stamina drained (confirmed) |

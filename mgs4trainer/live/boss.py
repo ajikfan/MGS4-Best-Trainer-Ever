@@ -370,6 +370,27 @@ class BossGaugeMixin:
         threading.Thread(target=run, daemon=True).start()
         return True
 
+    # Un coup, un mort sur la bete de Laughing Octopus (2026-10-25, valide :
+    # premier tir -> vie a 0, machine 0 du script en etat 6 = defaite, puis la
+    # Beauty). 1435110 bloque la vie au palier de la premiere phase non jouee
+    # (drapeaux +0x267D0, +0x267D4, +0x267D8/+0x267E0, +0x267DC, +0x43F8 ;
+    # paliers 7200, 6000, 4800, 3600, 2400) et chaque palier lance une
+    # transition scriptee. Toutes les phases marquees jouees : aucun palier,
+    # le jeu enchaine sa propre fin de combat.
+    OCTOPUS_PHASE_FLAGS = ((0x267D0, 5), (0x43F8, 1))
+
+    def boss_one_hit_tick(self, one_hit: bool) -> None:
+        """A appeler souvent : Un coup, un mort sur les boss a phases."""
+        if not one_hit:
+            return
+        boss = self._boss()
+        if not boss or boss[0] != "octopus_beast":
+            return
+        for offset, count in self.OCTOPUS_PHASE_FLAGS:
+            wanted = struct.pack(f"<{count}i", *[1] * count)
+            if self.proc.read_bytes(boss[1] + offset, 4 * count) != wanted:
+                self.proc.write_bytes(boss[1] + offset, wanted)
+
     def _rtti_name(self, vtable: int) -> str | None:
         """Nom de classe (sans .?AV ni @@) d'une vtable du module, sinon None."""
         cache = getattr(self, "_rtti_cache", None)
