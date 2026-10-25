@@ -21,7 +21,7 @@ from mgs4trainer.core.i18n import (
 from mgs4trainer.core.build import updates_available
 from mgs4trainer.core.paths import PROFILES_FILE, TRAINER_ICON
 from mgs4trainer.live import MGS4Live
-from mgs4trainer.ui.cutscene_menu_overlay import CutsceneQuitOverlay
+from mgs4trainer.ui.cutscene_menu_overlay import CutsceneQuitOverlay, GameCurtain
 from mgs4trainer.ui.common import (
     GENERAL_ITEM_QUANTITY_IDS, ITEM_CATEGORIES, REFRESH_MS, _FACECAMO_IDS_ORDERED,
     _FACECAMO_NAMES_VISIBLE, _VEST_NAMES_VISIBLE, item_unclassified_format, warn_dialog,
@@ -87,8 +87,11 @@ class TrainerWindow(QMainWindow):
         # patchs poses tant que le trainer est accroche, texte dessine par
         # CutsceneQuitOverlay ; sondage rapide, independant du rafraichissement.
         self.cutscene_overlay = CutsceneQuitOverlay()
+        # Entree « Charger » du menu pause (live/load_menu.py) et rideau noir
+        # du trainer (fermeture du menu apres chargement, retour au titre).
+        self.curtain = GameCurtain()
         self._cutscene_timer = QTimer(self)
-        self._cutscene_timer.setInterval(50)
+        self._cutscene_timer.setInterval(30)
         self._cutscene_timer.timeout.connect(self._cutscene_tick)
         self._cutscene_timer.start()
         self._hotkeys: list[int] = []
@@ -357,6 +360,11 @@ class TrainerWindow(QMainWindow):
         restart_trainer()
 
     def refresh(self):
+        # Menu pause des cinematiques ouvert : pas de rafraichissement des
+        # onglets (il bloque l'interface jusqu'a 1-2 s et retardait la ligne
+        # QUITTER et sa confirmation).
+        if getattr(self, "_cutscene_menu_open", False):
+            return
         if self.live.connected and not self.live.check_alive():
             self._apply_connection_state()
         for tab in self.item_tabs:
@@ -511,7 +519,7 @@ class TrainerWindow(QMainWindow):
                 self._hotkeys.remove(hotkey_id)
             if enabled and user32.RegisterHotKey(hwnd, hotkey_id, 0, vk):
                 self._hotkeys.append(hotkey_id)
-        self.overlay.show_message(tr("overlay.photo_on" if enabled else "overlay.photo_off"), not enabled, self.live.pid)
+        self.overlay.show_message(tr("overlay.photo_on" if enabled else "overlay.photo_off"), enabled, self.live.pid)
 
     def _on_pause_overlay(self, paused: bool):
         self.overlay.show_message(tr("overlay.pause_on" if paused else "overlay.pause_off"), not paused, self.live.pid)
@@ -522,16 +530,46 @@ class TrainerWindow(QMainWindow):
             self.cutscene_overlay.hide()
             return
         try:
+            if live.load_menu_install():
+                event = live.load_menu_poll()
+                if event == "curtain":
+                    self.curtain.fade_in(live.pid)
+                elif event == "uncurtain":
+                    self.curtain.fade_out()
+        except OSError:
+            pass
+        try:
+            # Combat final : « Coups finaux » en attente, et premier coup qui
+            # y met fin si « Un coup, un mort » est coche.
+            live.liquid_tick(self.vitals_tab.instant_kill_check.isChecked())
+        except OSError:
+            pass
+        try:
             if not live.cutscene_quit_install():
                 self.cutscene_overlay.hide()
                 return
-            menu_open, cursor, quit_requested = live.cutscene_menu_poll()
-            if quit_requested:
-                live.return_to_title()
+            menu_open, cursor, confirming = live.cutscene_menu_poll()
+            if live.cutscene_title_request():
+                self.curtain.fade_in(live.pid, on_done=self._curtain_to_title)
+            label = live.cutscene_quit_label() if menu_open else None
         except OSError:
+            self._cutscene_menu_open = False
             self.cutscene_overlay.hide()
             return
-        self.cutscene_overlay.update_menu(live.pid, menu_open, cursor)
+        self._cutscene_menu_open = menu_open
+        # Pendant la confirmation du jeu, le menu reste dessine, assombri, sous
+        # la fenetre : la 3e ligne aussi ; le rideau noir la couvre.
+        show_line = menu_open and not self.curtain.isVisible()
+        self.cutscene_overlay.update_menu(live.pid, show_line, cursor, label, shaded=confirming)
+
+    def _curtain_to_title(self):
+        """Rideau opaque : retour au menu principal, puis rideau retire une
+        fois l'ecran titre en place."""
+        try:
+            self.live.return_to_title()
+        except OSError:
+            pass
+        QTimer.singleShot(1500, self.curtain.fade_out)
 
     def _photo_teleport(self):
         photo = self.vitals_tab.photo_check
@@ -669,7 +707,9 @@ class TrainerWindow(QMainWindow):
             user32.UnregisterHotKey(wintypes.HWND(int(self.winId())), hotkey_id)
         self._cutscene_timer.stop()
         self.live.cutscene_quit_remove()
+        self.live.load_menu_remove()
         self.cutscene_overlay.close()
+        self.curtain.close()
         self.overlay.close()
         self.live.detach()
         super().closeEvent(event)

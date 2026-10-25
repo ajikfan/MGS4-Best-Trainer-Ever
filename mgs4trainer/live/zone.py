@@ -182,10 +182,25 @@ class ZoneMixin:
     }
     ZONE_EMOTION_SIG = "8b82d04300004c8bd9b90000"
 
+    # Poursuite a moto de l'acte 3 (2026-10-25, s03a35) : Gekko d'une autre
+    # classe (18ECBD8, vie 5000, camp 4), meme machine a +0xE910 et meme etat
+    # "touche" (6, entree 10637D0) que les Gekko ; SMP a vie 1/1 (camp 1) ;
+    # resistance europeenne et Big Mama en camp 0 (18F1438), jamais visees.
+    ZONE_GEKKO_VTABLES_RVA = (0x18EC5B8, 0x18ECBD8)
+    ZONE_NEUTRAL_CAMP = 0
+    # Camps ennemis gardes meme a vie 1/1 : PMC (1) et SMP (16 ; SMP scripte
+    # sur le van de s03a40, classe 18E2F08, sans machine a etats : Tuer passe
+    # par la demande de mise a mort B2FB00, valide en jeu).
+    ZONE_HOSTILE_CAMPS = (1, 16)
+    # Machine a etats des soldats : +0xE7D0, ou +0xE7E0 chez les soldats
+    # embarques de l'acte 3 (classe 18F38D0, s03a40 : +0xE7D0 y est un
+    # handle de tache) ; on garde celle dont le +0x50 renvoie a l'acteur.
+    ZONE_SOLDIER_MACHINE_OFFSETS = (0xE7D0, 0xE7E0)
+
     def _zone_kind(self, actor: int) -> str:
         """"gekko", "escape_gekko" ou "soldier" selon le type de l'acteur."""
         vtable = struct.unpack("<Q", self.proc.read_bytes(actor, 8))[0] - self.base
-        if vtable == self.ZONE_GEKKO_VTABLE_RVA:
+        if vtable in self.ZONE_GEKKO_VTABLES_RVA:
             return "gekko"
         return "escape_gekko" if vtable == self.ZONE_ESCAPE_GEKKO_VTABLE_RVA else "soldier"
 
@@ -203,8 +218,11 @@ class ZoneMixin:
             if vtable - self.base != self.ZONE_LIFE_OBJECT_VTABLE_RVA:
                 continue
             life, life_max, stamina, _, sleep = struct.unpack("<5i", self.proc.read_bytes(life_object + 0x314, 0x14))
-            if life_max <= 1 and self._zone_kind(soldier) != "escape_gekko":
-                continue  # civils, rats
+            camp = struct.unpack("<Q", self.proc.read_bytes(soldier + 0x43D0, 8))[0] >> 56
+            if life_max <= 1 and self._zone_kind(soldier) != "escape_gekko" and camp not in self.ZONE_HOSTILE_CAMPS:
+                continue  # civils, rats (les SMP de l'acte 3 ont aussi 1/1)
+            if camp == self.ZONE_NEUTRAL_CAMP and self._zone_kind(soldier) == "soldier":
+                continue  # resistance europeenne, Big Mama (acte 3)
             if self._zone_is_ally(soldier):
                 continue  # Rat Patrol (liste du gestionnaire, camp 128) : jauges dans l'onglet Jauges
             out.append((soldier, life_object, (life, stamina, sleep)))
@@ -263,6 +281,19 @@ class ZoneMixin:
             if vehicle and self._zone_vehicle_intact(vehicle):
                 out.append(vehicle)
         return out
+
+    # Camp d'un vehicule (2026-10-25, s03a40) : dword vehicule+0x200, memes
+    # valeurs que les soldats : 1 = PMC (Humvee ennemi), 2 = rebelles (les 5
+    # motos allies de l'escorte du van, que « Tuer » videait sans les detruire).
+    ZONE_VEHICLE_CAMP = 0x200
+
+    def _zone_vehicle_camp_matches(self, vehicle: int, target: str) -> bool:
+        camp = struct.unpack("<I", self.proc.read_bytes(vehicle + self.ZONE_VEHICLE_CAMP, 4))[0]
+        if target == "all":
+            return True
+        if target == "rebels":
+            return camp == self.ZONE_REBEL_CAMP
+        return target == "enemies" and camp != self.ZONE_REBEL_CAMP
 
     def _zone_vehicle_intact(self, vehicle: int) -> bool:
         life_object = vehicle + self.ZONE_VEHICLE_LIFE_OFFSET
@@ -325,6 +356,176 @@ class ZoneMixin:
     def _zone_helicopter_kill(self, helicopter: int) -> None:
         if struct.unpack("<Q", self.proc.read_bytes(helicopter + self.ZONE_TASK_UPDATE, 8))[0] - self.base == self.ZONE_HELICOPTER_UPDATE_RVA:
             self.proc.write_bytes(helicopter + self.ZONE_HELICOPTER_LIFE, struct.pack("<i", 0))
+
+    # Sliders de la poursuite a moto (2026-10-25, s03a35, valide : les 6
+    # explosent) : classe BIKE_SLIDER (RTTI ; 16 objets recycles d'une vague
+    # a l'autre), taches de mise a jour F71F90, objet a tache+0x90, actif si
+    # +0x44 est rempli. Vie dans le plugin SLIDER_PLG_DAMAGE (Slider+0x1E8,
+    # meme forme qu'un objet de vie : +0x314 vie, 1/1). Sa mise a jour
+    # FDC180 appelle d'abord B88260, qui efface le coup en cours (+0x68,
+    # +0x10C, attaquant +0xC8) et le reconstruit depuis les impacts reels :
+    # toute ecriture du trainer est perdue. Puis, vie <= 0 : si l'attaquant
+    # est Snake (8DA180), credit et procedure de mort du script
+    # (3ED630([+0x400], 0)), drapeau mort +0x3E0 bit 0 lu par le Slider
+    # dans la meme image (seul ce chemin le fait exploser). Detour apres
+    # l'appel a B88260 (FDC1D0) : si le trainer a marque le plugin (bit 30
+    # de +0x3E4, libre), il y pose un coup "mise a mort" 0x1000 de Snake.
+    ZONE_SLIDER_UPDATE_RVA = 0xF71F90
+    ZONE_SLIDER_ACTIVE = 0x44
+    ZONE_SLIDER_DAMAGE = 0x1E8
+    ZONE_SLIDER_MARK = (0x3E4, 0x40000000)
+    ZONE_SLIDER_HOOK_RVA = 0xFDC1D0
+    ZONE_SLIDER_FUNCS = {
+        "slider_hits": (0xFDC180, "48895c2410574883ec2033ff488bd989"),
+        "hit_collect": (0xB88260, "40535741554883ec608b4168488bf94c"),
+        "player_entry": (0x8DA180, "8b05caaf5d23488d0dd3af5d23ffc048"),
+    }
+
+    def _zone_sliders(self) -> list[int]:
+        """Plugins de degats des Sliders actifs et vivants de la zone."""
+        head = self.base + self.ZONE_TASK_LIST_RVA
+        update = self.base + self.ZONE_SLIDER_UPDATE_RVA
+        offset, bit = self.ZONE_SLIDER_MARK
+        out = []
+        task = struct.unpack("<Q", self.proc.read_bytes(head + self.ZONE_TASK_NEXT, 8))[0]
+        for _ in range(0x1000):
+            if not task or task == head:
+                break
+            if struct.unpack("<Q", self.proc.read_bytes(task + self.ZONE_TASK_UPDATE, 8))[0] == update:
+                slider = struct.unpack("<Q", self.proc.read_bytes(task + 0x90, 8))[0]
+                if slider and struct.unpack("<Q", self.proc.read_bytes(slider + self.ZONE_SLIDER_ACTIVE, 8))[0]:
+                    damage = struct.unpack("<Q", self.proc.read_bytes(slider + self.ZONE_SLIDER_DAMAGE, 8))[0]
+                    life = struct.unpack("<i", self.proc.read_bytes(damage + 0x314, 4))[0] if damage else 0
+                    if life > 0 and not struct.unpack("<I", self.proc.read_bytes(damage + offset, 4))[0] & bit:
+                        out.append(damage)
+            task = struct.unpack("<Q", self.proc.read_bytes(task + self.ZONE_TASK_NEXT, 8))[0]
+        return out
+
+    def _zone_slider_hook(self, funcs: dict[str, int]) -> bool:
+        """Installe (une fois par processus) le detour apres le collecteur
+        de coups des Sliders ; faux si le site n'a pas la forme attendue."""
+        site = self.base + self.ZONE_SLIDER_HOOK_RVA
+        code = self.proc.read_bytes(site - 3, 8)
+        if code[:4] != bytes.fromhex("488bcbe8"):
+            return False
+        target = site + 5 + struct.unpack_from("<i", code, 4)[0]
+        if target != funcs["hit_collect"]:
+            return self._zone_slider_cave_ok(target, funcs)  # deja detourne (trainer relance)
+        cave = self.proc.alloc_near(site)
+        if not cave:
+            return False
+        self.proc.write_bytes(cave, self._zone_slider_stub(funcs))
+        self.proc.write_bytes(site + 1, struct.pack("<i", cave - (site + 5)))
+        return True
+
+    def _zone_slider_stub(self, funcs: dict[str, int]) -> bytes:
+        offset, bit = self.ZONE_SLIDER_MARK
+        marked = (bytes.fromhex("81a3") + struct.pack("<II", offset, ~bit & 0xFFFFFFFF)          # and [rbx+3E4],~marque
+                  + bytes.fromhex("48b8") + struct.pack("<Q", funcs["player_entry"]) + bytes.fromhex("ffd0")
+                  + bytes.fromhex("488b00488983c8000000")                                       # attaquant = Snake
+                  + bytes.fromhex("c7830c010000") + struct.pack("<I", self.ZONE_VEHICLE_KILL_HIT)  # coup 0x1000
+                  + bytes.fromhex("834b6801")                                                   # or [rbx+68],1
+                  + bytes.fromhex("c7831403000000000000")                                       # vie 0
+                  + bytes.fromhex("48c783f803000000000000"))                                    # delai 0
+        return (bytes.fromhex("4883ec2848b8") + struct.pack("<Q", funcs["hit_collect"]) + bytes.fromhex("ffd0")
+                + bytes.fromhex("f783") + struct.pack("<II", offset, bit)                       # test [rbx+3E4],marque
+                + bytes([0x74, len(marked)]) + marked
+                + bytes.fromhex("4883c428c3"))
+
+    def _zone_slider_cave_ok(self, cave: int, funcs: dict[str, int]) -> bool:
+        """Vrai si le detour en place est le notre (memes octets)."""
+        stub = self._zone_slider_stub(funcs)
+        try:
+            return self.proc.read_bytes(cave, len(stub)) == stub
+        except OSError:
+            return False
+
+    def _zone_slider_kill(self, damage: int) -> None:
+        offset, bit = self.ZONE_SLIDER_MARK
+        flags = struct.unpack("<I", self.proc.read_bytes(damage + offset, 4))[0]
+        self.proc.write_bytes(damage + offset, struct.pack("<I", flags | bit))
+
+    # Sliders de Raging Raven (2026-10-25, valide : les 8 explosent) : classe
+    # BOSS_SLIDER (gestionnaire BOSS_SLDMNG), taches de mise a jour 13CB420,
+    # objet a tache+0x90 ; en vol si +0x584 == 1. Vie +0x57C (500). Chaque
+    # image, 13EC230 appelle la methode de degats 13CA170 (qui efface les
+    # bits 0x300 de +0x588, puis a vie <= 0 pose 0x600 et libere +0x5E8 /
+    # +0x5F0 par 40B110), puis si le bit 0x200 est leve : message 2 au
+    # gestionnaire (13B4820 -> 13CC8A0), son 86F20([+0x520], 0x1000),
+    # explosion 13F4440, score 4CF5A0(100). Ecrire vie et bits ne suffit pas
+    # (le bit 0x200 est efface avant le test) : un petit code fait la mort
+    # puis cette sequence dans le meme appel.
+    ZONE_BOSS_SLIDER_UPDATE_RVA = 0x13CB420
+    ZONE_BOSS_SLIDER_LIFE = 0x57C
+    ZONE_BOSS_SLIDER_FLYING = 0x584
+    ZONE_BOSS_SLIDER_FUNCS = {
+        "bs_manager": (0x13B4820, "488b154999be224885d2742748b8ffff"),
+        "bs_notify": (0x13CC8A0, "40534883ec204533c9488d81b0380000"),
+        "bs_sound": (0x86F20, "f6c23f7403c601000911c3"),
+        "bs_explode": (0x13F4440, "4533c0418d500de9b40b0000"),
+        "bs_score": (0x4CF5A0, "4c8bdc5741564881ec38010000488b05"),
+        "bs_release": (0x40B110, "4885c9743248894c24084883ec28488b"),
+        "bs_death_msg": (0x13EC2F7, "8b05........8944242cc744242802"),  # mov eax,[rip+x] : 2e mot du message
+    }
+
+    def _zone_boss_sliders(self) -> list[int]:
+        """Sliders de Raging Raven en vol et vivants."""
+        head = self.base + self.ZONE_TASK_LIST_RVA
+        update = self.base + self.ZONE_BOSS_SLIDER_UPDATE_RVA
+        out = []
+        task = struct.unpack("<Q", self.proc.read_bytes(head + self.ZONE_TASK_NEXT, 8))[0]
+        for _ in range(0x1000):
+            if not task or task == head:
+                break
+            if struct.unpack("<Q", self.proc.read_bytes(task + self.ZONE_TASK_UPDATE, 8))[0] == update:
+                slider = struct.unpack("<Q", self.proc.read_bytes(task + 0x90, 8))[0]
+                if slider:
+                    life, _, flying = struct.unpack("<iii", self.proc.read_bytes(slider + self.ZONE_BOSS_SLIDER_LIFE, 12))
+                    if life > 0 and flying == 1:
+                        out.append(slider)
+            task = struct.unpack("<Q", self.proc.read_bytes(task + self.ZONE_TASK_NEXT, 8))[0]
+        return out
+
+    def _zone_boss_slider_stub(self, funcs: dict[str, int]) -> int:
+        """Petit code place dans le jeu (un par processus) : mort du Slider
+        (vie 0, bit 0x400, liberations) puis la sequence de mort du jeu."""
+        if getattr(self, "_zone_bs_stub_pid", None) == self.pid:
+            return self._zone_bs_stub_addr
+        site = funcs["bs_death_msg"]
+        message_word = site + 6 + struct.unpack("<i", self.proc.read_bytes(site + 2, 4))[0]
+        call = lambda name: bytes.fromhex("48b8") + struct.pack("<Q", funcs[name]) + bytes.fromhex("ffd0")
+        release = lambda offset: (bytes.fromhex("488b8b") + struct.pack("<I", offset)
+                                  + bytes.fromhex("4885c9740c") + call("bs_release"))
+        notify = bytes.fromhex("4889c1488d542420") + call("bs_notify")
+        sound = bytes.fromhex("ba00100000") + call("bs_sound")
+        code = (bytes.fromhex("534883ec404889cb")
+                + bytes.fromhex("c7837c050000") + struct.pack("<I", 0)             # vie 0
+                + bytes.fromhex("818b88050000") + struct.pack("<I", 0x400)         # mort
+                + release(0x5E8) + release(0x5F0)
+                + bytes.fromhex("488b43104889442420c744242802000000")             # message : [+0x10], 2,
+                + bytes.fromhex("48b8") + struct.pack("<Q", message_word)
+                + bytes.fromhex("8b008944242c")                                     # ... et le mot global
+                + call("bs_manager") + bytes.fromhex("4885c074") + bytes([len(notify)]) + notify
+                + bytes.fromhex("488b8b20050000") + bytes.fromhex("4885c974") + bytes([len(sound)]) + sound
+                + bytes.fromhex("4889d9") + call("bs_explode")
+                + bytes.fromhex("b964000000") + call("bs_score")
+                + bytes.fromhex("4883c4405bc3"))
+        stub = kernel32.VirtualAllocEx(self.proc.handle, None, 0x1000, MEM_COMMIT | 0x2000, PAGE_EXECUTE_READWRITE)
+        if not stub:
+            return 0
+        self.proc.write_bytes(stub, code)
+        self._zone_bs_stub_addr, self._zone_bs_stub_pid = stub, self.pid
+        return stub
+
+    def _zone_boss_slider_kill(self, funcs: dict[str, int], slider: int) -> bool | None:
+        """Detruit un Slider de Raging Raven ; False si l'appel au jeu a echoue."""
+        life, _, flying = struct.unpack("<iii", self.proc.read_bytes(slider + self.ZONE_BOSS_SLIDER_LIFE, 12))
+        if life <= 0 or flying != 1:
+            return None  # detruit depuis
+        stub = self._zone_boss_slider_stub(funcs)
+        if not stub:
+            return None
+        return False if self.speed.game_call(stub, slider) is None else None
 
     # Salle blanche des Beauty (2026-10-23, valide sur Crying Wolf et une
     # autre Beauty) : apres la Bete, la Beauty est une tache de la liste des
@@ -406,12 +607,20 @@ class ZoneMixin:
         la forme attendue (machine qui renvoie a l'acteur, etat "touche" avec
         la bonne entree), (0, 0) sinon."""
         if self._zone_kind(actor) == "gekko":
-            offset, index, enter_rva = (self.ZONE_GEKKO_MACHINE_OFFSET, self.ZONE_GEKKO_HIT_STATE,
-                                        self.ZONE_GEKKO_HIT_STATE_ENTER_RVA)
+            offsets, index, enter_rva = ((self.ZONE_GEKKO_MACHINE_OFFSET,), self.ZONE_GEKKO_HIT_STATE,
+                                         self.ZONE_GEKKO_HIT_STATE_ENTER_RVA)
         else:
-            offset, index, enter_rva = 0xE7D0, self.ZONE_HIT_STATE, self.ZONE_HIT_STATE_ENTER_RVA
-        machine = struct.unpack("<Q", self.proc.read_bytes(actor + offset, 8))[0]
-        if not machine or struct.unpack("<Q", self.proc.read_bytes(machine + 0x50, 8))[0] != actor:
+            offsets, index, enter_rva = self.ZONE_SOLDIER_MACHINE_OFFSETS, self.ZONE_HIT_STATE, self.ZONE_HIT_STATE_ENTER_RVA
+        machine = 0
+        for offset in offsets:
+            candidate = struct.unpack("<Q", self.proc.read_bytes(actor + offset, 8))[0]
+            try:
+                if candidate and struct.unpack("<Q", self.proc.read_bytes(candidate + 0x50, 8))[0] == actor:
+                    machine = candidate
+                    break
+            except OSError:
+                continue  # autre champ a cet endroit (handle de tache chez 18F38D0)
+        if not machine:
             return 0, 0
         states = struct.unpack("<Q", self.proc.read_bytes(machine + 0x20, 8))[0]
         state = struct.unpack("<Q", self.proc.read_bytes(states + index * 8, 8))[0]
@@ -491,18 +700,30 @@ class ZoneMixin:
             targets = [(s, lo) for s, lo, gauges in self._zone_soldiers()
                        if self._zone_eligible(action, s, gauges) and self._zone_camp_matches(s, target)]
             mini_gekkos = self._zone_mini_gekkos() if mg_funcs else []
-            vehicles = self._zone_vehicles() if vehicle_funcs and funcs else []
+            vehicles = [v for v in self._zone_vehicles() if self._zone_vehicle_camp_matches(v, target)] \
+                if vehicle_funcs and funcs else []
             helicopters = self._zone_helicopters() if machines and action == "kill" else []
+            slider_funcs = self._live_funcs(self.ZONE_SLIDER_FUNCS) if machines and action == "kill" else None
+            sliders = self._zone_sliders() if slider_funcs else []
+            if sliders and not self._zone_slider_hook(slider_funcs):
+                sliders = []
+            bs_funcs = self._live_funcs(self.ZONE_BOSS_SLIDER_FUNCS) if machines and action == "kill" else None
+            boss_sliders = self._zone_boss_sliders() if bs_funcs else []
         except OSError:
             return False
-        if funcs is None or not (targets or mini_gekkos or vehicles or helicopters):
+        if funcs is None or not (targets or mini_gekkos or vehicles or helicopters or sliders or boss_sliders):
             return False
+        if boss_sliders:
+            funcs = {**funcs, **bs_funcs}
+        for damage in sliders:
+            self._zone_slider_kill(damage)  # traite par le jeu a l'image suivante
         if vehicles:
             funcs = {**funcs, **vehicle_funcs}
         if mini_gekkos:
             funcs = {**funcs, **mg_funcs}
         self._zone_busy = True
-        threading.Thread(target=self._zone_run, args=(action, funcs, targets, mini_gekkos, vehicles, helicopters),
+        threading.Thread(target=self._zone_run,
+                         args=(action, funcs, targets, mini_gekkos, vehicles, helicopters, boss_sliders),
                          daemon=True).start()
         return True
 
@@ -532,11 +753,13 @@ class ZoneMixin:
         return True
 
     def _zone_run(self, action: str, funcs: dict[str, int], targets: list[tuple[int, int]],
-                  mini_gekkos: list[int], vehicles: list[int], helicopters: list[int]) -> None:
+                  mini_gekkos: list[int], vehicles: list[int], helicopters: list[int],
+                  boss_sliders: list[int]) -> None:
         jobs = ([(self._zone_apply, (action, funcs, soldier, life_object)) for soldier, life_object in targets]
                 + [(self._zone_mini_gekko_apply, (action, funcs, mini_gekko)) for mini_gekko in mini_gekkos]
                 + [(self._zone_vehicle_kill, (funcs, vehicle)) for vehicle in vehicles]
-                + [(self._zone_helicopter_kill, (helicopter,)) for helicopter in helicopters])
+                + [(self._zone_helicopter_kill, (helicopter,)) for helicopter in helicopters]
+                + [(self._zone_boss_slider_kill, (funcs, slider)) for slider in boss_sliders])
         try:
             for apply, args in jobs:
                 try:
@@ -586,6 +809,15 @@ class ZoneMixin:
         if action in ("kill", "knockout", "gekko_sleep", "gekko_knockout"):
             machine, state = self._zone_hit_state(soldier)
             if not machine:
+                if action == "kill" and kind == "soldier":
+                    # Soldat scripte sans machine a etats (SMP sur le van,
+                    # acte 3) : demande de mise a mort de l'acteur.
+                    request = self.proc.read_bytes(soldier + self.ZONE_KILL_REQUEST_OFFSET, 0x18)
+                    if any(request):
+                        return None
+                    self.proc.write_bytes(soldier + self.ZONE_KILL_REQUEST_OFFSET,
+                                          struct.pack("<iiI", *self.ZONE_KILL_REQUEST))
+                    return False if call(funcs["kill_request"], soldier) is None else None
                 return None
             if action == "gekko_knockout":
                 for offset, value in self.ZONE_GEKKO_KNOCKOUT_HIT:

@@ -17,16 +17,35 @@ class CutsceneMenuMixin:
       - 4C0D09 : 3 entrees ;
       - 4C0DE4 : table de surbrillance a nous {PASSER, CONTINUER, 0} (le
         hachage 0 ne lance rien) ;
-      - 4C0DC1 : validation curseur 2 -> compteur (le trainer ramene au
-        menu principal), le menu se ferme comme pour CONTINUER ;
-      - 4C0B80 : note la tache a chaque image (menu ouvert, curseur).
+      - 4C0DC1 : validation curseur 2 -> compteur, le menu reste ouvert (le
+        trainer ouvre la confirmation du jeu, voir plus bas) ;
+      - 4C0B80 : note la tache a chaque image (menu ouvert, curseur), et
+        saute la mise a jour du menu tant que le trainer a ouvert la fenetre
+        de confirmation (octet page+0x20 ; pas le bit 0x2000 de mgs4+3B7C0E0,
+        qui peut rester leve et figeait alors la cinematique) : seule la
+        fenetre reagit.
     La scene n'a que 2 lignes : la 3e est dessinee par le trainer
     (CutsceneQuitOverlay). Curseur sur QUITTER : la barre du jeu descend d'une
     ligne (decalage 0x3C0, 1/16 px de 720p) et PASSER/CONTINUER passent en
-    gris (0x80808040), reecrits tant que le curseur y reste."""
+    gris (0x80808040), reecrits tant que le curseur y reste.
+
+    Confirmation (2026-10-24, validee en jeu) : la vraie fenetre « Retourner
+    a l'ecran titre ? » OUI / NON du menu Sauvegarder (tache creee par
+    526980, scene 0x15E2AE). Elle a besoin du paquet de ressources du menu
+    pause, charge par 4EE0C0(0x38118E) (tache de chargement a terminer
+    ensuite : laissee vivante, elle bloque le menu pause suivant), et d'une
+    couche d'affichage : 4D6D10 la lit dans le gestionnaire du menu pause
+    (absent ici, plantage) -> l'appel en 4D5F7E est remplace par « mov
+    eax,1 » le temps de la creation (couche du menu des cinematiques ; 4 =
+    couche du menu pause, plante hors de lui). Elle est rattachee au menu
+    (740D30) dont la racine (noeud 0x2A4634) est masquee avant (sinon le
+    menu reste dessine devant). Elle ne se termine pas seule (elle attend une
+    tache de fondu absente) : le trainer la termine (740A90). Sur OUI, sa
+    sequence de sortie (drapeaux globaux, fondu, 83830) est court-circuitee
+    (5268DE) et le trainer ramene au menu principal (return_to_title)."""
 
     CSM_ENTRY, CSM_CONFIRM, CSM_COUNT, CSM_TABLE_LEA = 0x4C0B80, 0x4C0DC1, 0x4C0D09, 0x4C0DE4
-    CSM_CONTINUE, CSM_SKIP = 0x4C0DAE, 0x4C0DCA
+    CSM_CONTINUE, CSM_SKIP, CSM_NOOP = 0x4C0DAE, 0x4C0DCA, 0x4C0DFA
     CSM_ORIGINAL = {
         CSM_ENTRY: bytes.fromhex("40534883ec30"),        # push rbx ; sub rsp,30h
         CSM_CONFIRM: bytes.fromhex("83bba00000000075e4"),  # cmp [rbx+A0h],0 ; jne continuer
@@ -42,10 +61,39 @@ class CutsceneMenuMixin:
     CSM_TEXT_COLORS = (-0x28, -0x10, 0x88, 0xA0)
     # Liste d'affichage : commande couleur clignotante de la barre (repere),
     # copies de la position de la barre et couleurs affichees des textes.
-    CSM_LIST_ANCHOR = re.compile(rb"\x14\x00\x00\x00........\x00\x00\x00\x01"
-                                 rb"\x16\x00\x00\x00\x00\x00\x00\x00.\x80\x80\x80", re.S)
+    # Commande = code sur 1 octet (0x14, 0x16), les 3 octets suivants et le
+    # mot suivant portent des parametres variables (16 0e e9 bb...). Liste propre a la scene
+    # (scene+0x148, taille +0x150 ; vu : barre a liste+0x660), allouee a part :
+    # sa distance au texte varie, la chercher autour faisait des faux reperes.
+    CSM_LIST_ANCHOR = re.compile(rb"\x14...........\x00\x00\x00\x01"
+                                 rb"\x16.......[\x00-\x80]\x80\x80\x80", re.S)
+    CSM_ANCHOR_RETRY = 0.15  # s entre deux recherches de la liste
+    CSM_COLOR_CMD = b"\x00\x00\x00\x01\x16"
     CSM_LIST_BAR, CSM_LIST_TEXT = (-0x50, -0x10), (0x138, 0x1D8)
     CSM_DIM = 0x80808040
+    # Confirmation du jeu : fonctions (signatures verifiees) et patchs.
+    CSM_DLG_FUNCS = {
+        "create": (0x526980, "48895c2408574883ec2048bf"),
+        "load": (0x4EE0C0, "48895c240848897424105748"),
+        "attach": (0x740D30, "4883ec284c8bd14885d20f84"),
+        "end": (0x740A90, "4885c90f84df000000534883"),
+        "node": (0x438C00, "448b8170010000448bda4c8b"),
+        "noop": (0x4C0DFA, "48c783b000000000000000"),
+    }
+    CSM_LAYER_CALL, CSM_LAYER_ORIGINAL = 0x4D5F7E, bytes.fromhex("e88d0d0000")
+    # Liste de rendu de la couche (objet de rendu de la scene, +0x24) : le
+    # menu des cinematiques est en liste 2, la fenetre serait creee en liste 1
+    # (dessinee avant, donc dessous) -> « mov edx,2 » le temps de la creation.
+    CSM_LIST_PARAM, CSM_LIST_ORIGINAL, CSM_LIST_MENU = 0x4D5F83, bytes.fromhex("ba01000000"), bytes.fromhex("ba02000000")
+    CSM_HIDE_MENU = False
+    CSM_YES_PATH, CSM_YES_ORIGINAL, CSM_YES_SKIP = 0x5268DE, bytes.fromhex("4881"), bytes.fromhex("ebca")
+    CSM_DLG_LAYER = 1
+    CSM_PACKAGE, CSM_DLG_RESOURCE = 0x38118E, 0x5F15E2AE
+    CSM_RESOURCE_ROOTS = 0x23D2F6D0   # arbres des ressources chargees (74C0B0)
+    CSM_UI_FLAGS = 0x3B7C0E0          # bit 0x2000 = fenetre de confirmation ouverte
+    CSM_MENU_ROOT = 0x2A4634          # noeud racine de la scene du menu
+    CSM_HIDE_DELAY, CSM_NO_DELAY, CSM_LOAD_TIMEOUT = 0.12, 0.6, 5.0
+    HANDLE_MASK = 0xFFFFFFFFFFFFF
 
     def cutscene_quit_install(self) -> bool:
         state = getattr(self, "_csm", None)
@@ -57,10 +105,16 @@ class CutsceneMenuMixin:
             if self.proc.read_bytes(self.base + rva, len(original)) != original:
                 return False
         b = self.base
+        confirm_ok = all(self.proc.read_bytes(b + rva, len(sig) // 2).hex() == sig
+                         for rva, sig in self.CSM_DLG_FUNCS.values())
+        confirm_ok = (confirm_ok and self.proc.read_bytes(b + self.CSM_LAYER_CALL, 5) == self.CSM_LAYER_ORIGINAL
+                      and self.proc.read_bytes(b + self.CSM_LIST_PARAM, 5) == self.CSM_LIST_ORIGINAL
+                      and self.proc.read_bytes(b + self.CSM_YES_PATH, 2) == self.CSM_YES_ORIGINAL)
         page = self.proc.alloc_near(b + self.CSM_ENTRY, 0x1000)
         if not page:
             return False
         table, task, tick, quit_count = page, page + 0x10, page + 0x18, page + 0x1C
+        frozen = page + 0x20  # 1 = fenetre de confirmation ouverte : menu fige
 
         def rel(target: int, end: int) -> bytes:
             return struct.pack("<i", target - end)
@@ -69,13 +123,17 @@ class CutsceneMenuMixin:
         entry = page + 0x40
         code = bytearray(b"\x48\x89\x0d" + rel(task, entry + 7))       # mov [tache],rcx
         code += b"\xff\x05" + rel(tick, entry + len(code) + 6)          # inc [images]
+        # Octet du trainer et non le bit 0x2000 du jeu : resté levé une fois,
+        # il figeait la cinematique jusqu'a la fermeture du trainer.
+        code += b"\x80\x3d" + rel(frozen, entry + len(code) + 7) + b"\x00"   # cmp byte [fige],0
+        code += b"\x74\x01\xc3"                                          # jz +1 ; ret (fenetre ouverte)
         code += self.CSM_ORIGINAL[self.CSM_ENTRY]
         code += b"\xe9" + rel(b + self.CSM_ENTRY + 6, entry + len(code) + 5)
         self.proc.write_bytes(entry, bytes(code))
         confirm = page + 0x80
         code = bytearray(b"\x83\xbb\xa0\x00\x00\x00\x02\x75\x0b")      # cmp [rbx+A0h],2 ; jne +0Bh
         code += b"\xff\x05" + rel(quit_count, confirm + len(code) + 6)  # inc [quitter]
-        code += b"\xe9" + rel(b + self.CSM_CONTINUE, confirm + len(code) + 5)
+        code += b"\xe9" + rel(b + (self.CSM_NOOP if confirm_ok else self.CSM_CONTINUE), confirm + len(code) + 5)
         code += b"\x83\xbb\xa0\x00\x00\x00\x00"                          # cmp [rbx+A0h],0
         code += b"\x0f\x85" + rel(b + self.CSM_CONTINUE, confirm + len(code) + 6)
         code += b"\xe9" + rel(b + self.CSM_SKIP, confirm + len(code) + 5)
@@ -86,8 +144,31 @@ class CutsceneMenuMixin:
         self.proc.write_bytes(b + self.CSM_ENTRY, b"\xe9" + rel(entry, b + self.CSM_ENTRY + 5) + b"\x90")
         self._csm = {"pid": self.pid, "page": page, "tick": None, "seen": 0.0,
                      "quit": struct.unpack("<I", self.proc.read_bytes(quit_count, 4))[0],
-                     "task": None, "key": None, "anchor": None}
+                     "task": None, "key": None, "anchor": None, "anchor_try": 0.0,
+                     "confirm_ok": confirm_ok, "confirm": None,
+                     "title": False, "label": None}
         return True
+
+    def cutscene_title_request(self) -> bool:
+        """Vrai une fois apres QUITTER confirme : le trainer pose son rideau
+        noir puis ramene au menu principal (return_to_title)."""
+        state = getattr(self, "_csm", None)
+        if not (state and state["pid"] == self.pid and state["title"]):
+            return False
+        state["title"] = False
+        return True
+
+    def cutscene_quit_label(self) -> str | None:
+        """Texte de la ligne QUITTER dans la langue du jeu : la description
+        « Retourner a l'ecran titre. » du menu pause (numero 31), en
+        majuscules comme les autres lignes ; None si indisponible."""
+        state = getattr(self, "_csm", None)
+        if not (state and state["pid"] == self.pid):
+            return None
+        if state["label"] is None:
+            text = self.game_menu_text(31) if self.speed.ensure_injected(self.pid) else None
+            state["label"] = text.strip().rstrip(".。").upper() if text else ""
+        return state["label"] or None
 
     def cutscene_quit_remove(self) -> None:
         state = getattr(self, "_csm", None)
@@ -95,34 +176,185 @@ class CutsceneMenuMixin:
         if not (state and state["pid"] == self.pid and self.proc):
             return
         try:
+            if state.get("confirm"):
+                self._csm_confirm_cleanup(state, show_menu=True)
             for rva, original in self.CSM_ORIGINAL.items():
                 self.proc.write_bytes(self.base + rva, original)
         except OSError:
             pass
 
     def cutscene_menu_poll(self) -> tuple[bool, int | None, bool]:
-        """(menu ouvert, curseur, QUITTER valide depuis le dernier appel)."""
+        """(menu ouvert, curseur, confirmation en cours). Fait avancer la
+        confirmation ; sans elle (autre version du jeu), QUITTER ramene
+        directement au menu principal."""
         state = getattr(self, "_csm", None)
         if not (state and state["pid"] == self.pid):
             return False, None, False
         page = state["page"]
         task, tick, quit_count = struct.unpack("<QII", self.proc.read_bytes(page + 0x10, 16))
         now = time.monotonic()
+        self._csm_late_loader(state, now)
+        confirm = state["confirm"]
         if tick != state["tick"]:
             state["tick"], state["seen"] = tick, now
         quit_requested = quit_count != state["quit"]
         state["quit"] = quit_count
-        if not task or now - state["seen"] > self.CSM_OPEN_DELAY:
-            return False, None, quit_requested
+        # Menu fige pendant la confirmation (sa mise a jour est sautee) :
+        # le compteur d'images continue, le menu reste "ouvert".
+        # Tache du menu terminee a sa fermeture : le texte disparait tout de
+        # suite (le delai ne sert que si elle survivait).
+        alive = bool(task) and self._csm_alive(struct.unpack("<Q", self.proc.read_bytes(task + 0x30, 8))[0])
+        menu_open = alive and now - state["seen"] <= self.CSM_OPEN_DELAY
+        if confirm:
+            # Pas de delai ici : jeu sans le focus = boucle arretee, compteur
+            # fige, mais la confirmation est toujours la.
+            if not alive:
+                self._csm_confirm_cleanup(state, show_menu=False)
+                return False, None, False
+            self._csm_confirm_step(state, now)
+            confirm = state["confirm"]
+            return True, 2, bool(confirm and confirm["stage"] in ("open", "closing"))
+        if not menu_open:
+            return False, None, False
+        if quit_requested:
+            if state["confirm_ok"]:
+                self._csm_confirm_start(state, task, now)
+                return True, 2, False
+            state["title"] = True
         cursor = struct.unpack("<i", self.proc.read_bytes(task + 0xA0, 4))[0]
         if cursor == 2:
             self._csm_highlight_quit(state, task)
-        return True, cursor, quit_requested
+        return True, cursor, False
+
+    # --- confirmation du jeu ---
+
+    def _csm_alive(self, handle: int | None) -> bool:
+        if not handle:
+            return False
+        try:
+            return struct.unpack("<Q", self.proc.read_bytes((handle & self.HANDLE_MASK) + 0x30, 8))[0] == handle
+        except OSError:
+            return False
+
+    def _csm_resource_loaded(self, key: int) -> bool:
+        def q(address: int) -> int:
+            return struct.unpack("<Q", self.proc.read_bytes(address, 8))[0]
+
+        node = q(self.base + self.CSM_RESOURCE_ROOTS + ((key >> 3) & 0xF) * 8)
+        wanted = key & 0x7FFFFFFF
+        for _ in range(64):
+            if not node:
+                return False
+            current = struct.unpack("<I", self.proc.read_bytes(node + 0x10, 4))[0] & 0x7FFFFFFF
+            if current == wanted:
+                return True
+            node = q(node) if wanted < current else q(node + 8)
+        return False
+
+    def _csm_menu_root(self, show: bool, root: int | None) -> None:
+        if not root:
+            return
+        flags = struct.unpack("<I", self.proc.read_bytes(root, 4))[0]
+        # bit 22 = voulu affiche, bit 28 = masque, bit 30 = a recalculer
+        flags = (flags | 0x400000) if show else (flags & ~0x400000)
+        self.proc.write_bytes(root, struct.pack("<I", flags | 0x40000000))
+
+    def _csm_confirm_start(self, state: dict, task: int, now: float) -> None:
+        call, b = self.speed.game_call, self.base
+        scene = struct.unpack("<Q", self.proc.read_bytes(task + 0x98, 8))[0]
+        root = None
+        if self.CSM_HIDE_MENU:
+            root = call(b + self.CSM_DLG_FUNCS["node"][0], scene, self.CSM_MENU_ROOT) if scene else None
+            self._csm_menu_root(False, root)
+        state["confirm"] = {"stage": "hide", "since": now, "task": task, "root": root,
+                            "loader": None, "dialog": None}
+
+    def _csm_confirm_step(self, state: dict, now: float) -> None:
+        c, call, b = state["confirm"], self.speed.game_call, self.base
+        stage = c["stage"]
+        if stage == "hide" and now - c["since"] >= self.CSM_HIDE_DELAY:
+            if not self._csm_resource_loaded(self.CSM_DLG_RESOURCE):
+                c["loader"] = call(b + self.CSM_DLG_FUNCS["load"][0], self.CSM_PACKAGE)
+            c["stage"], c["since"] = "load", now
+        elif stage == "load":
+            if self._csm_resource_loaded(self.CSM_DLG_RESOURCE):
+                self.proc.write_bytes(b + self.CSM_YES_PATH, self.CSM_YES_SKIP)
+                self.proc.write_bytes(b + self.CSM_LAYER_CALL, b"\xb8" + struct.pack("<I", self.CSM_DLG_LAYER))
+                self.proc.write_bytes(b + self.CSM_LIST_PARAM, self.CSM_LIST_MENU)
+                try:
+                    dialog = call(b + self.CSM_DLG_FUNCS["create"][0])
+                finally:
+                    self.proc.write_bytes(b + self.CSM_LAYER_CALL, self.CSM_LAYER_ORIGINAL)
+                    self.proc.write_bytes(b + self.CSM_LIST_PARAM, self.CSM_LIST_ORIGINAL)
+                if not self._csm_alive(dialog):
+                    self._csm_confirm_cleanup(state, show_menu=True)
+                    return
+                call(b + self.CSM_DLG_FUNCS["attach"][0], c["task"], dialog)
+                self.proc.write_bytes(state["page"] + 0x20, b"\x01")  # menu fige
+                c["dialog"], c["stage"] = dialog, "open"
+            elif now - c["since"] > self.CSM_LOAD_TIMEOUT:
+                self._csm_confirm_cleanup(state, show_menu=True)
+        elif stage == "open":
+            dialog = c["dialog"]
+            if not self._csm_alive(dialog):
+                self._csm_confirm_cleanup(state, show_menu=True)
+                return
+            cursor, closing = struct.unpack("<ii", self.proc.read_bytes((dialog & self.HANDLE_MASK) + 0x98, 8))
+            if closing:
+                if cursor == 0:  # OUI
+                    self._csm_confirm_cleanup(state, show_menu=False)
+                    state["title"] = True
+                else:
+                    c["stage"], c["since"] = "closing", now
+        elif stage == "closing" and now - c["since"] >= self.CSM_NO_DELAY:
+            self._csm_confirm_cleanup(state, show_menu=True)
+
+    def _csm_confirm_cleanup(self, state: dict, show_menu: bool) -> None:
+        c, call, b = state["confirm"], self.speed.game_call, self.base
+        state["confirm"] = None
+        if not c:
+            return
+        if self._csm_alive(c["dialog"]):
+            call(b + self.CSM_DLG_FUNCS["end"][0], c["dialog"] & self.HANDLE_MASK)
+        self.proc.write_bytes(state["page"] + 0x20, b"\x00")  # menu libere
+        if not self._csm_alive(c["dialog"]):  # bit « fenetre ouverte » du jeu, s'il est reste leve
+            flags = struct.unpack("<Q", self.proc.read_bytes(b + self.CSM_UI_FLAGS, 8))[0]
+            if flags & 0x2000:
+                self.proc.write_bytes(b + self.CSM_UI_FLAGS, struct.pack("<Q", flags & ~0x2000))
+        self.proc.write_bytes(b + self.CSM_YES_PATH, self.CSM_YES_ORIGINAL)
+        # Tache de chargement terminee seulement une fois le paquet charge :
+        # la couper en pleine lecture peut corrompre la memoire (plantage
+        # du 2026-10-25 dans la lecture 128DD0, apres le mode photo) ; sinon
+        # elle est terminee plus tard (_csm_late_loader).
+        if self._csm_alive(c["loader"]):
+            if self._csm_resource_loaded(self.CSM_DLG_RESOURCE):
+                call(b + self.CSM_DLG_FUNCS["end"][0], c["loader"] & self.HANDLE_MASK)
+            else:
+                state["late_loader"] = (c["loader"], time.monotonic())
+        if show_menu:
+            self._csm_menu_root(True, c["root"])
+
+    CSM_LATE_LOADER_TIMEOUT = 20.0  # s ; au-dela, la tache se termine seule (delai du jeu)
+
+    def _csm_late_loader(self, state: dict, now: float) -> None:
+        """Termine une tache de chargement laissee en cours au nettoyage, une
+        fois le paquet charge."""
+        late = state.get("late_loader")
+        if not late:
+            return
+        loader, since = late
+        if not self._csm_alive(loader) or now - since > self.CSM_LATE_LOADER_TIMEOUT:
+            state["late_loader"] = None
+        elif self._csm_resource_loaded(self.CSM_DLG_RESOURCE):
+            state["late_loader"] = None
+            self.speed.game_call(self.base + self.CSM_DLG_FUNCS["end"][0], loader & self.HANDLE_MASK)
 
     def _csm_highlight_quit(self, state: dict, task: int) -> None:
+        now = time.monotonic()
         if state["task"] != task:
-            state["task"], state["key"], state["anchor"] = task, None, None
+            state["task"], state["key"], state["anchor"], state["anchor_try"] = task, None, None, 0.0
             scene = struct.unpack("<Q", self.proc.read_bytes(task + 0x98, 8))[0]
+            state["scene"] = scene
             if not scene:
                 return
             low = scene - 0x1000
@@ -130,17 +362,26 @@ class CutsceneMenuMixin:
             found = data.find(self.CSM_TEXT_RECORD)
             if found < 0:
                 return
-            key = low + found + 4
-            area = self.proc.read_bytes(key, 0x4000)
-            for match in self.CSM_LIST_ANCHOR.finditer(area):
-                anchor = match.end() - 4
-                # Couleur d'un texte = commande 0x16 precedee de 00000001.
-                if all(area[anchor + off - 12:anchor + off - 4] == b"\x00\x00\x00\x01\x16\x00\x00\x00"
-                       for off in self.CSM_LIST_TEXT):
-                    state["anchor"] = key + anchor
-                    break
-            state["key"] = key
-        key, anchor = state["key"], state["anchor"]
+            state["key"] = low + found + 4
+        key = state["key"]
+        # Repere cherche dans la liste d'affichage de la scene (adresse en
+        # scene+0x148, taille en +0x150) ; nouvel essai tant qu'il manque.
+        if key and not state["anchor"] and now - state["anchor_try"] >= self.CSM_ANCHOR_RETRY:
+            state["anchor_try"] = now
+            scene = state["scene"]
+            start = struct.unpack("<Q", self.proc.read_bytes(scene + 0x148, 8))[0]
+            size = struct.unpack("<I", self.proc.read_bytes(scene + 0x150, 4))[0]
+            area = self.proc.read_bytes(start, min(size, 0x10000)) if start and size else b""
+            # Couleur d'un texte = commande 0x16 precedee de 00000001. Un autre
+            # element (titre) a la meme forme, couleurs fixes 80808080 : la
+            # barre est celle qui clignote, sinon la derniere.
+            found = [match.end() - 4 for match in self.CSM_LIST_ANCHOR.finditer(area)
+                     if all(area[match.end() - 4 + off - 12:match.end() - 4 + off - 7] == self.CSM_COLOR_CMD
+                            for off in self.CSM_LIST_TEXT)]
+            if found:
+                blinking = [a for a in found if area[a] != 0x80]
+                state["anchor"] = start + (blinking or found)[-1]
+        anchor = state["anchor"]
         if not key:
             return
         for offset, value in self.CSM_BAR_NODE:

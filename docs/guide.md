@@ -84,7 +84,7 @@ L'onglet des réglages en direct, en plusieurs groupes :
     Non létal, les soldats et les Gekko sont endormis au premier coup, et
     les boss mis K.O. (endurance vidée, vie intacte). Les autres machines
     (tanks, hélicoptères, véhicules, Metal Gear RAY, objets destructibles)
-    sont détruites dans les deux modes, les mini Gekko détruits en Létal
+    sont détruites dans les deux modes, les Gekko nains détruits en Létal
     et paralysés en Non létal. Boss : voir [la page des boss](boss.md) ;
   - **Rail Gun / Solar Gun toujours chargés** : tir chargé à fond dès
     l'appui sur la gâchette (et laser de Metal Gear REX au niveau 5).
@@ -92,7 +92,7 @@ L'onglet des réglages en direct, en plusieurs groupes :
   - **Intouchable** : aucun impact n'a d'effet sur Snake (ni dégâts, ni
     projection, ni assommage) ; aux commandes de Metal Gear REX, REX
     ignore aussi les coups (ni dégâts, ni réaction) ;
-  - **Invisible** : les soldats, les Gekko et les mini Gekko ne le voient
+  - **Invisible** : les soldats, les Gekko et les Gekko nains ne le voient
     plus, même debout devant eux, et un tir sans silencieux ne les fait
     plus passer en alerte (le hold-up reste possible). À combiner avec
     "Pas d'alerte" pour que rien ne déclenche l'alerte générale ;
@@ -115,12 +115,13 @@ L'onglet des réglages en direct, en plusieurs groupes :
   - **Cible** : **Ennemis**, **Rebelles**, **Tous les PNJ** (les civils,
     les boss et le Rat Patrol ne sont jamais visés) ou **Rat Patrol**
     (Tuer, Assommer et Endormir seulement) ;
-  - **Tuer** : soldats, Gekko, mini Gekko, véhicules, tanks et
-    hélicoptères (les machines comptent comme ennemis) ;
+  - **Tuer** : soldats, Gekko, Gekko nains, véhicules, tanks,
+    hélicoptères et Sliders (les machines comptent comme ennemis, les
+    véhicules selon leur camp) ;
   - **Assommer** : les soldats tombent K.O., les Gekko tombent au sol,
-    les mini Gekko sont paralysés quelques secondes, les Gekko de la
+    les Gekko nains sont paralysés quelques secondes, les Gekko de la
     fuite de Metal Gear REX (acte 4) s'accroupissent quelques secondes ;
-  - **Endormir** : soldats et Gekko (ni les mini Gekko ni les Gekko de
+  - **Endormir** : soldats et Gekko (ni les Gekko nains ni les Gekko de
     la fuite de REX ne dorment) ;
   - **Rire**, **Pleurer**, **Enrager**, **Crier** : les émotions des
     Beauty, sur les soldats éveillés, pendant une trentaine de secondes ;

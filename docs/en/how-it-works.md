@@ -139,14 +139,14 @@ bullet then destroys a tank (confirmed in game, 2026-10-03). Only the
 rifle has been tested so far; a particular weapon could still be
 filtered further down the chain.
 
-**Helicopters, vehicles, mini Gekko, gates (V2.3).** Same principles,
+**Helicopters, vehicles, Dwarf Gekko, gates (V2.3).** Same principles,
 each with its own patches (confirmed in game, 2026-10-04):
 
 - **helicopters**: originally, only rocket launchers, explosives, the
   M82A2 and the Rail Gun hit them; all weapons now count and each hit
   removes all their health;
 - **Millennium Park vehicle**: its weapon filter is lifted;
-- **mini Gekko**: destroyed at the first impact (V2.4: paralyzed in
+- **Dwarf Gekko**: destroyed at the first impact (V2.4: paralyzed in
   Non-lethal);
 - **destructible objects** (gates to bring down with the tank cannon...):
   give way at the first impact. The minimum imposed by the level
@@ -166,7 +166,7 @@ included. Confirmed in game (2026-10-10):
   Mk.2 hits them too (helicopters, Gekko, gates confirmed; tanks not
   tested for lack of a tank), as well as the Mosin-Nagant's tranquilizer
   rounds (Gekko confirmed);
-- **mini Gekko**: destroyed at the first hit in Lethal, paralyzed in
+- **Dwarf Gekko**: destroyed at the first hit in Lethal, paralyzed in
   Non-lethal, Mk.2 included;
 - **Crying Wolf**, **Raging Raven**, **Screaming Mantis** (with the doll,
   Beast and Beauty forms), **Laughing Octopus** and the Beauties: stamina
@@ -204,7 +204,7 @@ quick Rail Gun shot.
   knockback, no knockout.
 - **Invisible**: soldiers and Gekko no longer see Snake, even standing
   right in front of them, as with the Stealth Camo but without the
-  transparency (the camo index shows 99 %). Since V2.4, mini Gekko no
+  transparency (the camo index shows 99 %). Since V2.4, Dwarf Gekko no
   longer detect him either (lasers, proximity, contact); a switch to
   Caution remains if Snake stays still among them. Since V2.4.1, an
   unsuppressed shot no longer causes an alert: the game stores all

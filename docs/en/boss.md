@@ -28,7 +28,7 @@ Notes:
 - **Liquid Ocelot**: the next hit starts the next phase; the last 7
   scripted hits are not covered.
 - **Machines** (Gekko, tanks, helicopters, vehicles, RAY): destroyed in
-  both modes; **mini Gekko**: destroyed in Lethal, paralyzed in
+  both modes; **Dwarf Gekko**: destroyed in Lethal, paralyzed in
   Non-lethal.
 
 The technical details (each boss's damage functions, patches) are in

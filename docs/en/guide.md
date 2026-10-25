@@ -65,7 +65,7 @@ The live settings tab, in several groups:
     soldiers in the area, the game handles no alert: forcing has no
     effect;
   - **No Alerts**: the general alert never goes off, whatever the cause
-    (sight, noise, body found, mini Gekko lasers...). Enemies still react
+    (sight, noise, body found, Dwarf Gekko lasers...). Enemies still react
     individually: a soldier who sees you shows his "!", aims and may shoot
     at you, but with no general alert, reinforcements or alert music.
 - **Weapons & Combat**:
@@ -80,7 +80,7 @@ The live settings tab, in several groups:
     in Non-lethal, soldiers and Gekko are put to sleep at the first hit,
     and bosses are knocked out (stamina drained, health untouched).
     Other machines (tanks, helicopters, vehicles, Metal Gear RAY,
-    destructible objects) are destroyed in both modes, mini Gekko
+    destructible objects) are destroyed in both modes, Dwarf Gekko
     destroyed in Lethal and paralyzed in Non-lethal. Bosses: see [the
     bosses page](boss.md);
   - **Rail Gun / Solar Gun Always Charged**: fully charged shot as soon
@@ -89,7 +89,7 @@ The live settings tab, in several groups:
   - **Untouchable**: no impact affects Snake (no damage, no knockback, no
     knockout); when piloting Metal Gear REX, REX ignores hits too (no
     damage, no reaction);
-  - **Invisible**: soldiers, Gekko and mini Gekko no longer see him, even
+  - **Invisible**: soldiers, Gekko and Dwarf Gekko no longer see him, even
     standing right in front of them, and an unsuppressed shot no longer
     puts them on alert (hold-ups still work). Combine with "No Alerts" so
     that nothing triggers the general alert;
@@ -111,12 +111,13 @@ The live settings tab, in several groups:
   - **Target**: **Enemies**, **Rebels**, **All NPCs** (civilians, bosses
     and the Rat Patrol are never targeted) or **Rat Patrol** (Kill, Knock
     out and Sleep only);
-  - **Kill**: soldiers, Gekko, mini Gekko, vehicles, tanks and
-    helicopters (machines count as enemies);
+  - **Kill**: soldiers, Gekko, Dwarf Gekko, vehicles, tanks,
+    helicopters and Sliders (machines count as enemies, vehicles
+    according to their side);
   - **Knock out**: soldiers fall unconscious, Gekko fall to the ground,
-    mini Gekko are paralyzed for a few seconds, the Gekko of the Metal
+    Dwarf Gekko are paralyzed for a few seconds, the Gekko of the Metal
     Gear REX escape (act 4) crouch for a few seconds;
-  - **Sleep**: soldiers and Gekko (neither mini Gekko nor the Gekko of
+  - **Sleep**: soldiers and Gekko (neither Dwarf Gekko nor the Gekko of
     the REX escape sleep);
   - **Laugh**, **Cry**, **Rage**, **Scream**: the Beauties' emotions, on
     awake soldiers, for about thirty seconds;

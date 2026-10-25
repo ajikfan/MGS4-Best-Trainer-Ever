@@ -141,14 +141,14 @@ une simple balle de fusil détruit alors un tank (confirmé en jeu,
 2026-10-03). Seul le fusil a été testé à ce jour ; une arme
 particulière pourrait encore être filtrée plus loin dans la chaîne.
 
-**Hélicoptères, véhicules, mini Gekko, portails (V2.3).** Mêmes
+**Hélicoptères, véhicules, Gekko nains, portails (V2.3).** Mêmes
 principes, chacun avec ses patchs (confirmés en jeu, 2026-10-04) :
 
 - **hélicoptères** : d'origine, seuls les lance-roquettes, les
   explosifs, le M82A2 et le Rail Gun les touchent ; toutes les armes
   comptent et chaque coup retire toute leur vie ;
 - **véhicule de Millennium Park** : son filtre d'armes est levé ;
-- **mini Gekko** : détruits au premier impact (V2.4 : paralysés en Non
+- **Gekko nains** : détruits au premier impact (V2.4 : paralysés en Non
   létal) ;
 - **objets destructibles** (portails à abattre au canon de tank...) :
   cèdent au premier impact. Le minimum imposé par le niveau (verrou de
@@ -168,7 +168,7 @@ armes létales. Confirmé en jeu (2026-10-10) :
   destructibles ; le Mk.2 les touche aussi (hélicoptères, Gekko, portails
   confirmés ; tanks non testés faute de tank), ainsi que les balles
   tranquillisantes du Mosin-Nagant (Gekko confirmé) ;
-- **mini Gekko** : détruits au premier coup en Létal, paralysés en Non
+- **Gekko nains** : détruits au premier coup en Létal, paralysés en Non
   létal, Mk.2 compris ;
 - **Crying Wolf**, **Raging Raven**, **Screaming Mantis** (avec la
   poupée, formes bête et Beauty), **Laughing Octopus** et les Beauty :
@@ -208,7 +208,7 @@ Onglet "État de jeu", groupe "Snake" et tableau des jauges.
 - **Invisible** : les soldats et les Gekko ne voient plus Snake, même
   debout devant eux, comme avec le Camouflage furtif mais sans la
   transparence (l'indice de camouflage affiche 99 %). Depuis la V2.4,
-  les mini Gekko ne le détectent plus non plus (lasers, proximité,
+  les Gekko nains ne le détectent plus non plus (lasers, proximité,
   contact) ; il reste un passage en Prudence si Snake reste immobile au
   milieu d'eux. Depuis la V2.4.1, un tir sans silencieux ne fait plus
   passer en alerte : le jeu range tous les bruits dans une table commune

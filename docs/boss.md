@@ -28,7 +28,7 @@ Remarques :
 - **Liquid Ocelot** : le coup suivant lance la phase suivante ; les 7
   derniers coups scénarisés ne sont pas couverts.
 - **Machines** (Gekko, tanks, hélicoptères, véhicules, RAY) : détruites
-  dans les deux modes ; **mini Gekko** : détruits en Létal, paralysés en
+  dans les deux modes ; **Gekko nains** : détruits en Létal, paralysés en
   Non létal.
 
 Le détail technique (fonctions de dégâts de chaque boss, patchs) est dans

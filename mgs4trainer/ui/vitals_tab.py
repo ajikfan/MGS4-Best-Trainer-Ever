@@ -368,6 +368,7 @@ class VitalsTab(QWidget):
                 group_layout.addWidget(table)
                 tables.append(table)
             content_layout.addWidget(group)
+        content_layout.addWidget(self._build_liquid_box())
         content_layout.addStretch(1)
         lock_width = self._fit_tables(tables)
         if ally_tables:
@@ -412,6 +413,60 @@ class VitalsTab(QWidget):
             self.ally_status_labels[ally], self.ally_action_combos[ally] = status, combo
             self.ally_action_buttons[ally] = button
         return grid
+
+    # Combat final contre Liquid Ocelot (2026-10-24) : phase en direct et
+    # changement de phase (MGS4Live.liquid_status / liquid_set_phase).
+    # « 3 derniers coups » : sequence finale (transition 9 du jeu).
+    LIQUID_TARGETS = (1, 2, 3, 4, "last3")
+
+    def _build_liquid_box(self) -> QGroupBox:
+        box = QGroupBox(tr("gauges.liquid_group"))
+        box_layout = QVBoxLayout(box)
+        self.liquid_status_label = QLabel(tr("liquid.absent"))
+        self.liquid_status_label.setStyleSheet("font-weight: bold;")
+        box_layout.addWidget(self.liquid_status_label)
+        row = QHBoxLayout()
+        self.liquid_buttons: dict = {}
+        for target in self.LIQUID_TARGETS:
+            key = "liquid.last3" if target == "last3" else "liquid.phase"
+            button = QPushButton(tr(key, number=target))
+            button.setToolTip(tr(key + "_tooltip"))
+            button.clicked.connect(lambda _checked=False, t=target: self._on_liquid_phase(t))
+            button.setEnabled(False)
+            row.addWidget(button)
+            self.liquid_buttons[target] = button
+        row.addStretch(1)
+        box_layout.addLayout(row)
+        return box
+
+    def _on_liquid_phase(self, target):
+        try:
+            done = self.live.liquid_set_phase(target)
+        except OSError:
+            done = False
+        if not done:
+            warn_dialog(self, tr("gauges.liquid_group"), tr("liquid.failed"))
+        self._refresh_liquid()
+
+    def _refresh_liquid(self):
+        try:
+            status = self.live.liquid_status()
+        except OSError:
+            status = None
+        if status is None:
+            self.liquid_status_label.setText(tr("liquid.absent"))
+        else:
+            phase = status["phase"]
+            name = (tr("liquid.status.phase", number=phase) if isinstance(phase, int)
+                    else tr(f"liquid.status.{phase or 'other'}"))
+            self.liquid_status_label.setText(tr("liquid.status", phase=name, life=status["life"],
+                                                life_max=status["life_max"], stamina=status["stamina"],
+                                                stamina_max=status["stamina_max"]))
+        # Actifs en phase et pendant l'echange de coups final, pas pendant
+        # une transition.
+        phase = status["phase"] if status else None
+        for target, button in self.liquid_buttons.items():
+            button.setEnabled(isinstance(phase, int) or (phase == "final" and target != "last3"))
 
     def _on_ally_action(self, ally: str):
         try:
@@ -712,6 +767,7 @@ class VitalsTab(QWidget):
 
     def _reassert_player_gauges(self):
         self._refresh_ally_states()
+        self._refresh_liquid()
         self.live.set_allies_invulnerable(set())
         self.live.set_ally_write_locks(
             {ally for ally, (life, _stamina) in self.ALLY_LOCK_ROWS.items() if life in self.locked_percents},

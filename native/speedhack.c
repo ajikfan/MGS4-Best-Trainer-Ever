@@ -1239,37 +1239,52 @@ static void photo_frame(void) {
      * carree pour les amplifier (stick a fond inchange). */
     rx = rx < 0.0f ? -sqrtf(-rx) : sqrtf(rx);
     ry = ry < 0.0f ? -sqrtf(-ry) : sqrtf(ry);
-    /* Monter : R1/R2 (RB/RT, clic gauche) ; descendre : L1/L2 (LB/LT, clic
-     * droit) ; rapide : carre (X, touche A). Espace (croix) est lu par le
+    /* Monter : R1/R2 (RB/RT, clic droit) ; descendre : L1/L2 (LB/LT, clic
+     * gauche) ; rapide : carre (X, touche A). Espace (croix) est lu par le
      * jeu en dehors de la manette virtuelle : le trainer le reserve. */
     BYTE buttons = pad[1];
-    /* Triangle (Y, touche E) : figer ou relancer le temps, fait par le
-     * trainer (case Pause) ; ici on compte seulement les appuis. */
-    static BYTE prev_buttons = 0;
-    if ((buttons & 0x10) && !(prev_buttons & 0x10)) sh->photo_toggles++;
-    if ((buttons & 0x40) && !(prev_buttons & 0x40)) sh->photo_teleports++; /* croix (A) */
-    prev_buttons = buttons;
     /* Clavier lu directement (Maj toujours, le reste en cinematique),
      * seulement quand la fenetre du jeu est au premier plan. */
     DWORD fg_pid = 0;
     HWND fg = GetForegroundWindow();
     if (fg) GetWindowThreadProcessId(fg, &fg_pid);
     BOOL focused = fg && fg_pid == GetCurrentProcessId();
+    /* Triangle (Y, touche E) : figer ou relancer le temps, fait par le
+     * trainer (case Pause) ; croix (A, Espace) : teleportation ; ici on
+     * compte seulement les appuis. Certaines cinematiques traduisent aussi
+     * les clics en boutons de la manette virtuelle (clic gauche = croix,
+     * clic droit = gachette « descendre ») : pendant un clic et quelques
+     * images apres (le jeu relache en retard), boutons et gachettes de la
+     * manette ignores, seuls les clics lus directement comptent. */
+    static BYTE prev_buttons = 0;
+    static int mouse_recent = 0;
+    if (focused && sh->photo_direct && ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000))
+        mouse_recent = 12;
+    else if (mouse_recent > 0)
+        mouse_recent--;
+    BYTE pressed = mouse_recent ? 0 : (BYTE)(buttons & ~prev_buttons);
+    if (mouse_recent) buttons &= (BYTE)~0x5F; /* gachettes 0x0F, triangle 0x10, croix 0x40 */
+    if (pressed & 0x10) sh->photo_toggles++;
+    if (pressed & 0x40) sh->photo_teleports++;
+    prev_buttons = buttons;
     BOOL shift = focused && (GetAsyncKeyState(VK_SHIFT) & 0x8000);
     float mouse_x = 0.0f, mouse_y = 0.0f;
     static BOOL direct_before = FALSE;
     BOOL direct = focused && sh->photo_direct;
+    BOOL key_move_y = FALSE; /* Z/S enfonces : certaines cinematiques les
+                              * traduisent aussi en croix haut/bas (zoom) */
     if (direct) {
         /* Touches par position (scancodes), quelle que soit la disposition :
          * Z/W 0x11, Q/A 0x1E, S 0x1F, D 0x20, A/Q 0x10 (rapide). */
 #define PHOTO_KEY(sc) ((GetAsyncKeyState(MapVirtualKeyW((sc), MAPVK_VSC_TO_VK)) & 0x8000) ? 1.0f : 0.0f)
         float kx = PHOTO_KEY(0x20) - PHOTO_KEY(0x1E), ky = PHOTO_KEY(0x1F) - PHOTO_KEY(0x11);
+        key_move_y = PHOTO_KEY(0x1F) != 0.0f || PHOTO_KEY(0x11) != 0.0f;
         if (GetAsyncKeyState(VK_CONTROL) & 0x8000) { kx *= 0.5f; ky *= 0.5f; }
         if (lx == 0.0f && ly == 0.0f) { lx = kx; ly = ky; }
         if (PHOTO_KEY(0x10)) buttons |= 0x80;
 #undef PHOTO_KEY
-        if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) buttons |= 0x02;
-        if (GetAsyncKeyState(VK_RBUTTON) & 0x8000) buttons |= 0x01;
+        if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) buttons |= 0x01; /* descendre */
+        if (GetAsyncKeyState(VK_RBUTTON) & 0x8000) buttons |= 0x02; /* monter */
         /* Souris : mouvements recus par photo_mouse_hook depuis l'image
          * precedente ; curseur garde au centre pour ne pas buter au bord
          * (SetCursorPos ne passe pas par l'accroche). */
@@ -1303,7 +1318,8 @@ static void photo_frame(void) {
     float zoom_dir = 0.0f;
     if (wheel_frames > 0) { zoom_dir = 1.0f; wheel_frames--; }
     else if (wheel_frames < 0) { zoom_dir = -1.0f; wheel_frames++; }
-    else if (wheel_idle > 30) zoom_dir = ((pad[0] & 0x10) ? 1.0f : 0.0f) - ((pad[0] & 0x40) ? 1.0f : 0.0f);
+    else if (wheel_idle > 30 && !key_move_y)
+        zoom_dir = ((pad[0] & 0x10) ? 1.0f : 0.0f) - ((pad[0] & 0x40) ? 1.0f : 0.0f);
     if (zoom_dir != 0.0f && sh->photo_zoom && sh->photo_zoom_rate > 0.0f) {
         volatile float *zoom = (volatile float *)(UINT64)sh->photo_zoom;
         float z = *zoom * (zoom_dir > 0.0f ? 1.0f + sh->photo_zoom_rate : 1.0f / (1.0f + sh->photo_zoom_rate));
