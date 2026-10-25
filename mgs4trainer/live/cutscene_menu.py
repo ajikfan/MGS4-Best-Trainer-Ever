@@ -331,14 +331,14 @@ class CutsceneMenuMixin:
             cursor, closing = struct.unpack("<ii", self.proc.read_bytes((dialog & self.HANDLE_MASK) + 0x98, 8))
             if closing:
                 if cursor == 0:  # OUI
-                    self._csm_confirm_cleanup(state, show_menu=False)
+                    self._csm_confirm_cleanup(state, show_menu=False, to_title=True)
                     state["title"] = True
                 else:
                     c["stage"], c["since"] = "closing", now
         elif stage == "closing" and now - c["since"] >= self.CSM_NO_DELAY:
             self._csm_confirm_cleanup(state, show_menu=True)
 
-    def _csm_confirm_cleanup(self, state: dict, show_menu: bool) -> None:
+    def _csm_confirm_cleanup(self, state: dict, show_menu: bool, to_title: bool = False) -> None:
         c, call, b = state["confirm"], self.speed.game_call, self.base
         state["confirm"] = None
         if not c:
@@ -355,7 +355,12 @@ class CutsceneMenuMixin:
         # la couper en pleine lecture peut corrompre la memoire (plantage
         # du 2026-10-25 dans la lecture 128DD0, apres le mode photo) ; sinon
         # elle est terminee plus tard (_csm_late_loader).
-        if self._csm_alive(c["loader"]):
+        # Retour au titre (OUI) : la tache n'est pas terminee par le trainer.
+        # Liberer le paquet juste avant le chargement des paquets du titre
+        # plantait dans la meme lecture 128DD0 (2026-10-25, deux fois, apres
+        # Liquid vaincu puis retour au titre) ; le retour au titre detruit de
+        # toute facon les taches de la partie. Hypothese, a confirmer.
+        if self._csm_alive(c["loader"]) and not to_title:
             if self._csm_resource_loaded(self.CSM_DLG_RESOURCE):
                 call(b + self.CSM_DLG_FUNCS["end"][0], c["loader"] & self.HANDLE_MASK)
             else:
