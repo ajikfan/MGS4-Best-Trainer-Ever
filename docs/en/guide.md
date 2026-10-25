@@ -137,9 +137,7 @@ window is small):
   **Jonathan**, **Ed**; acts 1 and 5 for Meryl and Johnny, act 1 for
   Jonathan and Ed), with their live state (active, hit, asleep, knocked
   out, dead), a **Wake up / Put to sleep / Knock out / Kill** list and
-  the **Apply** button, then their health and stamina;
-- **Boss**: health and stamina of the boss currently present, its name
-  in the title ("no boss" outside a fight).
+  the **Apply** button, then their health and stamina.
 
 For each one: a percentage slider to set it, and a **Lock** checkbox
 that keeps it at that level (Health locked at 100 % = infinite health,
@@ -156,12 +154,24 @@ Wake up gets them up right away; Put to sleep makes them fall slowly
 ("Z"s); Knock out makes them fall suddenly (stars); a teammate may come
 and wake them up.
 
-Boss: the on-screen bars follow the slider at once. The lock brings the
-gauge back up at each refresh: a short dip remains visible after a hit.
-Health and stamina never go below 1 (use One Shot, One Kill to take a
-boss down). Locked health prevents the phase changes tied to health.
-Confirmed on Raging Raven; the other bosses are recognized by their class
-name in the game.
+### Bosses
+
+One box per boss, in game order: **Laughing Octopus**, **Raging Raven**,
+**Crying Wolf** and **Screaming Mantis** (**Beast** and **Beauty**
+columns, with the **White room** button on the Beauty side), **Vamp**,
+**Metal Gear RAY** and **Liquid Ocelot** (with the **Final fight
+phases**). Each form has its health and stamina, slider and **Lock**
+checkbox as in the Gauges tab; the box of the current boss reads "in
+progress", the others show "not present".
+
+The on-screen bars follow the slider at once. The lock brings the gauge
+back up at each refresh: a short dip remains visible after a hit. A gauge
+at 0 does not finish the boss by itself: the next hit does, through the
+game's normal path. For Laughing Octopus's beast, Screaming Mantis's
+beast, Vamp and Liquid Ocelot, health and stamina never go below 1 (their
+phases and scripts depend on health). Locked health prevents the phase
+changes tied to health. Confirmed on Raging Raven and Laughing Octopus;
+the other bosses are recognized by their class name in the game.
 
 ### Weapons
 

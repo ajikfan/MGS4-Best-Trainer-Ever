@@ -175,6 +175,7 @@ class TrainerWindow(QMainWindow):
         self._photo_timer.timeout.connect(self._photo_tick)
         self.tabs.addTab(vitals_tab, tr("tab.game_state"))
         self.tabs.addTab(vitals_tab.gauges_page, tr("tab.gauges"))
+        self.tabs.addTab(vitals_tab.boss_page, tr("tab.boss"))
         self.item_tabs.append(vitals_tab)
 
         # Un seul onglet "Armes", sections empilees par categorie (meme

@@ -15,31 +15,37 @@ class BossGaugeMixin:
     # soldats : vie +0x314, max +0x318, endurance +0x31C, max +0x320) est a
     # boss+0x1E8 et renvoie au boss en +0x8. Valide sur Raging Raven
     # (BOSS_RAVEN, 20000 / 20000) ; les autres noms de classe viennent des
-    # RTTI, a confirmer boss par boss.
+    # RTTI (BB + initiale du boss : BBC_WOLF bete de Crying Wolf, BBx_BTY
+    # Beauty de chacun), a confirmer boss par boss.
+    # BOSS_CLASSES : classe -> cle (boss_forme), voir BOSS_ROSTER de l'onglet Boss.
     BOSS_CLASSES = {
-        "BOSS_RAVEN": "Raging Raven",
-        "OCTOPUS": "Laughing Octopus",
-        "BBC_WOLF": "Crying Wolf",
-        "MANTIS": "Screaming Mantis",
-        "BEAUTY": "Beauty",
-        "VAMP": "Vamp",
-        "OCELOT": "Liquid Ocelot",
-        "RY_RAY": "Metal Gear RAY",
+        "OCTOPUS": "octopus_beast", "BBL_BTY": "octopus_beauty",
+        "BOSS_RAVEN": "raven_beast", "BBR_BTY": "raven_beauty",
+        "BBC_WOLF": "wolf_beast", "BBC_BTY": "wolf_beauty",
+        "MANTIS": "mantis_beast", "BBS_BTY": "mantis_beauty",
+        "VAMP": "vamp", "RY_RAY": "ray", "OCELOT": "liquid",
     }
     BOSS_TASK_POINTER = 0x90
     BOSS_TASK_INLINE = 0xC0
     BOSS_DAMAGE = 0x1E8
-    BOSS_GAUGES = {"boss": 0x314, "boss_stamina": 0x31C}
+    BOSS_GAUGES = {"life": 0x314, "stamina": 0x31C}
     BOSS_SCAN_INTERVAL = 1.0
     # Barres du boss a l'ecran : le jeu ne les recopie qu'a un coup. Leur
     # structure (Raging Raven : pointee par boss+0x7E0) porte vie (max
     # +0x10C, valeur +0x110, puis affichage et trainee qui la rejoignent
     # seuls) et endurance (max +0x144, valeur +0x148). Valide en jeu : ecrire
-    # la valeur fait bouger la barre. Retrouvee parmi les pointeurs des
-    # BOSS_HUD_SCAN premiers octets du boss par ses deux maximums, egaux a
-    # ceux de l'objet de vie.
-    BOSS_HUD = {"boss": (0x10C, 0x110), "boss_stamina": (0x144, 0x148)}
+    # la valeur fait bouger la barre. Retrouvee par ses deux maximums, egaux a
+    # ceux de l'objet de vie : parmi les pointeurs des BOSS_HUD_SCAN premiers
+    # octets du boss, sinon dans BOSS_HUD_WINDOW octets de part et d'autre du
+    # boss (Laughing Octopus : boss-0x4FA0, aucun pointeur depuis le boss).
+    BOSS_HUD = {"life": (0x10C, 0x110), "stamina": (0x144, 0x148)}
     BOSS_HUD_SCAN = 0x1000
+    BOSS_HUD_WINDOW = 0x40000
+    # Plancher a 1 (2026-10-25, choix de l'utilisateur) pour les boss dont la
+    # vie rythme des phases ou des scripts : vie ou endurance a 0 ecrite de
+    # l'exterieur n'y est pas traitee comme un coup. Ailleurs, 0 = le coup
+    # suivant l'acheve par le chemin normal du jeu.
+    BOSS_FLOOR_ONE = {"octopus_beast", "mantis_beast", "vamp", "liquid"}
 
     def _rtti_name(self, vtable: int) -> str | None:
         """Nom de classe (sans .?AV ni @@) d'une vtable du module, sinon None."""
@@ -92,7 +98,7 @@ class BossGaugeMixin:
         return None
 
     def _boss(self) -> tuple[str, int, int] | None:
-        """(nom affiche, boss, objet de vie) du boss present, sinon None
+        """(cle, boss, objet de vie) du boss present, sinon None
         (nouvelle recherche au plus toutes les BOSS_SCAN_INTERVAL secondes)."""
         if not (self.connected and self.sane):
             return None
@@ -134,36 +140,70 @@ class BossGaugeMixin:
             if 0x10000 < pointer < 0x7FF000000000 and pointer not in (boss, damage)                     and self._boss_hud_matches(pointer, damage):
                 hud = pointer
                 break
+        if not hud:
+            hud = self._boss_hud_near(boss, damage)
         self._boss_hud_cache = (boss, hud)
         return hud
 
-    def boss_name(self) -> str | None:
+    def _boss_hud_near(self, boss: int, damage: int) -> int:
+        """Structure des barres cherchee par sa forme autour du boss."""
+        life_max, stamina_max = (struct.unpack("<i", self.proc.read_bytes(damage + self.BOSS_GAUGES[g] + 4, 4))[0]
+                                 for g in ("life", "stamina"))
+        if life_max <= 0 or stamina_max <= 0:
+            return 0
+        (life_at, _), (stamina_at, _) = self.BOSS_HUD["life"], self.BOSS_HUD["stamina"]
+        pattern_gap = stamina_at - life_at
+        start = boss - self.BOSS_HUD_WINDOW
+        for chunk in range(start, boss + self.BOSS_HUD_WINDOW, 0x10000):
+            try:
+                data = self.proc.read_bytes(chunk, 0x10000 + pattern_gap + 4)
+            except OSError:
+                continue
+            wanted = struct.pack("<i", life_max)
+            index = data.find(wanted)
+            while 0 <= index < 0x10000:
+                if index % 4 == 0 and data[index + pattern_gap:index + pattern_gap + 4] == struct.pack("<i", stamina_max):
+                    hud = chunk + index - life_at
+                    if hud != damage - life_at and self._boss_hud_matches(hud, damage):
+                        return hud
+                index = data.find(wanted, index + 1)
+        return 0
+
+    def boss_key(self) -> str | None:
+        """Cle (BOSS_CLASSES) du boss present, sinon None."""
         boss = self._boss()
         return boss[0] if boss else None
 
-    def read_boss_gauge(self, gauge: str) -> int:
-        """Valeur de la jauge `gauge` (BOSS_GAUGES) ; -1 sans boss."""
+    def _boss_for(self, gauge: str) -> tuple[int, int, str] | None:
+        """(boss, objet de vie, "life"/"stamina") si la jauge "boss:<cle>:<jauge>"
+        est celle du boss present, sinon None."""
+        _prefix, key, which = gauge.split(":")
         boss = self._boss()
-        if not boss:
+        return (boss[1], boss[2], which) if boss and boss[0] == key else None
+
+    def read_boss_gauge(self, gauge: str) -> int:
+        """Valeur de la jauge "boss:<cle>:life|stamina" ; -1 si ce boss est absent."""
+        found = self._boss_for(gauge)
+        if not found:
             return -1
-        return struct.unpack("<i", self.proc.read_bytes(boss[2] + self.BOSS_GAUGES[gauge], 4))[0]
+        return struct.unpack("<i", self.proc.read_bytes(found[1] + self.BOSS_GAUGES[found[2]], 4))[0]
 
     def boss_gauge_max(self, gauge: str) -> int | None:
-        boss = self._boss()
-        if not boss:
+        found = self._boss_for(gauge)
+        if not found:
             return None
-        return struct.unpack("<i", self.proc.read_bytes(boss[2] + self.BOSS_GAUGES[gauge] + 4, 4))[0] or None
+        return struct.unpack("<i", self.proc.read_bytes(found[1] + self.BOSS_GAUGES[found[2]] + 4, 4))[0] or None
 
     def write_boss_gauge(self, gauge: str, value: int) -> bool:
-        """Ecrit la jauge, au moins 1 : vie ou endurance a 0 ecrite de
-        l'exterieur laisse le boss dans un etat que le jeu ne traite pas (la
-        mise a mort passe par Un coup, un mort)."""
-        boss = self._boss()
-        if not boss:
+        """Ecrit la jauge (au moins 1 pour BOSS_FLOOR_ONE) et sa barre."""
+        found = self._boss_for(gauge)
+        if not found:
             return False
-        value = struct.pack("<i", max(1, value))
-        self.proc.write_bytes(boss[2] + self.BOSS_GAUGES[gauge], value)
-        hud = self._boss_hud(boss[1], boss[2])
+        boss, damage, which = found
+        floor = 1 if gauge.split(":")[1] in self.BOSS_FLOOR_ONE else 0
+        value = struct.pack("<i", max(floor, value))
+        self.proc.write_bytes(damage + self.BOSS_GAUGES[which], value)
+        hud = self._boss_hud(boss, damage)
         if hud:
-            self.proc.write_bytes(hud + self.BOSS_HUD[gauge][1], value)
+            self.proc.write_bytes(hud + self.BOSS_HUD[which][1], value)
         return True

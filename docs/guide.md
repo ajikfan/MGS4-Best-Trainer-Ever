@@ -141,9 +141,7 @@ si la fenêtre est petite) :
   **Jonathan**, **Ed** ; actes 1 et 5 pour Meryl et Johnny, acte 1 pour
   Jonathan et Ed), avec son état en direct (actif, touché, endormi,
   assommé, mort), une liste **Réveiller / Endormir / Assommer / Tuer** et
-  le bouton **Appliquer**, puis sa vie et son endurance ;
-- **Boss** : vie et endurance du boss présent, son nom dans le titre
-  (« aucun boss » hors combat).
+  le bouton **Appliquer**, puis sa vie et son endurance.
 
 Pour chacune : un curseur en pourcentage pour la régler, et une case
 **Verrouiller** qui la maintient à ce niveau (Santé verrouillée à 100 % =
@@ -161,11 +159,24 @@ K.O. aussitôt. Réveiller les relève tout de suite ; Endormir les fait
 tomber lentement (des « Z ») ; Assommer les fait tomber brusquement (des
 étoiles) ; un équipier peut venir les réveiller.
 
-Boss : les barres à l'écran suivent aussitôt le curseur. Le verrou remonte
-la jauge à chaque rafraîchissement : une courte baisse reste visible après
-un coup. Vie et endurance ne descendent pas sous 1 (pour mettre un boss à
-terre, utiliser Un coup, un mort). Une vie verrouillée empêche les
-changements de phase liés à la vie. Confirmé sur Raging Raven ; les autres
+### Boss
+
+Un encadré par boss, dans l'ordre du jeu : **Laughing Octopus**, **Raging
+Raven**, **Crying Wolf** et **Screaming Mantis** (colonnes **Bête** et
+**Beauty**, avec le bouton **Salle blanche** côté Beauty), **Vamp**,
+**Metal Gear RAY** et **Liquid Ocelot** (avec les **Phases du combat
+final**). Chaque forme a sa vie et son endurance, curseur et case
+**Verrouiller** comme dans l'onglet Jauges ; l'encadré du boss en cours
+porte « en cours », les autres affichent « absent ».
+
+Les barres à l'écran suivent aussitôt le curseur. Le verrou remonte la
+jauge à chaque rafraîchissement : une courte baisse reste visible après un
+coup. Une jauge à 0 n'achève pas le boss d'elle-même : c'est le coup
+suivant qui l'achève, par le chemin normal du jeu. Pour la bête de
+Laughing Octopus, celle de Screaming Mantis, Vamp et Liquid Ocelot, vie et
+endurance ne descendent pas sous 1 (leurs phases et leurs scripts
+dépendent de la vie). Une vie verrouillée empêche les changements de phase
+liés à la vie. Confirmé sur Raging Raven et Laughing Octopus ; les autres
 boss sont reconnus par le nom de leur classe dans le jeu.
 
 ### Armes

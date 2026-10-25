@@ -14,6 +14,22 @@ from mgs4trainer.live import MGS4Live
 from mgs4trainer.ui.common import AMMO_LOCK_REFRESH_MS, warn_dialog
 from mgs4trainer.ui.photo_help import PhotoControlsDialog
 
+# Onglet Boss (2026-10-25) : un encadre par boss dans l'ordre du jeu, la bete
+# et la Beauty cote a cote ; cles = MGS4Live.BOSS_CLASSES. Forme None = boss
+# a une seule forme.
+BOSS_ROSTER = (
+    ("Laughing Octopus", (("octopus_beast", "beast"), ("octopus_beauty", "beauty"))),
+    ("Raging Raven", (("raven_beast", "beast"), ("raven_beauty", "beauty"))),
+    ("Crying Wolf", (("wolf_beast", "beast"), ("wolf_beauty", "beauty"))),
+    ("Screaming Mantis", (("mantis_beast", "beast"), ("mantis_beauty", "beauty"))),
+    ("Vamp", (("vamp", None),)),
+    ("Metal Gear RAY", (("ray", None),)),
+    ("Liquid Ocelot", (("liquid", None),)),
+)
+# Lignes des jauges de boss : nom de ligne = nom de jauge MGS4Live.
+BOSS_ROWS = {f"boss:{key}:{which}": f"boss:{key}:{which}"
+             for _name, forms in BOSS_ROSTER for key, _form in forms for which in ("life", "stamina")}
+
 
 class VitalsTab(QWidget):
     """Onglet "Etat de jeu" : Sante/Stamina/Stress/Batterie Solid
@@ -322,7 +338,6 @@ class VitalsTab(QWidget):
         ("gauges.vehicles_group", ("Drebin 893", "Van", "Sante Metal Gear REX")),
         ("gauges.allies_group", ("Vie de Meryl", "Endurance de Meryl", "Vie de Johnny", "Endurance de Johnny",
                                  "Vie de Jonathan", "Endurance de Jonathan", "Vie d'Ed", "Endurance d'Ed")),
-        ("gauges.boss_group", ("Vie du boss", "Endurance du boss")),
     )
 
     def _gauge_table(self, names, header: bool = True) -> QTableWidget:
@@ -361,8 +376,6 @@ class VitalsTab(QWidget):
         tables, ally_tables = [], []
         for title, names in self.GAUGE_GROUPS:
             group = QGroupBox(tr(title))
-            if title == "gauges.boss_group":
-                self.boss_group = group
             if title == "gauges.allies_group":
                 group.setLayout(self._build_ally_boxes(ally_tables))
             else:
@@ -371,7 +384,6 @@ class VitalsTab(QWidget):
                 group_layout.addWidget(table)
                 tables.append(table)
             content_layout.addWidget(group)
-        content_layout.addWidget(self._build_liquid_box())
         content_layout.addStretch(1)
         lock_width = self._fit_tables(tables)
         if ally_tables:
@@ -380,6 +392,55 @@ class VitalsTab(QWidget):
         self.gauges_page.setWidgetResizable(True)
         self.gauges_page.setFrameShape(QFrame.NoFrame)
         self.gauges_page.setWidget(content)
+        self._build_boss_page(lock_width)
+
+    def _build_boss_page(self, lock_width: int):
+        """Page de l'onglet "Boss" (self.boss_page), ajoutee par la fenetre
+        principale : vie et endurance de chaque boss (bete et Beauty), les
+        phases de Liquid Ocelot."""
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        self.boss_groups: list[tuple[QGroupBox, str, set[str]]] = []
+        tables = []
+        for name, forms in BOSS_ROSTER:
+            group = QGroupBox(name)
+            row = QHBoxLayout(group)
+            for key, form in forms:
+                box = QGroupBox(tr(f"boss.{form}")) if form else QWidget()
+                box_layout = QVBoxLayout(box)
+                if not form:
+                    box_layout.setContentsMargins(0, 0, 0, 0)
+                table = self._gauge_table((f"boss:{key}:life", f"boss:{key}:stamina"), header=False)
+                table.item(0, 0).setText(tr("gauges.ally_life"))
+                table.item(1, 0).setText(tr("gauges.ally_stamina"))
+                box_layout.addWidget(table)
+                if form == "beauty":
+                    button = QPushButton(tr("vitals.white_room"))
+                    button.setToolTip(tr("vitals.white_room_tooltip"))
+                    button.clicked.connect(self._on_white_room)
+                    box_layout.addWidget(button)
+                if key == "liquid":
+                    box_layout.addWidget(self._build_liquid_box())
+                box_layout.addStretch(1)
+                row.addWidget(box, 1)
+                tables.append(table)
+            self.boss_groups.append((group, name, {key for key, _form in forms}))
+            content_layout.addWidget(group)
+        content_layout.addStretch(1)
+        self._fit_tables(tables, lock_width)
+        self.boss_page = QScrollArea()
+        self.boss_page.setWidgetResizable(True)
+        self.boss_page.setFrameShape(QFrame.NoFrame)
+        self.boss_page.setWidget(content)
+
+    def _refresh_boss_titles(self):
+        """Titre de l'encadre du boss present : « nom — en cours »."""
+        try:
+            present = self.live.boss_key()
+        except OSError:
+            present = None
+        for group, name, keys in self.boss_groups:
+            group.setTitle(tr("boss.present", name=name) if present in keys else name)
 
     # Rat Patrol (2026-10-18) : un encadre par membre en grille 2x2 : en tete
     # son etat en direct et le changement d'etat (MGS4Live.ally_status /
@@ -423,7 +484,7 @@ class VitalsTab(QWidget):
     LIQUID_TARGETS = (1, 2, 3, 4, "last3")
 
     def _build_liquid_box(self) -> QGroupBox:
-        box = QGroupBox(tr("gauges.liquid_group"))
+        box = QGroupBox(tr("boss.liquid_phases"))
         box_layout = QVBoxLayout(box)
         self.liquid_status_label = QLabel(tr("liquid.absent"))
         self.liquid_status_label.setStyleSheet("font-weight: bold;")
@@ -448,7 +509,7 @@ class VitalsTab(QWidget):
         except OSError:
             done = False
         if not done:
-            warn_dialog(self, tr("gauges.liquid_group"), tr("liquid.failed"))
+            warn_dialog(self, tr("boss.liquid_phases"), tr("liquid.failed"))
         self._refresh_liquid()
 
     def _refresh_liquid(self):
@@ -527,8 +588,7 @@ class VitalsTab(QWidget):
                          "Vie de Meryl": "meryl", "Endurance de Meryl": "meryl_stamina",
                          "Vie de Johnny": "johnny", "Endurance de Johnny": "johnny_stamina",
                          "Vie de Jonathan": "jonathan", "Endurance de Jonathan": "jonathan_stamina",
-                         "Vie d'Ed": "ed", "Endurance d'Ed": "ed_stamina",
-                         "Vie du boss": "boss", "Endurance du boss": "boss_stamina"}
+                         "Vie d'Ed": "ed", "Endurance d'Ed": "ed_stamina", **BOSS_ROWS}
     PLAYER_GAUGE_MAX = 2000
 
     def _on_lock_toggled(self, name: str, checked: bool):
@@ -772,8 +832,7 @@ class VitalsTab(QWidget):
     def _reassert_player_gauges(self):
         self._refresh_ally_states()
         self._refresh_liquid()
-        boss = self.live.boss_name()
-        self.boss_group.setTitle(tr("gauges.boss_named", name=boss) if boss else tr("gauges.boss_group"))
+        self._refresh_boss_titles()
         self.live.set_allies_invulnerable(set())
         self.live.set_ally_write_locks(
             {ally for ally, (life, _stamina) in self.ALLY_LOCK_ROWS.items() if life in self.locked_percents},
@@ -786,7 +845,7 @@ class VitalsTab(QWidget):
                 label.setText("?")
                 continue
             if value < 0:
-                label.setText(tr(f"vitals.{gauge}_inactive"))
+                label.setText(tr("boss.absent") if gauge.startswith("boss:") else tr(f"vitals.{gauge}_inactive"))
                 continue
             real_max = self.live.player_gauge_max(gauge)
             maxi = self._gauge_max[name] = real_max or max(self._gauge_max[name], value)
