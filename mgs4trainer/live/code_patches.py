@@ -228,6 +228,9 @@ class CodePatchesMixin:
         ],
         "boss_non_lethal_kill": [
             (0xB800CC, bytes.fromhex("756f448b891c030000"), bytes.fromhex("9090")),
+            # Vamp (2026-10-25) : a terre au premier tir aussi en Non letal (il
+            # ne peut pas mourir avant la seringue) ; meme site que le patch Letal.
+            (0x1123568, bytes.fromhex("2bc74863c848f7d9"), bytes.fromhex("31c0")),
             (0x1173CF9, bytes.fromhex("2bcb4863c148f7d8"), bytes.fromhex("31c9")),
             # Armes letales -> endurance, comme les soldats (vie jamais touchee).
             (0x1434BCF, bytes.fromhex("0f8ef20000008bd049"), bytes.fromhex("909090909090")),

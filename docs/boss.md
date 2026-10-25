@@ -18,7 +18,7 @@ gérées par le jeu.
 | Crying Beauty | un coup, toute arme (confirmé) | endurance vidée, toute arme (confirmé) |
 | Screaming Mantis (bête et Beauty) | bête : vaincue à la première balle, poupées lâchées en une balle chacune, sans la poupée Mantis (confirmé) ; Beauty : un coup avec la poupée (confirmé) | même chose pour la bête (confirmé) ; Beauty : endurance vidée avec la poupée (confirmé) |
 | Metal Gear RAY | détruit en un coup (confirmé) | détruit en un coup (confirmé) |
-| Vamp | à terre en un tir, la seringue reste nécessaire | non couvert |
+| Vamp | à terre en un tir, puis vaincu sans seringue dès qu'il est au sol (confirmé) | même chose (confirmé) |
 | Liquid Ocelot (combat final) | vie et endurance au plancher de la phase au premier coup | pareil (combat aux poings) |
 
 Remarques :

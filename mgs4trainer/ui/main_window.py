@@ -549,6 +549,7 @@ class TrainerWindow(QMainWindow):
             live.boss_one_hit_tick(self.vitals_tab.instant_kill_check.isChecked())
             live.mantis_strings_tick(self.vitals_tab.untouchable_check.isChecked())
             live.mantis_one_hit_tick(self.vitals_tab.instant_kill_check.isChecked())
+            live.vamp_one_hit_tick(self.vitals_tab.instant_kill_check.isChecked())
         except OSError:
             pass
         try:

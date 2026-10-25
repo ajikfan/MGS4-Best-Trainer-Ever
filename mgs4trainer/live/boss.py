@@ -41,15 +41,16 @@ class BossGaugeMixin:
     # la valeur fait bouger la barre. Retrouvee par ses deux maximums, egaux a
     # ceux de l'objet de vie : parmi les pointeurs des BOSS_HUD_SCAN premiers
     # octets du boss, sinon dans BOSS_HUD_WINDOW octets de part et d'autre du
-    # boss (Laughing Octopus : boss-0x4FA0, aucun pointeur depuis le boss).
+    # boss (Laughing Octopus : boss-0x4FA0, aucun pointeur depuis le boss ;
+    # Vamp : boss+0x464F0).
     BOSS_HUD = {"life": (0x10C, 0x110), "stamina": (0x144, 0x148)}
     BOSS_HUD_SCAN = 0x1000
-    BOSS_HUD_WINDOW = 0x40000
+    BOSS_HUD_WINDOW = 0x80000
     # Plancher a 1 (2026-10-25, choix de l'utilisateur) pour les boss dont la
     # vie rythme des phases ou des scripts non encore maitrises : jauge a 0 =
     # pas d'achevement (boss_kill). Ailleurs, 0 = achevement par un tir de
     # Snake (bete d'Octopus : phases sautees d'abord, voir _boss_skip_phases).
-    BOSS_FLOOR_ONE = {"mantis_beast", "vamp", "liquid"}
+    BOSS_FLOOR_ONE = {"mantis_beast", "liquid"}
 
     # Toucher le boss (2026-10-25) : une jauge mise a 0 de l'exterieur n'a
     # aucun effet avant un coup (le jeu ne juge la vie qu'a un impact), et le
@@ -524,6 +525,52 @@ class BossGaugeMixin:
                         time.sleep(1.0)
                         self._mantis_defeating = False
                 threading.Thread(target=run, daemon=True).start()
+
+    # Un coup, un mort sur Vamp sans seringue (2026-10-25, valide : la
+    # sequence de la seringue se joue, puis la cinematique). Releve sur une
+    # vraie injection : sa machine 2 passe de "a terre" (79 ; 69 vu aussi) a
+    # 80, puis 81, 82, vie videe par le jeu. Quand il est a terre, on demande
+    # l'etat 80 (B0F9B0 : demande +0xCC appliquee a la mise a jour suivante),
+    # machine 2 verifiee (sans elle, B0F9B0 passe une machine nulle).
+    VAMP_DOWN_STATES = (69, 79)
+    VAMP_SYRINGE = (2, 80)
+    VAMP_FUNCS = {"machine_goto": (0xB0F9B0, "448b51344533c9488b49384585d27e17")}
+
+    def vamp_one_hit_tick(self, one_hit: bool) -> None:
+        """A appeler souvent : avec Un coup, un mort, Vamp a terre est vaincu
+        comme par la seringue."""
+        boss = self._boss() if one_hit else None
+        if not boss or boss[0] != "vamp" or getattr(self, "_vamp_syringe", False):
+            return
+        vamp = boss[1]
+        machine_id, state = self.VAMP_SYRINGE
+        count = struct.unpack("<i", self.proc.read_bytes(vamp + 0x34, 4))[0]
+        machines = struct.unpack("<Q", self.proc.read_bytes(vamp + 0x38, 8))[0]
+        machine = 0
+        for index in range(min(max(count, 0), 16) if machines else 0):
+            if struct.unpack("<i", self.proc.read_bytes(machines + index * 0x130 + 0x128, 4))[0] == machine_id:
+                machine = machines + index * 0x130
+                break
+        if not machine:
+            return
+        current, = struct.unpack("<i", self.proc.read_bytes(machine + 0xA4, 4))
+        requested, = struct.unpack("<i", self.proc.read_bytes(machine + 0xCC, 4))
+        if current not in self.VAMP_DOWN_STATES or requested == state:
+            return
+        funcs = self._live_funcs(self.VAMP_FUNCS)
+        if funcs is None or not self.speed.main_loop_hook_installed():
+            return
+        self._vamp_syringe = True
+
+        def run():
+            try:
+                self.speed.game_call(funcs["machine_goto"], vamp, machine_id, state)
+            except OSError:
+                pass
+            finally:
+                time.sleep(1.0)
+                self._vamp_syringe = False
+        threading.Thread(target=run, daemon=True).start()
 
     def _rtti_name(self, vtable: int) -> str | None:
         """Nom de classe (sans .?AV ni @@) d'une vtable du module, sinon None."""
