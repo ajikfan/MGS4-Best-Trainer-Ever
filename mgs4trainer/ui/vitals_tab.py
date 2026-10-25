@@ -26,9 +26,17 @@ BOSS_ROSTER = (
     ("Metal Gear RAY", (("ray", None),)),
     ("Liquid Ocelot", (("liquid", None),)),
 )
+# Boss sans endurance (Metal Gear RAY : maximum 0) : ligne Vie seule.
+BOSS_LIFE_ONLY = {"ray"}
+
+
+def boss_gauges(key: str) -> tuple[str, ...]:
+    return ("life",) if key in BOSS_LIFE_ONLY else ("life", "stamina")
+
+
 # Lignes des jauges de boss : nom de ligne = nom de jauge MGS4Live.
 BOSS_ROWS = {f"boss:{key}:{which}": f"boss:{key}:{which}"
-             for _name, forms in BOSS_ROSTER for key, _form in forms for which in ("life", "stamina")}
+             for _name, forms in BOSS_ROSTER for key, _form in forms for which in boss_gauges(key)}
 
 
 class VitalsTab(QWidget):
@@ -410,9 +418,10 @@ class VitalsTab(QWidget):
                 box_layout = QVBoxLayout(box)
                 if not form:
                     box_layout.setContentsMargins(0, 0, 0, 0)
-                table = self._gauge_table((f"boss:{key}:life", f"boss:{key}:stamina"), header=False)
-                table.item(0, 0).setText(tr("gauges.ally_life"))
-                table.item(1, 0).setText(tr("gauges.ally_stamina"))
+                gauges = boss_gauges(key)
+                table = self._gauge_table(tuple(f"boss:{key}:{which}" for which in gauges), header=False)
+                for index, which in enumerate(gauges):
+                    table.item(index, 0).setText(tr("gauges.ally_life" if which == "life" else "gauges.ally_stamina"))
                 box_layout.addWidget(table)
                 if form == "beauty":
                     button = QPushButton(tr("vitals.white_room"))
