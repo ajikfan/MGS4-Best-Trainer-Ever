@@ -1,5 +1,7 @@
 """MGS4Live : jauges de vie et d'endurance du boss present."""
+import math
 import struct
+import threading
 import time
 
 
@@ -46,6 +48,313 @@ class BossGaugeMixin:
     # l'exterieur n'y est pas traitee comme un coup. Ailleurs, 0 = le coup
     # suivant l'acheve par le chemin normal du jeu.
     BOSS_FLOOR_ONE = {"octopus_beast", "mantis_beast", "vamp", "liquid"}
+
+    # Toucher le boss (2026-10-25) : une jauge mise a 0 de l'exterieur n'a
+    # aucun effet avant un coup (le jeu ne juge la vie qu'a un impact), et le
+    # code des coups des Beauty (1172930) ignore tout coup si vie, endurance
+    # ou sommeil est deja <= 0. B88260 (methode 3 de NPC_PLG_DAMAGE, appelee
+    # a chaque image) efface puis reconstruit le coup en cours depuis les
+    # impacts reels : on l'enveloppe. Apres elle :
+    #  - enregistrement : si l'objet de vie est celui de la place +0x40 et
+    #    porte un vrai coup, ce coup (+0x80 a +0x170) est copie dans le
+    #    modele (+0x200), drapeau +0x48 ;
+    #  - toucher : si l'objet de vie figure dans les BOSS_TOUCH_SLOTS places,
+    #    la place est liberee et un coup y est pose : le modele (par defaut
+    #    BOSS_TOUCH_MODEL_DATA ; sans lui, les seuls champs recopies en
+    #    "dernier coup", BOSS_TOUCH_HIT, ne font aucun degat), projectile
+    #    +0xD0 efface, attaquant +0xC8 = entree du joueur (8DA180), +0x68 bit 0.
+    # Bloc : places (+0x00), magie (+0x20), rax sauve (+0x28), prologue
+    # deplace (+0x30), enregistrement (+0x40), modele pret (+0x48), code
+    # (+0x60), modele (+0x200).
+    BOSS_TOUCH_RVA = 0xB88260
+    BOSS_TOUCH_PROLOGUE = bytes.fromhex("4053574155" "4883ec60")  # push rbx/rdi/r13 ; sub rsp,60
+    BOSS_TOUCH_MAGIC = b"MGS4TCH3"
+    BOSS_TOUCH_CODE = 0x60
+    BOSS_TOUCH_OLD_CODE = (0x40,)  # versions precedentes (code a +0x40)
+    BOSS_TOUCH_SLOTS = 4
+    BOSS_TOUCH_MODEL = (0x200, 0x80, 0xF0)  # (place dans le bloc, debut du coup, taille)
+    # Modele par defaut : vrai tir de pistolet enregistre sur la Beauty de
+    # Laughing Octopus (630 degats), attaquant et projectile effaces.
+    BOSS_TOUCH_MODEL_DATA = bytes.fromhex(
+        "00000000000000000b0000009600000003000000000000000000000000000000"
+        "96bf2d47e4297744a3f577490000000000000000b88680440000000000000000"
+        "e803500000000000000000000000000000000000000000000000000000000000"
+        "020000000000004000000000000000002e7b34470bb4c544fa4779490000803f"
+        "000000000000000011000000030200105e010000000000000000000000000000"
+        "ca102d473ad467449ad377490000803f1668033ff90bef3ee657383f04000000"
+        "80361cc40c525bc3005cf3c460020000c2929bbe286cdabdea5c72bf00000000"
+        "00000000000000000000000000000000"
+    )
+    BOSS_PLAYER_ENTRY = (0x8DA180, "8b05caaf5d23488d0dd3af5d23ffc048")
+    BOSS_TOUCH_HIT = ((0x108, 4), (0x10C, 0x10000203), (0x110, 0x15E), (0xC0, 0x5003E8),
+                      (0x88, 1), (0x8C, 0x96), (0x1A8, 0x40021E), (0x160, 0))
+
+    def _boss_touch_code(self, block: int, player_entry: int) -> bytes:
+        site = self.base + self.BOSS_TOUCH_RVA
+
+        def rel(end: int, target: int) -> bytes:
+            return struct.pack("<i", target - end)
+        code_at, save = block + self.BOSS_TOUCH_CODE, block + 0x28
+        record, ready = block + 0x40, block + 0x48
+        model_at, hit_start, hit_size = self.BOSS_TOUCH_MODEL
+        model = block + model_at
+        code = bytearray()
+        labels, fixups = {}, []
+
+        def emit(raw: bytes, rip_target: int | None = None, tail: bytes = b""):
+            # instruction rip-relative : opcode + disp32 (+ tail) ; disp calcule sur la fin
+            if rip_target is None:
+                code.extend(raw)
+            else:
+                end = code_at + len(code) + len(raw) + 4 + len(tail)
+                code.extend(raw + rel(end, rip_target) + tail)
+
+        def jump(opcode: int, label: str):  # saut court vers une etiquette
+            code.extend(bytes([opcode, 0]))
+            fixups.append((len(code) - 1, label))
+
+        def mark(label: str):
+            labels[label] = len(code)
+
+        def copy(source_rip: int | None, destination_rip: int | None):
+            # rep movsb de hit_size octets entre l'objet de vie (rcx) et le modele
+            emit(bytes.fromhex("5657"))                                         # push rsi ; push rdi
+            if source_rip is None:
+                emit(bytes.fromhex("488db1") + struct.pack("<I", hit_start))    # lea rsi,[rcx+debut]
+            else:
+                emit(bytes.fromhex("488d35"), source_rip)                       # lea rsi,[modele]
+            if destination_rip is None:
+                emit(bytes.fromhex("488db9") + struct.pack("<I", hit_start))    # lea rdi,[rcx+debut]
+            else:
+                emit(bytes.fromhex("488d3d"), destination_rip)                  # lea rdi,[modele]
+            emit(bytes.fromhex("51b9") + struct.pack("<I", hit_size) + bytes.fromhex("f3a4595f5e"))
+            # push rcx ; mov ecx,taille ; rep movsb ; pop rcx ; pop rdi ; pop rsi
+
+        emit(bytes.fromhex("514883ec20"))                                  # push rcx ; sub rsp,20
+        emit(bytes.fromhex("e8"), block + 0x30)                            # call prologue deplace
+        emit(bytes.fromhex("4883c42059"))                                  # add rsp,20 ; pop rcx
+        emit(bytes.fromhex("488905"), save)                                # mov [sauve],rax
+        emit(bytes.fromhex("483b0d"), record)                              # cmp rcx,[enregistrement]
+        jump(0x75, "slots")
+        emit(bytes.fromhex("f74168b72fe301"))                              # test [rcx+68],coups
+        jump(0x75, "record")
+        emit(bytes.fromhex("83796c00"))                                    # cmp dword [rcx+6c],0
+        jump(0x74, "slots")
+        mark("record")
+        copy(None, model)
+        emit(bytes.fromhex("48c705"), record, struct.pack("<I", 0))        # enregistrement libere
+        emit(bytes.fromhex("48c705"), ready, struct.pack("<I", 1))         # modele pret
+        mark("slots")
+        for slot in range(self.BOSS_TOUCH_SLOTS):
+            emit(bytes.fromhex("483b0d"), block + 8 * slot)                 # cmp rcx,[place]
+            jump(0x75, f"next{slot}")
+            emit(bytes.fromhex("48c705"), block + 8 * slot, struct.pack("<I", 0))  # place liberee
+            jump(0xEB, "inject")
+            mark(f"next{slot}")
+        emit(bytes.fromhex("488b05"), save)                                # mov rax,[sauve]
+        emit(bytes.fromhex("c3"))
+        mark("inject")
+        emit(bytes.fromhex("534889cb4883ec20"))                            # push rbx ; mov rbx,rcx ; sub rsp,20
+        emit(bytes.fromhex("48833d"), ready, bytes(1))                     # cmp qword [pret],0
+        jump(0x74, "default")
+        copy(model, None)
+        jump(0xEB, "common")
+        mark("default")
+        for offset, value in self.BOSS_TOUCH_HIT:
+            emit(bytes.fromhex("c783") + struct.pack("<II", offset, value))  # mov dword [rbx+off],valeur
+        mark("common")
+        emit(bytes.fromhex("48c783d000000000000000"))                      # projectile efface
+        emit(bytes.fromhex("48b8") + struct.pack("<Q", player_entry) + bytes.fromhex("ffd0"))
+        emit(bytes.fromhex("488b00488983c8000000"))                        # attaquant = Snake
+        emit(bytes.fromhex("834b6801"))                                    # or [rbx+68],1
+        emit(bytes.fromhex("4883c4205b"))                                  # add rsp,20 ; pop rbx
+        emit(bytes.fromhex("488b05"), save)                                # mov rax,[sauve]
+        emit(bytes.fromhex("c3"))
+        for at, label in fixups:
+            distance = labels[label] - (at + 1)
+            if not -128 <= distance <= 127:
+                raise ValueError(label)
+            code[at] = distance & 0xFF
+        trampoline = self.BOSS_TOUCH_PROLOGUE + bytes.fromhex("e9") + rel(
+            block + 0x30 + len(self.BOSS_TOUCH_PROLOGUE) + 5, site + len(self.BOSS_TOUCH_PROLOGUE))
+        head = (bytes(8 * self.BOSS_TOUCH_SLOTS) + self.BOSS_TOUCH_MAGIC + bytes(8)
+                + trampoline.ljust(0x10, bytes.fromhex("cc")) + bytes(8) + struct.pack("<Q", 1) + bytes(0x10))
+        body = head + bytes(code)
+        if len(body) > model_at:
+            raise ValueError("code du detour trop long")
+        return body.ljust(model_at, bytes(1)) + self.BOSS_TOUCH_MODEL_DATA
+
+    def _boss_touch_block(self) -> int:
+        """Bloc du detour de B88260 (pose une fois par processus, retrouve
+        apres un redemarrage du trainer ; un bloc d'une version precedente est
+        remplace par un nouveau), 0 si impossible."""
+        cache = getattr(self, "_boss_touch_cache", (0, None))
+        if cache[1] == self.pid and cache[0]:
+            return cache[0]
+        site = self.base + self.BOSS_TOUCH_RVA
+        current = self.proc.read_bytes(site, len(self.BOSS_TOUCH_PROLOGUE))
+        block = 0
+        if current[0] == 0xE9:
+            target = site + 5 + struct.unpack_from("<i", current, 1)[0]
+            known = False
+            for code_offset in (self.BOSS_TOUCH_CODE, *self.BOSS_TOUCH_OLD_CODE):
+                try:
+                    magic = self.proc.read_bytes(target - code_offset + 0x20, 8)
+                except OSError:
+                    continue
+                if magic.startswith(b"MGS4TCH"):
+                    known = True
+                    if magic == self.BOSS_TOUCH_MAGIC and code_offset == self.BOSS_TOUCH_CODE:
+                        block = target - code_offset
+                    break
+            if not known:
+                return 0
+        elif current != self.BOSS_TOUCH_PROLOGUE:
+            return 0
+        if not block:
+            funcs = self._live_funcs({"player_entry": self.BOSS_PLAYER_ENTRY})
+            block = self.proc.alloc_near(site) if funcs else 0
+            if not block:
+                return 0
+            self.proc.write_bytes(block, self._boss_touch_code(block, funcs["player_entry"]))
+            jump = struct.pack("<i", block + self.BOSS_TOUCH_CODE - (site + 5))
+            if current[0] == 0xE9:
+                self.proc.write_bytes(site + 1, jump)  # une seule ecriture de 4 octets
+            else:
+                self.proc.write_bytes(site, bytes.fromhex("e9") + jump
+                                      + bytes.fromhex("90") * (len(self.BOSS_TOUCH_PROLOGUE) - 5))
+        self._boss_touch_cache = (block, self.pid)
+        return block
+
+    def boss_record_hit(self, gauge: str) -> bool:
+        """Le prochain vrai coup recu par le boss de la jauge servira de
+        modele aux coups du trainer."""
+        found = self._boss_for(gauge)
+        block = self._boss_touch_block() if found else 0
+        if not block:
+            return False
+        self.proc.write_bytes(block + 0x40, struct.pack("<Q", found[1]))
+        return True
+
+    def boss_hit_model_ready(self) -> bool:
+        block = self._boss_touch_block()
+        return bool(block) and struct.unpack("<Q", self.proc.read_bytes(block + 0x48, 8))[0] != 0
+
+    def boss_touch(self, gauge: str) -> bool:
+        """Fait toucher le boss de la jauge "boss:<cle>:..." par Snake a
+        l'image suivante (le jeu juge alors vie et endurance)."""
+        found = self._boss_for(gauge)
+        if not found:
+            return False
+        block = self._boss_touch_block()
+        if not block:
+            return False
+        slots = struct.unpack(f"<{self.BOSS_TOUCH_SLOTS}Q", self.proc.read_bytes(block, 8 * self.BOSS_TOUCH_SLOTS))
+        damage = found[1]
+        if damage in slots:
+            return True
+        if 0 not in slots:
+            return False
+        self.proc.write_bytes(block + 8 * slots.index(0), struct.pack("<Q", damage))
+        return True
+
+    # Achever le boss depuis l'onglet (2026-10-25) : un coup ordinaire ne fait
+    # pas descendre une Beauty sous 2 % de sa vie max (1173D5E), les autres
+    # boss ont leurs paliers ; seul le chemin "mise a mort" passe outre, celui
+    # que pose Un coup, un mort (CODE_PATCHES["boss_one_shot_kill"]). Vie a
+    # BOSS_KILL_LIFE du max (le code des coups ignore un boss deja a 0, et
+    # sous 2 % il ramene les degats a presque rien), patch pose le temps du
+    # coup s'il ne l'etait pas, coup de Snake (boss_touch), puis patch remis.
+    # Valide sur la Beauty de Laughing Octopus (elle meurt).
+    BOSS_KILL_PATCH = "boss_one_shot_kill"
+    BOSS_KILL_LIFE = 0.05
+    BOSS_KILL_TIMEOUT = 10.0
+
+    def _code_patch_applied(self, name: str) -> bool:
+        for rva, original, patch in self.CODE_PATCHES[name]:
+            if self.proc.read_bytes(self.base + rva, len(patch)) != patch:
+                return False
+        return True
+
+    # Beauty dans la salle blanche (2026-10-25) : machine 0 du script dans
+    # l'etat 4 ; le code des coups (1172A91) n'y applique les degats que si
+    # Beauty+0x68 vaut 0x60 (releve sur de vrais tirs : seuls ceux portes
+    # quand elle est dans sa phase vulnerable comptent). Le temps du coup du
+    # trainer, ce test est saute (jne 1172A99 -> jmp), demande utilisateur :
+    # la jauge a 0 l'acheve quelle que soit sa phase. Meme chose pour l'etat
+    # 0xB de la machine 0 (coups ignores, je 1172AB2 -> nop ; un premier essai
+    # dans l'arene n'avait rien fait).
+    BOSS_KILL_FORCE = ((0x1172A99, bytes.fromhex("750a837b68600f85"), bytes.fromhex("eb")),
+                       (0x1172AB2, bytes.fromhex("0f84920800008b87"), bytes.fromhex("909090909090")))
+
+    def _boss_kill_force(self, enabled: bool) -> None:
+        for rva, original, patch in self.BOSS_KILL_FORCE:
+            current = self.proc.read_bytes(self.base + rva, len(original))
+            wanted = patch + original[len(patch):] if enabled else original
+            if current in (original, patch + original[len(patch):]) and current != wanted:
+                self.proc.write_bytes(self.base + rva, wanted[:len(patch)])
+
+    def boss_kill(self, gauge: str) -> bool:
+        """Acheve le boss de la jauge "boss:<cle>:life" par le chemin de mise
+        a mort du jeu (fil a part : un coup de Snake a chaque fois que le jeu
+        l'accepte, jusqu'a la mort ou BOSS_KILL_TIMEOUT) ; faux si impossible."""
+        found = self._boss_for(gauge)
+        key = gauge.split(":")[1]
+        if not found or key in self.BOSS_FLOOR_ONE or getattr(self, "_boss_killing", False):
+            return False
+        boss, damage, _which = found
+        block = self._boss_touch_block()
+        if not block:
+            return False
+        was_applied = self._code_patch_applied(self.BOSS_KILL_PATCH)
+        life_offset = self.BOSS_GAUGES["life"]
+        life_max = struct.unpack("<i", self.proc.read_bytes(damage + life_offset + 4, 4))[0]
+        kill_life = max(2, math.ceil(life_max * self.BOSS_KILL_LIFE))
+        # Le curseur a pu mettre la vie a 0 en glissant : le jeu ignorerait le
+        # coup (et la boucle croirait le boss mort).
+        self.write_boss_gauge(gauge, kill_life)
+        self._boss_killing = True
+
+        def pending() -> bool:
+            slots = struct.unpack(f"<{self.BOSS_TOUCH_SLOTS}Q", self.proc.read_bytes(block, 8 * self.BOSS_TOUCH_SLOTS))
+            return damage in slots
+
+        def run():
+            try:
+                started = time.monotonic()
+                while time.monotonic() - started < self.BOSS_KILL_TIMEOUT:
+                    if self._boss_for(gauge) is None:
+                        break  # boss parti (mort, cinematique)
+                    life = struct.unpack("<i", self.proc.read_bytes(damage + life_offset, 4))[0]
+                    if life <= 0:
+                        break
+                    if pending():
+                        time.sleep(0.01)
+                        continue
+                    self._boss_kill_force(True)
+                    if not was_applied and not self._code_patch_applied(self.BOSS_KILL_PATCH):
+                        self.set_code_patch(self.BOSS_KILL_PATCH, True)  # seulement le temps du coup
+                    if life > kill_life:
+                        self.write_boss_gauge(gauge, kill_life)
+                    self.boss_touch(gauge)
+                    time.sleep(0.1)  # coup consomme puis traite a l'image suivante
+                if pending():
+                    slots = struct.unpack(f"<{self.BOSS_TOUCH_SLOTS}Q",
+                                          self.proc.read_bytes(block, 8 * self.BOSS_TOUCH_SLOTS))
+                    self.proc.write_bytes(block + 8 * slots.index(damage), bytes(8))  # coup annule
+                time.sleep(0.1)
+                if not was_applied and self._code_patch_applied(self.BOSS_KILL_PATCH):
+                    self.set_code_patch(self.BOSS_KILL_PATCH, False)
+            except OSError:
+                pass
+            finally:
+                try:
+                    self._boss_kill_force(False)
+                except OSError:
+                    pass
+                self._boss_killing = False
+        threading.Thread(target=run, daemon=True).start()
+        return True
 
     def _rtti_name(self, vtable: int) -> str | None:
         """Nom de classe (sans .?AV ni @@) d'une vtable du module, sinon None."""

@@ -562,6 +562,7 @@ class VitalsTab(QWidget):
         slider = QSlider(Qt.Horizontal)
         slider.setRange(0, 100)
         slider.valueChanged.connect(lambda value, n=name: self._on_slider_changed(n, value))
+        slider.sliderReleased.connect(lambda n=name: self._on_slider_released(n))
         control_layout.addWidget(slider, 1)
         self.sliders[name] = slider
         value_label = QLabel("? %")
@@ -630,8 +631,19 @@ class VitalsTab(QWidget):
             except OSError:
                 pass
 
+    def _on_slider_released(self, name: str):
+        """Vie d'un boss relachee a 0 : le jeu l'acheve (MGS4Live.boss_kill)."""
+        if name.startswith("boss:") and name.endswith(":life") and self.sliders[name].value() == 0:
+            try:
+                self.live.boss_kill(name)
+            except OSError:
+                pass
+
     def _on_slider_changed(self, name: str, value: int):
         if not (self.live.connected and self.live.sane):
+            return
+        if name.startswith("boss:") and name.endswith(":life") and value == 0 and not self.sliders[name].isSliderDown():
+            self._on_slider_released(name)  # clic ou clavier, sans glisser
             return
         if name in self.PLAYER_GAUGE_ROWS:
             # Sans effet quand la jauge n'est pas active (pas suspendu, hors de l'eau).
