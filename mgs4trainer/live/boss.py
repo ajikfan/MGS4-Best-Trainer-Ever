@@ -44,6 +44,11 @@ class BossGaugeMixin:
     # boss (Laughing Octopus : boss-0x4FA0, aucun pointeur depuis le boss ;
     # Vamp : boss+0x464F0).
     BOSS_HUD = {"life": (0x10C, 0x110), "stamina": (0x144, 0x148)}
+    # Second modele (Liquid Ocelot, combat final, 2026-10-25 ; trouve a
+    # boss+0x3CBE4 par deux vrais coups) : (vie, endurance, 1, 1, vie, max de
+    # vie, endurance, max d'endurance), sans pointeur depuis le boss.
+    BOSS_HUD_PAIRS = {"life": (0x0, 0x10), "stamina": (0x4, 0x18)}
+    BOSS_HUD_PAIRS_CHECK = ((0x8, 1), (0xC, 1))  # puis max de vie +0x14, d'endurance +0x1C
     BOSS_HUD_SCAN = 0x1000
     BOSS_HUD_WINDOW = 0x80000
     # Plancher a 1 (2026-10-25, choix de l'utilisateur) pour les boss dont la
@@ -672,7 +677,8 @@ class BossGaugeMixin:
             data = b""
         for offset in range(8, len(data), 8):
             pointer = struct.unpack_from("<Q", data, offset)[0]
-            if 0x10000 < pointer < 0x7FF000000000 and pointer not in (boss, damage)                     and self._boss_hud_matches(pointer, damage):
+            if 0x10000 < pointer < 0x7FF000000000 and pointer not in (boss, damage) \
+                    and self._boss_hud_matches(pointer, damage):
                 hud = pointer
                 break
         if not hud:
@@ -703,6 +709,39 @@ class BossGaugeMixin:
                         return hud
                 index = data.find(wanted, index + 1)
         return 0
+
+    def _boss_hud_pairs(self, boss: int, damage: int) -> int:
+        """Barres du second modele (BOSS_HUD_PAIRS) autour du boss, 0 sinon."""
+        life_max, stamina_max = struct.unpack("<ii", self.proc.read_bytes(damage + 0x318, 4)
+                                              + self.proc.read_bytes(damage + 0x320, 4))
+        cached = getattr(self, "_boss_pairs_cache", (0, 0))
+        if cached[0] == boss and cached[1]:
+            try:
+                if struct.unpack("<ii", self.proc.read_bytes(cached[1] + 0x14, 4)
+                                 + self.proc.read_bytes(cached[1] + 0x1C, 4)) == (life_max, stamina_max):
+                    return cached[1]
+            except OSError:
+                pass
+        found = 0
+        if life_max > 0:
+            pattern = struct.pack("<iiii", 1, 1, 0, life_max)  # +0x8, +0xC, (+0x10 vie : quelconque), +0x14
+            for chunk in range(boss - self.BOSS_HUD_WINDOW, boss + self.BOSS_HUD_WINDOW, 0x10000):
+                try:
+                    data = self.proc.read_bytes(chunk, 0x10000 + 0x20)
+                except OSError:
+                    continue
+                index = data.find(pattern[:8])
+                while 0 <= index < 0x10000 and not found:
+                    start = index - 0x8
+                    if start >= 0 and index % 4 == 0 and len(data) >= start + 0x20:
+                        fields = struct.unpack_from("<8i", data, start)
+                        if fields[5] == life_max and fields[7] == stamina_max and 0 <= fields[0] <= life_max:
+                            found = chunk + start
+                    index = data.find(pattern[:8], index + 1)
+                if found:
+                    break
+        self._boss_pairs_cache = (boss, found)
+        return found
 
     def boss_key(self) -> str | None:
         """Cle (BOSS_CLASSES) du boss present, sinon None."""
@@ -741,4 +780,13 @@ class BossGaugeMixin:
         bars = self._boss_hud(boss, damage) if hud else 0
         if bars:
             self.proc.write_bytes(bars + self.BOSS_HUD[which][1], value)
+        pairs = self._boss_hud_pairs(boss, damage) if hud and not bars else 0
+        for offset in self.BOSS_HUD_PAIRS[which] if pairs else ():
+            self.proc.write_bytes(pairs + offset, value)
+        watch = getattr(self, "_lq_watch", None)
+        if gauge.split(":")[1] == "liquid" and watch and watch.get("gauges") is not None:
+            # Un coup, un mort sur Liquid guette une baisse de ses jauges : une
+            # baisse faite ici n'est pas un coup (meme fil que liquid_tick).
+            watch["gauges"] = struct.unpack("<i", self.proc.read_bytes(damage + 0x314, 4)) + \
+                struct.unpack("<i", self.proc.read_bytes(damage + 0x31C, 4))
         return True
