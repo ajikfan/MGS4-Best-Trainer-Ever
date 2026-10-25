@@ -4,6 +4,8 @@ import struct
 import threading
 import time
 
+from mgs4trainer.core.winproc import MEM_COMMIT, PAGE_EXECUTE_READWRITE, kernel32
+
 
 class BossGaugeMixin:
     """Vie et endurance du boss de la zone (onglet Jauges)."""
@@ -64,11 +66,12 @@ class BossGaugeMixin:
     #    "dernier coup", BOSS_TOUCH_HIT, ne font aucun degat), projectile
     #    +0xD0 efface, attaquant +0xC8 = entree du joueur (8DA180), +0x68 bit 0.
     # Bloc : places (+0x00), magie (+0x20), rax sauve (+0x28), prologue
-    # deplace (+0x30), enregistrement (+0x40), modele pret (+0x48), code
-    # (+0x60), modele (+0x200).
+    # deplace (+0x30), enregistrement (+0x40), modele pret (+0x48),
+    # surveillance (+0x50 : objet de vie dont les impacts sont comptes en
+    # +0x58, voir mantis_one_hit_tick), code (+0x60), modele (+0x200).
     BOSS_TOUCH_RVA = 0xB88260
     BOSS_TOUCH_PROLOGUE = bytes.fromhex("4053574155" "4883ec60")  # push rbx/rdi/r13 ; sub rsp,60
-    BOSS_TOUCH_MAGIC = b"MGS4TCH3"
+    BOSS_TOUCH_MAGIC = b"MGS4TCH4"
     BOSS_TOUCH_CODE = 0x60
     BOSS_TOUCH_OLD_CODE = (0x40,)  # versions precedentes (code a +0x40)
     BOSS_TOUCH_SLOTS = 4
@@ -135,15 +138,24 @@ class BossGaugeMixin:
         emit(bytes.fromhex("4883c42059"))                                  # add rsp,20 ; pop rcx
         emit(bytes.fromhex("488905"), save)                                # mov [sauve],rax
         emit(bytes.fromhex("483b0d"), record)                              # cmp rcx,[enregistrement]
-        jump(0x75, "slots")
+        jump(0x75, "watch")
         emit(bytes.fromhex("f74168b72fe301"))                              # test [rcx+68],coups
         jump(0x75, "record")
         emit(bytes.fromhex("83796c00"))                                    # cmp dword [rcx+6c],0
-        jump(0x74, "slots")
+        jump(0x74, "watch")
         mark("record")
         copy(None, model)
         emit(bytes.fromhex("48c705"), record, struct.pack("<I", 0))        # enregistrement libere
         emit(bytes.fromhex("48c705"), ready, struct.pack("<I", 1))         # modele pret
+        mark("watch")
+        emit(bytes.fromhex("483b0d"), block + 0x50)                        # cmp rcx,[surveillance]
+        jump(0x75, "slots")
+        emit(bytes.fromhex("f74168b72fe301"))                              # test [rcx+68],coups
+        jump(0x75, "count")
+        emit(bytes.fromhex("83796c00"))                                    # cmp dword [rcx+6c],0
+        jump(0x74, "slots")
+        mark("count")
+        emit(bytes.fromhex("48ff05"), block + 0x58)                        # inc qword [impacts]
         mark("slots")
         for slot in range(self.BOSS_TOUCH_SLOTS):
             emit(bytes.fromhex("483b0d"), block + 8 * slot)                 # cmp rcx,[place]
@@ -425,6 +437,93 @@ class BossGaugeMixin:
                     self.proc.write_bytes(plugin + offset, struct.pack("<I", flags & ~bit))
                 return
             plugin = struct.unpack("<Q", self.proc.read_bytes(plugin + 8, 8))[0]
+
+    # Un coup, un mort sur Screaming Mantis (2026-10-25) : ses balles ne lui
+    # font rien, seule la poupee Mantis secouee dans sa phase (etat 0x2BD)
+    # retire de l'endurance (mise a jour F08CF0). Sa defaite est le bloc
+    # F0903E-F0917B : endurance 0, message 0x1E001C au joueur, vitesse de
+    # chute (+0x5810, +0x57C0..+0x57E0, +0x5820), animation EE9690, ralenti,
+    # puis B0F9B0(Mantis, [Mantis+0x2AC], 0x2BF) - machine 2 (etats 700 a
+    # 703), [+0x2AC] ne vaut 2 que dans cette phase (-1 sinon : B0F9B0 passe
+    # alors une machine nulle, PLANTAGE constate). Un petit code refait le
+    # prologue de F08CF0 (rdi = Mantis, rsi = 0, xmm6 = 0, xmm7 = 1.0, rax =
+    # objet de vie) et saute dans le bloc, qui rend la main par l'epilogue
+    # F09241 ; +0x2AC mis a 2 le temps de l'appel. Valide : fin du combat,
+    # cinematique. Declenche quand l'objet de vie de Mantis recoit un impact
+    # (place de surveillance du detour de B88260).
+    MANTIS_DEFEAT = {
+        "prologue": (0xF08CF0, "48895c24084889742410574883ec50"),
+        "block": (0xF0903E, "f30f10058a9d900089b01c0300000f2f"),
+        "epilogue": (0xF09241, "488b5c2460488b7424680f287424400f287c24304883c4505fc3"),
+        "machine_goto": (0xB0F9B0, "448b51344533c9488b49384585d27e17"),
+    }
+    MANTIS_DEFEAT_MACHINE = (0x2AC, 2)
+
+    def _mantis_defeat_stub(self, funcs: dict[str, int]) -> int:
+        if getattr(self, "_mantis_stub_pid", None) == self.pid:
+            return self._mantis_stub_addr
+        code = (bytes.fromhex("48895c2408488974241057" "4883ec50" "0f29742440" "0f297c2430")  # prologue de F08CF0
+                + bytes.fromhex("4889cf" "0f57f6" "b80000803f" "660f6ef8" "31f6")       # rdi, xmm6, xmm7 = 1.0, esi
+                + bytes.fromhex("488b87b8420000")                                      # rax = objet de vie
+                + bytes.fromhex("48b9") + struct.pack("<Q", funcs["block"]) + bytes.fromhex("ffe1"))
+        stub = kernel32.VirtualAllocEx(self.proc.handle, None, 0x1000, MEM_COMMIT | 0x2000, PAGE_EXECUTE_READWRITE)
+        if not stub:
+            return 0
+        self.proc.write_bytes(stub, code)
+        self._mantis_stub_addr, self._mantis_stub_pid = stub, self.pid
+        return stub
+
+    def mantis_defeat(self) -> bool:
+        """Lance la defaite de Screaming Mantis (bete) par le code du jeu."""
+        boss = self._boss()
+        if not boss or boss[0] != "mantis_beast" or not self.speed.main_loop_hook_installed():
+            return False
+        mantis = boss[1]
+        funcs = self._live_funcs(self.MANTIS_DEFEAT)
+        offset, machine_id = self.MANTIS_DEFEAT_MACHINE
+        count = struct.unpack("<i", self.proc.read_bytes(mantis + 0x34, 4))[0]
+        machines = struct.unpack("<Q", self.proc.read_bytes(mantis + 0x38, 8))[0]
+        ids = [struct.unpack("<i", self.proc.read_bytes(machines + i * 0x130 + 0x128, 4))[0]
+               for i in range(min(max(count, 0), 16))] if machines else []
+        if funcs is None or machine_id not in ids:
+            return False
+        stub = self._mantis_defeat_stub(funcs)
+        if not stub:
+            return False
+        saved = self.proc.read_bytes(mantis + offset, 4)
+        self.proc.write_bytes(mantis + offset, struct.pack("<i", machine_id))
+        try:
+            done = self.speed.game_call(stub, mantis) is not None
+        finally:
+            self.proc.write_bytes(mantis + offset, saved)
+        return done
+
+    def mantis_one_hit_tick(self, one_hit: bool) -> None:
+        """A appeler souvent : avec Un coup, un mort, le premier impact recu
+        par Screaming Mantis (bete) la fait perdre."""
+        boss = self._boss() if one_hit else None
+        block = self._boss_touch_block() if boss and boss[0] == "mantis_beast" else 0
+        if not block:
+            return
+        watched, hits = struct.unpack("<QQ", self.proc.read_bytes(block + 0x50, 16))
+        if watched != boss[2]:
+            self.proc.write_bytes(block + 0x50, struct.pack("<QQ", boss[2], 0))
+            self._mantis_hits = 0
+            return
+        if hits != getattr(self, "_mantis_hits", 0):
+            self._mantis_hits = hits
+            if not getattr(self, "_mantis_defeating", False):
+                self._mantis_defeating = True
+
+                def run():
+                    try:
+                        self.mantis_defeat()
+                    except OSError:
+                        pass
+                    finally:
+                        time.sleep(1.0)
+                        self._mantis_defeating = False
+                threading.Thread(target=run, daemon=True).start()
 
     def _rtti_name(self, vtable: int) -> str | None:
         """Nom de classe (sans .?AV ni @@) d'une vtable du module, sinon None."""

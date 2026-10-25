@@ -16,7 +16,7 @@ are still handled by the game.
 | Raging Beauty | one hit, any weapon (confirmed) | stamina drained (confirmed) |
 | Crying Wolf | one hit, any weapon (confirmed) | stamina drained, any weapon (confirmed) |
 | Crying Beauty | one hit, any weapon (confirmed) | stamina drained, any weapon (confirmed) |
-| Screaming Mantis (Beast and Beauty) | one hit with the doll (confirmed) | stamina drained with the doll (confirmed) |
+| Screaming Mantis (Beast and Beauty) | Beast: defeated by the first bullet, dolls dropped with one bullet each, no Mantis doll needed (confirmed); Beauty: one hit with the doll (confirmed) | same for the Beast (confirmed); Beauty: stamina drained with the doll (confirmed) |
 | Metal Gear RAY | destroyed in one hit (confirmed) | destroyed in one hit (confirmed) |
 | Vamp | down in one shot, the syringe is still needed | not covered |
 | Liquid Ocelot (final fight) | health and stamina at the phase floor at the first hit | same (fist fight) |
