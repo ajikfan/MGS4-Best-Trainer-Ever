@@ -101,9 +101,8 @@ class CutsceneMenuMixin:
             return True
         if not (self.connected and self.sane):
             return False
-        for rva, original in self.CSM_ORIGINAL.items():
-            if self.proc.read_bytes(self.base + rva, len(original)) != original:
-                return False
+        if not self._csm_restore_leftover():
+            return False
         b = self.base
         confirm_ok = all(self.proc.read_bytes(b + rva, len(sig) // 2).hex() == sig
                          for rva, sig in self.CSM_DLG_FUNCS.values())
@@ -169,6 +168,36 @@ class CutsceneMenuMixin:
             text = self.game_menu_text(31) if self.speed.ensure_injected(self.pid) else None
             state["label"] = text.strip().rstrip(".。").upper() if text else ""
         return state["label"] or None
+
+    def _csm_restore_leftover(self) -> bool:
+        """Vrai si les sites sont d'origine. Un detour laisse par un trainer
+        ferme sans nettoyage (tue, plantage) est reconnu (sauts vers le code de
+        la page : mov [tache],rcx en +0x40, cmp [rbx+A0h],2 en +0x80 ; 3
+        entrees ; lea vers la page) et retire ; autre contenu : faux."""
+        b, proc = self.base, self.proc
+        current = {rva: proc.read_bytes(b + rva, len(original)) for rva, original in self.CSM_ORIGINAL.items()}
+        if all(current[rva] == original for rva, original in self.CSM_ORIGINAL.items()):
+            return True
+        try:
+            for rva, data in current.items():
+                if data == self.CSM_ORIGINAL[rva]:
+                    continue
+                if rva == self.CSM_COUNT:
+                    ours = data == bytes.fromhex("ba03000000")
+                elif rva == self.CSM_TABLE_LEA:
+                    ours = data[:3] == bytes.fromhex("488d0d")
+                else:
+                    target = b + rva + 5 + struct.unpack_from("<i", data, 1)[0]
+                    expected = bytes.fromhex("48890d") if rva == self.CSM_ENTRY else bytes.fromhex("83bba000000002")
+                    ours = data[0] == 0xE9 and proc.read_bytes(target, len(expected)) == expected
+                if not ours:
+                    return False
+        except OSError:
+            return False
+        for rva, original in self.CSM_ORIGINAL.items():
+            if current[rva] != original:
+                proc.write_bytes(b + rva, original)
+        return True
 
     def cutscene_quit_remove(self) -> None:
         state = getattr(self, "_csm", None)

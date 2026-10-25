@@ -101,9 +101,8 @@ class LoadMenuMixin:
         if not (self.connected and self.sane):
             return False
         b, proc = self.base, self.proc
-        for rva, original in self.LM_SITES.items():
-            if proc.read_bytes(b + rva, len(original)) != original:
-                return False
+        if not self._lm_restore_leftover():
+            return False
         for rva, sig in self.LM_FUNCS.items():
             if proc.read_bytes(b + rva, len(sig) // 2).hex() != sig:
                 return False
@@ -130,6 +129,35 @@ class LoadMenuMixin:
             patch = opcode + struct.pack("<i", target - (site + 5))
             proc.write_bytes(site, patch + b"\x90" * (len(self.LM_SITES[rva]) - 5))
         self._lm = {"pid": self.pid, "page": page, "phase": "idle", "since": 0.0, "data": 0, "data_state": None}
+        return True
+
+    def _lm_restore_leftover(self) -> bool:
+        """Vrai si les sites sont d'origine. Un detour laisse par un trainer
+        ferme sans nettoyage (tue, plantage) est reconnu (sauts vers une page
+        portant LM_CODE, octets de l'action) et retire ; autre contenu : faux."""
+        b, proc = self.base, self.proc
+        current = {rva: proc.read_bytes(b + rva, len(original)) for rva, original in self.LM_SITES.items()}
+        if all(current[rva] == original for rva, original in self.LM_SITES.items()):
+            return True
+        for rva, original in self.LM_SITES.items():
+            data = current[rva]
+            if data == original:
+                continue
+            if rva == 0x4E34FA:
+                if data != self.LM_ACTION:
+                    return False
+                continue
+            if data[0] not in (0xE8, 0xE9) or rva not in self.LM_ENTRY:
+                return False
+            page = b + rva + 5 + struct.unpack_from("<i", data, 1)[0] - self.LM_ENTRY[rva]
+            try:
+                if proc.read_bytes(page + 0x200, 32) != self.LM_CODE[:32]:
+                    return False
+            except OSError:
+                return False
+        for rva, original in self.LM_SITES.items():
+            if current[rva] != original:
+                proc.write_bytes(b + rva, original)
         return True
 
     def load_menu_remove(self) -> None:
