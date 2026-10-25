@@ -44,11 +44,14 @@ class BossGaugeMixin:
     # boss (Laughing Octopus : boss-0x4FA0, aucun pointeur depuis le boss ;
     # Vamp : boss+0x464F0).
     BOSS_HUD = {"life": (0x10C, 0x110), "stamina": (0x144, 0x148)}
-    # Second modele (Liquid Ocelot, combat final, 2026-10-25 ; trouve a
-    # boss+0x3CBE4 par deux vrais coups) : (vie, endurance, 1, 1, vie, max de
-    # vie, endurance, max d'endurance), sans pointeur depuis le boss.
-    BOSS_HUD_PAIRS = {"life": (0x0, 0x10), "stamina": (0x4, 0x18)}
-    BOSS_HUD_PAIRS_CHECK = ((0x8, 1), (0xC, 1))  # puis max de vie +0x14, d'endurance +0x1C
+    # Barres par handle (Liquid Ocelot, combat final, 2026-10-25) : sa
+    # fonction des coups (11270E0) met sa barre a jour par D11F90(handle, vie)
+    # puis D12180(handle, endurance), handle a Liquid+0x4670 : tache (verifiee
+    # par +0x30 == handle), vie +0xC4, endurance +0xCC ; le jeu remet aussi a 0
+    # +0xD8 / +0xE0 (8 octets) et +0xEC. Valeurs ecrites de la meme facon.
+    BOSS_HUD_HANDLES = {"liquid": 0x4670}
+    BOSS_HUD_HANDLE_FIELDS = {"life": (0xC4, 0xD8), "stamina": (0xCC, 0xE0)}
+    BOSS_HUD_HANDLE_RESET = 0xEC
     BOSS_HUD_SCAN = 0x1000
     BOSS_HUD_WINDOW = 0x80000
     # Plancher a 1 (2026-10-25, choix de l'utilisateur) pour les boss dont la
@@ -710,38 +713,18 @@ class BossGaugeMixin:
                 index = data.find(wanted, index + 1)
         return 0
 
-    def _boss_hud_pairs(self, boss: int, damage: int) -> int:
-        """Barres du second modele (BOSS_HUD_PAIRS) autour du boss, 0 sinon."""
-        life_max, stamina_max = struct.unpack("<ii", self.proc.read_bytes(damage + 0x318, 4)
-                                              + self.proc.read_bytes(damage + 0x320, 4))
-        cached = getattr(self, "_boss_pairs_cache", (0, 0))
-        if cached[0] == boss and cached[1]:
-            try:
-                if struct.unpack("<ii", self.proc.read_bytes(cached[1] + 0x14, 4)
-                                 + self.proc.read_bytes(cached[1] + 0x1C, 4)) == (life_max, stamina_max):
-                    return cached[1]
-            except OSError:
-                pass
-        found = 0
-        if life_max > 0:
-            pattern = struct.pack("<iiii", 1, 1, 0, life_max)  # +0x8, +0xC, (+0x10 vie : quelconque), +0x14
-            for chunk in range(boss - self.BOSS_HUD_WINDOW, boss + self.BOSS_HUD_WINDOW, 0x10000):
-                try:
-                    data = self.proc.read_bytes(chunk, 0x10000 + 0x20)
-                except OSError:
-                    continue
-                index = data.find(pattern[:8])
-                while 0 <= index < 0x10000 and not found:
-                    start = index - 0x8
-                    if start >= 0 and index % 4 == 0 and len(data) >= start + 0x20:
-                        fields = struct.unpack_from("<8i", data, start)
-                        if fields[5] == life_max and fields[7] == stamina_max and 0 <= fields[0] <= life_max:
-                            found = chunk + start
-                    index = data.find(pattern[:8], index + 1)
-                if found:
-                    break
-        self._boss_pairs_cache = (boss, found)
-        return found
+    def _boss_hud_task(self, key: str, boss: int) -> int:
+        """Tache de barre designee par un handle du boss (BOSS_HUD_HANDLES), 0 sinon."""
+        if key not in self.BOSS_HUD_HANDLES:
+            return 0
+        handle = struct.unpack("<Q", self.proc.read_bytes(boss + self.BOSS_HUD_HANDLES[key], 8))[0]
+        task = handle & 0xFFFFFFFFFFFFF
+        try:
+            if handle and struct.unpack("<Q", self.proc.read_bytes(task + 0x30, 8))[0] == handle:
+                return task
+        except OSError:
+            pass
+        return 0
 
     def boss_key(self) -> str | None:
         """Cle (BOSS_CLASSES) du boss present, sinon None."""
@@ -780,9 +763,12 @@ class BossGaugeMixin:
         bars = self._boss_hud(boss, damage) if hud else 0
         if bars:
             self.proc.write_bytes(bars + self.BOSS_HUD[which][1], value)
-        pairs = self._boss_hud_pairs(boss, damage) if hud and not bars else 0
-        for offset in self.BOSS_HUD_PAIRS[which] if pairs else ():
-            self.proc.write_bytes(pairs + offset, value)
+        task = self._boss_hud_task(gauge.split(":")[1], boss) if hud and not bars else 0
+        if task:
+            field, trail = self.BOSS_HUD_HANDLE_FIELDS[which]
+            self.proc.write_bytes(task + field, value)
+            self.proc.write_bytes(task + trail, bytes(8))
+            self.proc.write_bytes(task + self.BOSS_HUD_HANDLE_RESET, bytes(4))
         watch = getattr(self, "_lq_watch", None)
         if gauge.split(":")[1] == "liquid" and watch and watch.get("gauges") is not None:
             # Un coup, un mort sur Liquid guette une baisse de ses jauges : une
