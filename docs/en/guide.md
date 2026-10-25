@@ -137,7 +137,9 @@ window is small):
   **Jonathan**, **Ed**; acts 1 and 5 for Meryl and Johnny, act 1 for
   Jonathan and Ed), with their live state (active, hit, asleep, knocked
   out, dead), a **Wake up / Put to sleep / Knock out / Kill** list and
-  the **Apply** button, then their health and stamina.
+  the **Apply** button, then their health and stamina;
+- **Boss**: health and stamina of the boss currently present, its name
+  in the title ("no boss" outside a fight).
 
 For each one: a percentage slider to set it, and a **Lock** checkbox
 that keeps it at that level (Health locked at 100 % = infinite health,
@@ -153,6 +155,13 @@ act 5 fails the mission), their stamina at 0 knocks them out at once.
 Wake up gets them up right away; Put to sleep makes them fall slowly
 ("Z"s); Knock out makes them fall suddenly (stars); a teammate may come
 and wake them up.
+
+Boss: the on-screen bars follow the slider at once. The lock brings the
+gauge back up at each refresh: a short dip remains visible after a hit.
+Health and stamina never go below 1 (use One Shot, One Kill to take a
+boss down). Locked health prevents the phase changes tied to health.
+Confirmed on Raging Raven; the other bosses are recognized by their class
+name in the game.
 
 ### Weapons
 

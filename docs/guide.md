@@ -141,7 +141,9 @@ si la fenêtre est petite) :
   **Jonathan**, **Ed** ; actes 1 et 5 pour Meryl et Johnny, acte 1 pour
   Jonathan et Ed), avec son état en direct (actif, touché, endormi,
   assommé, mort), une liste **Réveiller / Endormir / Assommer / Tuer** et
-  le bouton **Appliquer**, puis sa vie et son endurance.
+  le bouton **Appliquer**, puis sa vie et son endurance ;
+- **Boss** : vie et endurance du boss présent, son nom dans le titre
+  (« aucun boss » hors combat).
 
 Pour chacune : un curseur en pourcentage pour la régler, et une case
 **Verrouiller** qui la maintient à ce niveau (Santé verrouillée à 100 % =
@@ -158,6 +160,13 @@ Meryl à l'acte 5 fait échouer la mission), leur endurance à 0 les met
 K.O. aussitôt. Réveiller les relève tout de suite ; Endormir les fait
 tomber lentement (des « Z ») ; Assommer les fait tomber brusquement (des
 étoiles) ; un équipier peut venir les réveiller.
+
+Boss : les barres à l'écran suivent aussitôt le curseur. Le verrou remonte
+la jauge à chaque rafraîchissement : une courte baisse reste visible après
+un coup. Vie et endurance ne descendent pas sous 1 (pour mettre un boss à
+terre, utiliser Un coup, un mort). Une vie verrouillée empêche les
+changements de phase liés à la vie. Confirmé sur Raging Raven ; les autres
+boss sont reconnus par le nom de leur classe dans le jeu.
 
 ### Armes
 

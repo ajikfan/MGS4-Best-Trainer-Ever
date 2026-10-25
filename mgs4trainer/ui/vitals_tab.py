@@ -322,6 +322,7 @@ class VitalsTab(QWidget):
         ("gauges.vehicles_group", ("Drebin 893", "Van", "Sante Metal Gear REX")),
         ("gauges.allies_group", ("Vie de Meryl", "Endurance de Meryl", "Vie de Johnny", "Endurance de Johnny",
                                  "Vie de Jonathan", "Endurance de Jonathan", "Vie d'Ed", "Endurance d'Ed")),
+        ("gauges.boss_group", ("Vie du boss", "Endurance du boss")),
     )
 
     def _gauge_table(self, names, header: bool = True) -> QTableWidget:
@@ -360,6 +361,8 @@ class VitalsTab(QWidget):
         tables, ally_tables = [], []
         for title, names in self.GAUGE_GROUPS:
             group = QGroupBox(tr(title))
+            if title == "gauges.boss_group":
+                self.boss_group = group
             if title == "gauges.allies_group":
                 group.setLayout(self._build_ally_boxes(ally_tables))
             else:
@@ -524,7 +527,8 @@ class VitalsTab(QWidget):
                          "Vie de Meryl": "meryl", "Endurance de Meryl": "meryl_stamina",
                          "Vie de Johnny": "johnny", "Endurance de Johnny": "johnny_stamina",
                          "Vie de Jonathan": "jonathan", "Endurance de Jonathan": "jonathan_stamina",
-                         "Vie d'Ed": "ed", "Endurance d'Ed": "ed_stamina"}
+                         "Vie d'Ed": "ed", "Endurance d'Ed": "ed_stamina",
+                         "Vie du boss": "boss", "Endurance du boss": "boss_stamina"}
     PLAYER_GAUGE_MAX = 2000
 
     def _on_lock_toggled(self, name: str, checked: bool):
@@ -768,6 +772,8 @@ class VitalsTab(QWidget):
     def _reassert_player_gauges(self):
         self._refresh_ally_states()
         self._refresh_liquid()
+        boss = self.live.boss_name()
+        self.boss_group.setTitle(tr("gauges.boss_named", name=boss) if boss else tr("gauges.boss_group"))
         self.live.set_allies_invulnerable(set())
         self.live.set_ally_write_locks(
             {ally for ally, (life, _stamina) in self.ALLY_LOCK_ROWS.items() if life in self.locked_percents},

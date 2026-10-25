@@ -869,7 +869,9 @@ class PlayerMixin:
         return None
 
     def player_gauge_max(self, gauge: str) -> int | None:
-        """Maximum reel d'une jauge quand le jeu le stocke (Drebin 893, allies)."""
+        """Maximum reel d'une jauge quand le jeu le stocke (Drebin 893, allies, boss)."""
+        if gauge in self.BOSS_GAUGES:
+            return self.boss_gauge_max(gauge)
         if gauge in self.ALLY_GAUGES and self.connected and self.sane:
             ally, offset = self.ALLY_GAUGES[gauge]
             life = self._ally_life_object(ally)
@@ -888,6 +890,8 @@ class PlayerMixin:
         sous l'eau, dans le Drebin 893) ; -1 sinon, None si introuvable."""
         if not (self.connected and self.sane):
             return None
+        if gauge in self.BOSS_GAUGES:
+            return self.read_boss_gauge(gauge)
         if gauge in self.ALLY_GAUGES:
             ally, offset = self.ALLY_GAUGES[gauge]
             life = self._ally_life_object(ally)
@@ -910,6 +914,8 @@ class PlayerMixin:
     def write_player_gauge(self, gauge: str, value: int) -> bool:
         if not (self.connected and self.sane):
             return False
+        if gauge in self.BOSS_GAUGES:
+            return self.write_boss_gauge(gauge, value)
         if gauge in self.ALLY_GAUGES:
             ally, offset = self.ALLY_GAUGES[gauge]
             life = self._ally_life_object(ally)
