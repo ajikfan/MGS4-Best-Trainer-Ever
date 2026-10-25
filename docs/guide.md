@@ -171,9 +171,10 @@ porte « en cours », les autres affichent « absent ».
 
 Les barres à l'écran suivent aussitôt le curseur. Le verrou remonte la
 jauge à chaque rafraîchissement : une courte baisse reste visible après un
-coup. Relâcher le curseur de vie à 0 achève le boss : le trainer lui
-fait recevoir un tir de Snake, et le jeu enchaîne sa mort normalement
-(Beauty comprises, quelle que soit leur phase). Pour la bête de
+coup. Relâcher le curseur de vie à 0 achève le boss, celui d'endurance
+le met K.O. : le trainer lui fait recevoir un tir de Snake (létal ou non
+létal), et le jeu enchaîne la suite normalement (Beauty comprises,
+quelle que soit leur phase). Pour la bête de
 Laughing Octopus, celle de Screaming Mantis, Vamp et Liquid Ocelot, vie et
 endurance ne descendent pas sous 1 (leurs phases et leurs scripts
 dépendent de la vie). Une vie verrouillée empêche les changements de phase

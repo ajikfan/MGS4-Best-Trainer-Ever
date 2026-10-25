@@ -166,9 +166,10 @@ progress", the others show "not present".
 
 The on-screen bars follow the slider at once. The lock brings the gauge
 back up at each refresh: a short dip remains visible after a hit. Releasing
-the health slider at 0 finishes the boss: the trainer makes it take a
-shot from Snake, and the game plays its death normally (Beauties
-included, whatever their phase). For Laughing Octopus's beast, Screaming Mantis's
+the health slider at 0 finishes the boss, the stamina slider knocks it
+out: the trainer makes it take a shot from Snake (lethal or not), and
+the game plays the rest normally (Beauties included, whatever their
+phase). For Laughing Octopus's beast, Screaming Mantis's
 beast, Vamp and Liquid Ocelot, health and stamina never go below 1 (their
 phases and scripts depend on health). Locked health prevents the phase
 changes tied to health. Confirmed on Raging Raven and Laughing Octopus;

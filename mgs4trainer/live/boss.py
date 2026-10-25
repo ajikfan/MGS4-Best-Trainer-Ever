@@ -266,7 +266,6 @@ class BossGaugeMixin:
     # sous 2 % il ramene les degats a presque rien), patch pose le temps du
     # coup s'il ne l'etait pas, coup de Snake (boss_touch), puis patch remis.
     # Valide sur la Beauty de Laughing Octopus (elle meurt).
-    BOSS_KILL_PATCH = "boss_one_shot_kill"
     BOSS_KILL_LIFE = 0.05
     BOSS_KILL_TIMEOUT = 10.0
 
@@ -294,25 +293,34 @@ class BossGaugeMixin:
             if current in (original, patch + original[len(patch):]) and current != wanted:
                 self.proc.write_bytes(self.base + rva, wanted[:len(patch)])
 
+    # Jauge relachee a 0 : vie -> mise a mort (patch Letal), endurance -> K.O.
+    # (patch Non letal : tout coup passe par le chemin endurance et la vide).
+    # Les deux patchs modifient le meme site (1173BC7) : l'oppose est retire
+    # le temps du coup, puis chacun retrouve son etat d'avant.
+    BOSS_FINISH_PATCHES = {"life": ("boss_one_shot_kill", "boss_non_lethal_kill"),
+                           "stamina": ("boss_non_lethal_kill", "boss_one_shot_kill")}
+
     def boss_kill(self, gauge: str) -> bool:
-        """Acheve le boss de la jauge "boss:<cle>:life" par le chemin de mise
-        a mort du jeu (fil a part : un coup de Snake a chaque fois que le jeu
-        l'accepte, jusqu'a la mort ou BOSS_KILL_TIMEOUT) ; faux si impossible."""
+        """Acheve le boss de la jauge "boss:<cle>:life" (mort) ou
+        "boss:<cle>:stamina" (K.O.) par le chemin du jeu (fil a part : un coup
+        de Snake a la fois, jusqu'au resultat ou BOSS_KILL_TIMEOUT) ; faux si
+        impossible."""
         found = self._boss_for(gauge)
         key = gauge.split(":")[1]
         if not found or key in self.BOSS_FLOOR_ONE or getattr(self, "_boss_killing", False):
             return False
-        boss, damage, _which = found
+        boss, damage, which = found
         block = self._boss_touch_block()
         if not block:
             return False
-        was_applied = self._code_patch_applied(self.BOSS_KILL_PATCH)
-        life_offset = self.BOSS_GAUGES["life"]
-        life_max = struct.unpack("<i", self.proc.read_bytes(damage + life_offset + 4, 4))[0]
-        kill_life = max(2, math.ceil(life_max * self.BOSS_KILL_LIFE))
-        # Le curseur a pu mettre la vie a 0 en glissant : le jeu ignorerait le
-        # coup (et la boucle croirait le boss mort).
-        self.write_boss_gauge(gauge, kill_life)
+        wanted_patch, opposite_patch = self.BOSS_FINISH_PATCHES[which]
+        initial = {name: self._code_patch_applied(name) for name in (wanted_patch, opposite_patch)}
+        offset = self.BOSS_GAUGES[which]
+        gauge_max = struct.unpack("<i", self.proc.read_bytes(damage + offset + 4, 4))[0]
+        finish_value = max(2, math.ceil(gauge_max * self.BOSS_KILL_LIFE))
+        # Le curseur a pu mettre la jauge a 0 en glissant : le jeu ignorerait
+        # le coup (et la boucle croirait le resultat atteint).
+        self.write_boss_gauge(gauge, finish_value)
         self._boss_killing = True
 
         def pending() -> bool:
@@ -325,17 +333,19 @@ class BossGaugeMixin:
                 while time.monotonic() - started < self.BOSS_KILL_TIMEOUT:
                     if self._boss_for(gauge) is None:
                         break  # boss parti (mort, cinematique)
-                    life = struct.unpack("<i", self.proc.read_bytes(damage + life_offset, 4))[0]
-                    if life <= 0:
+                    value = struct.unpack("<i", self.proc.read_bytes(damage + offset, 4))[0]
+                    if value <= 0:
                         break
                     if pending():
                         time.sleep(0.01)
                         continue
                     self._boss_kill_force(True)
-                    if not was_applied and not self._code_patch_applied(self.BOSS_KILL_PATCH):
-                        self.set_code_patch(self.BOSS_KILL_PATCH, True)  # seulement le temps du coup
-                    if life > kill_life:
-                        self.write_boss_gauge(gauge, kill_life)
+                    if self._code_patch_applied(opposite_patch):
+                        self.set_code_patch(opposite_patch, False)  # meme site : retire le temps du coup
+                    if not self._code_patch_applied(wanted_patch):
+                        self.set_code_patch(wanted_patch, True)
+                    if value > finish_value:
+                        self.write_boss_gauge(gauge, finish_value)
                     self.boss_touch(gauge)
                     time.sleep(0.1)  # coup consomme puis traite a l'image suivante
                 if pending():
@@ -343,13 +353,17 @@ class BossGaugeMixin:
                                           self.proc.read_bytes(block, 8 * self.BOSS_TOUCH_SLOTS))
                     self.proc.write_bytes(block + 8 * slots.index(damage), bytes(8))  # coup annule
                 time.sleep(0.1)
-                if not was_applied and self._code_patch_applied(self.BOSS_KILL_PATCH):
-                    self.set_code_patch(self.BOSS_KILL_PATCH, False)
             except OSError:
                 pass
             finally:
                 try:
                     self._boss_kill_force(False)
+                    for name in (wanted_patch, opposite_patch):  # l'un apres l'autre : meme site
+                        if not initial[name] and self._code_patch_applied(name):
+                            self.set_code_patch(name, False)
+                    for name in (wanted_patch, opposite_patch):
+                        if initial[name] and not self._code_patch_applied(name):
+                            self.set_code_patch(name, True)
                 except OSError:
                     pass
                 self._boss_killing = False
