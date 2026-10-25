@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.6.0
+# MGS4 Trainer — V2.7.0
 
 *[English version](README.en.md)*
 
@@ -50,20 +50,22 @@ des versions.
 - [Comment ça marche](docs/fonctionnement.md)
 - [Maintenance](docs/maintenance.md) (compatibilité, build, organisation du code)
 
-## Dernière version : V2.6.0
+## Dernière version : V2.7.0
 
-- **Mode photo** : caméra libre pilotée à la manette ou au clavier et à
-  la souris, Snake immobile.
-- **Pause** : la touche Pause utilise la pause du jeu (le mode photo
-  marche pendant la pause).
-- **Menu pause des cinématiques** : nouvelle ligne QUITTER.
-- **Salle blanche** et **Menu principal** : deux nouveaux boutons.
-- **Metal Gear REX** : la téléportation déplace REX lui-même quand tu le
-  pilotes, et Intouchable le protège aussi.
-- **Chrono figé** : le compte à rebours du jeu ne descend plus.
-- **Toute la zone** : Tuer et Assommer marchent sur les Gekko de la fuite
-  de REX.
-- Livrée par la **mise à jour intégrée** (petits fichiers).
+- **Onglet Boss** : vie et endurance de chaque boss (Bête et Beauty côte à
+  côte), barres à l'écran synchronisées ; jauge relâchée à 0 = boss achevé
+  ou mis K.O. par le jeu.
+- **Charger** depuis le menu pause, avec fondu au noir.
+- **Un coup, un mort** : Laughing Octopus, Screaming Mantis (sans la poupée
+  Mantis), Vamp (sans seringue) et Liquid vaincus au premier coup.
+- **Intouchable** : les ficelles de Screaming Mantis ne retiennent plus
+  Snake.
+- **Toute la zone** : ennemis de l'acte 3 et Sliders ; motos alliées
+  épargnées.
+- **Menu pause des cinématiques** : texte du jeu dans sa langue, fondu au
+  noir avant le retour au titre.
+- **Mode photo** : clics de la souris inversés et corrections.
+- Livrée par la **mise à jour intégrée** ; DLL modifiée : relancer le jeu.
 
 Détail dans [Nouveautés par version](docs/nouveautes.md).
 

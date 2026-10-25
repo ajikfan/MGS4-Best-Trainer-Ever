@@ -121,7 +121,9 @@ code est dans le paquet `mgs4trainer/` :
   la liste `CODE_PATCHES`), son et alerte (`sound_alert.py`),
   statistiques et lieu (`state.py`), équipement en direct (`equip.py`),
   Toute la zone (`zone.py`), caméra et mode photo (`camera.py`), ligne
-  QUITTER du menu pause des cinématiques (`cutscene_menu.py`) ;
+  QUITTER du menu pause des cinématiques (`cutscene_menu.py`), Charger
+  dans le menu pause (`load_menu.py`), combat final contre Liquid
+  (`liquid_fight.py`), onglet Boss et défaites des boss (`boss.py`) ;
 - `ui/` : un fichier par onglet, plus l'aide, les profils et le bandeau,
   les commandes du mode photo (`photo_help.py`), la ligne QUITTER dessinée
   par-dessus le jeu (`cutscene_menu_overlay.py`) et la fenêtre principale

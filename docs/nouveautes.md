@@ -4,6 +4,76 @@
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
+## Nouveautés de la V2.7.0
+
+### Onglet Boss
+
+Nouvel onglet : un encadré par boss, dans l'ordre du jeu. Laughing
+Octopus, Raging Raven, Crying Wolf et Screaming Mantis ont leurs formes
+**Bête** et **Beauty** côte à côte (avec le bouton **Salle blanche** côté
+Beauty) ; suivent **Vamp**, **Metal Gear RAY** (vie seule, il n'a pas
+d'endurance) et **Liquid Ocelot**, avec les **Phases du combat final**
+(phases 1 à 4 et 3 derniers coups, par les transitions du jeu), déplacées
+de l'onglet Jauges.
+
+Chaque forme a sa vie et son endurance, curseur et case **Verrouiller**.
+L'encadré du boss en cours porte « en cours », et ses barres à l'écran
+suivent le curseur. Relâcher la **vie à 0** achève le boss, l'**endurance
+à 0** le met K.O. : le trainer lui fait recevoir un tir de Snake et le jeu
+enchaîne la suite normalement (Beauty comprises, quelle que soit leur
+phase ; Vamp : à terre, puis la seringue se déclenche seule). Liquid et la
+bête de Mantis restent au minimum à 1.
+
+### Charger depuis le menu pause
+
+Le menu pause gagne une entrée **Charger**, juste au-dessus de
+Sauvegarder (à la place de Base de données). Elle ouvre l'écran de
+chargement du jeu ; après le chargement, un fondu au noir, la fermeture
+du menu, et la partie reprend sans compter de continue.
+
+### Un coup, un mort
+
+- **Laughing Octopus** : vaincue au premier tir, ses phases sont sautées
+  (Létal comme Non létal).
+- **Screaming Mantis** : une balle sur une poupée la lui fait lâcher, une
+  balle sur Mantis la fait perdre, sans la poupée Mantis.
+- **Vamp** : à terre au premier tir, puis vaincu sans seringue dès qu'il
+  est au sol (aussi en Non létal).
+- **Liquid Ocelot** : le premier coup met fin au combat.
+
+### Intouchable
+
+Contre Screaming Mantis, ses ficelles ne retiennent plus Snake, comme
+après la seringue.
+
+### Toute la zone
+
+Tuer vise aussi les SMP et les Gekko de la poursuite à moto, les soldats
+embarqués et le SMP sur le van de l'acte 3, et les **Sliders** (poursuite
+à moto et Raging Raven). Les véhicules sont filtrés par camp : les motos
+alliées de l'escorte sont épargnées. Les mini Gekko s'appellent désormais
+**Gekko nains**.
+
+### Menu pause des cinématiques
+
+La ligne affiche maintenant le texte du jeu, « Retourner à l'écran
+titre », dans la langue du jeu. La confirmation du jeu s'ouvre devant le
+menu, un fondu au noir précède le retour au menu principal, et la ligne
+disparaît en même temps que le menu.
+
+### Mode photo
+
+Clic gauche pour **descendre**, clic droit pour **monter**. Z et S ne
+zooment plus dans certaines cinématiques, un clic n'est plus pris pour
+une touche du jeu, et la couleur du bandeau est corrigée. La DLL a
+changé : relancer le jeu après la mise à jour.
+
+### Divers
+
+- Charger et la ligne du menu des cinématiques fonctionnent de nouveau
+  après un trainer fermé brutalement.
+- Documentation en anglais, et bouton **Guide en ligne** dans l'aide.
+
 ## Nouveautés de la V2.6.0
 
 ### Mode photo

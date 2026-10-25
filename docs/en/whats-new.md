@@ -4,6 +4,74 @@
 
 Details of the latest versions. The full history is also in the trainer's **Help** button and on the [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases) page.
 
+## What's new in V2.7.0
+
+### Bosses tab
+
+New tab: one box per boss, in game order. Laughing Octopus, Raging
+Raven, Crying Wolf and Screaming Mantis have their **Beast** and
+**Beauty** forms side by side (with the **White room** button on the
+Beauty side); then **Vamp**, **Metal Gear RAY** (health only, he has no
+stamina) and **Liquid Ocelot**, with the **Final fight phases** (phases 1
+to 4 and last 3 punches, through the game's transitions), moved from the
+Gauges tab.
+
+Each form has its health and stamina, slider and **Lock** checkbox. The
+box of the current boss reads "in progress", and its on-screen bars
+follow the slider. Releasing **health at 0** finishes the boss,
+**stamina at 0** knocks it out: the trainer makes it take a shot from
+Snake and the game plays the rest normally (Beauties included, whatever
+their phase; Vamp: down, then the syringe triggers by itself). Liquid and
+Mantis's beast stay at 1 minimum.
+
+### Load from the pause menu
+
+The pause menu gets a **Load** entry, right above Save (in place of
+Database). It opens the game's load screen; after loading, a fade to
+black, the menu closes, and the game resumes without counting a continue.
+
+### One Shot, One Kill
+
+- **Laughing Octopus**: defeated by the first shot, her phases are
+  skipped (Lethal and Non-lethal).
+- **Screaming Mantis**: one bullet on a doll makes her drop it, one
+  bullet on Mantis defeats her, no Mantis doll needed.
+- **Vamp**: down on the first shot, then defeated without the syringe
+  once he is on the ground (Non-lethal too).
+- **Liquid Ocelot**: the first hit ends the fight.
+
+### Untouchable
+
+Against Screaming Mantis, her strings no longer hold Snake, as after the
+syringe.
+
+### Whole area
+
+Kill also targets the SMP and Gekko of the bike chase, the mounted
+soldiers and the SMP on the van in act 3, and the **Sliders** (bike chase
+and Raging Raven). Vehicles are filtered by side: the escort's allied
+bikes are spared. Mini Gekko are now called **Dwarf Gekko**.
+
+### Cutscene pause menu
+
+The line now shows the game's own text, "Return to the title screen", in
+the game's language. The game's confirmation opens in front of the menu,
+a fade to black comes before returning to the main menu, and the line
+disappears together with the menu.
+
+### Photo mode
+
+Left click to **go down**, right click to **go up**. W and S no longer
+zoom in some cutscenes, a click is no longer taken for a game key, and
+the banner color is fixed. The DLL changed: restart the game after
+updating.
+
+### Misc
+
+- Load and the cutscene menu line work again after the trainer was
+  closed abruptly.
+- English documentation, and an **Online guide** button in the help.
+
 ## What's new in V2.6.0
 
 ### Photo mode

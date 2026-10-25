@@ -384,6 +384,30 @@ descend la barre de sélection du jeu d'une ligne et grise les deux autres
 textes, directement dans la scène d'interface en mémoire. Les patchs sont
 retirés à la fermeture du trainer.
 
+### Onglet Boss (V2.7.0)
+
+L'exécutable garde les noms des classes du jeu (informations de type
+C++) : le boss présent est reconnu par le nom de la sienne (`OCTOPUS`,
+`BOSS_RAVEN`, `BBL_BTY` pour la Beauty de Laughing Octopus…), puis son
+objet de vie (vie et endurance, comme les soldats) est lu à côté. Le jeu
+ne recopie ses barres à l'écran qu'au moment d'un coup : le trainer
+retrouve leur structure (trois formes selon les boss) et y écrit aussi.
+Une vie mise à 0 de l'extérieur n'a aucun effet tant que le jeu ne juge
+pas un coup : pour achever un boss, le trainer intercepte la fonction
+qui rassemble les coups reçus par les objets de vie et y dépose, une
+fois, un coup copié d'un vrai tir de Snake ; le temps de ce coup, il pose
+le patch Un coup, un mort et neutralise les filtres de phase des Beauty.
+Vamp et Screaming Mantis ont leur propre défaite (seringue, poupée) : le
+trainer déclenche l'état ou le bloc de code du jeu qui la joue.
+
+### Charger depuis le menu pause (V2.7.0)
+
+L'entrée Base de données est remplacée en mémoire par Charger (nom et
+description dans la langue du jeu), qui ouvre l'écran de chargement du
+jeu. Après le chargement, le trainer pose un rideau noir, ferme le menu
+comme le jeu, puis lance « Continuer » une fois le menu fermé, sans
+compter de continue. Rien n'est écrit dans les fichiers du jeu.
+
 ### Téléportation
 
 Onglet "Téléportation" : enregistre la position actuelle de Snake

@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.6.0
+# MGS4 Trainer — V2.7.0
 
 *[Version française](README.md)*
 
@@ -48,19 +48,20 @@ up the compatible version, the warnings and the version history.
 - [How it works](docs/en/how-it-works.md)
 - [Maintenance](docs/en/maintenance.md) (compatibility, build, code layout)
 
-## Latest version: V2.6.0
+## Latest version: V2.7.0
 
-- **Photo mode**: free camera driven with a controller or keyboard and
-  mouse, Snake stays still.
-- **Pause**: the Pause key uses the game's own pause (photo mode works
-  while paused).
-- **Cutscene pause menu**: new QUIT line.
-- **White Room** and **Main Menu**: two new buttons.
-- **Metal Gear REX**: teleporting moves REX itself while you pilot it,
-  and Untouchable protects it too.
-- **Freeze Countdown**: the game's countdown no longer goes down.
-- **Whole area**: Kill and Knock out work on the Gekko of the REX escape.
-- Delivered by the **built-in update** (small files).
+- **Bosses tab**: health and stamina of every boss (Beast and Beauty side
+  by side), on-screen bars kept in sync; a gauge released at 0 = the boss
+  is finished or knocked out by the game.
+- **Load** from the pause menu, with a fade to black.
+- **One Shot, One Kill**: Laughing Octopus, Screaming Mantis (no Mantis
+  doll needed), Vamp (no syringe) and Liquid defeated by the first hit.
+- **Untouchable**: Screaming Mantis's strings no longer hold Snake.
+- **Whole area**: act 3 enemies and Sliders; allied bikes spared.
+- **Cutscene pause menu**: the game's text in its language, fade to black
+  before returning to the title.
+- **Photo mode**: mouse clicks swapped and fixes.
+- Delivered by the **built-in update**; DLL changed: restart the game.
 
 Details in [What's new in each version](docs/en/whats-new.md).
 

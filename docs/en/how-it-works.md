@@ -374,6 +374,30 @@ on it, the trainer moves the game's selection bar down one line and greys
 out the two other texts, directly in the interface scene in memory. The
 patches are removed when the trainer closes.
 
+### Bosses tab (V2.7.0)
+
+The executable keeps the game's class names (C++ type information): the
+current boss is recognized by the name of its class (`OCTOPUS`,
+`BOSS_RAVEN`, `BBL_BTY` for Laughing Octopus's Beauty…), then its life
+object (health and stamina, like soldiers) is read next to it. The game
+copies its on-screen bars only when a hit lands: the trainer finds their
+structure (three shapes depending on the boss) and writes there too.
+Health set to 0 from outside has no effect until the game judges a hit:
+to finish a boss, the trainer intercepts the function that gathers the
+hits received by life objects and drops there, once, a hit copied from a
+real shot from Snake; for the time of that hit, it applies the One Shot,
+One Kill patch and neutralizes the Beauties' phase filters. Vamp and
+Screaming Mantis have their own defeat (syringe, doll): the trainer
+triggers the game state or code block that plays it.
+
+### Load from the pause menu (V2.7.0)
+
+The Database entry is replaced in memory by Load (name and description in
+the game's language), which opens the game's load screen. After loading,
+the trainer puts up a black curtain, closes the menu like the game does,
+then starts "Continue" once the menu is closed, without counting a
+continue. Nothing is written to the game files.
+
 ### Teleportation
 
 "Teleportation" tab: saves Snake's current position (X/Y/Z) under a

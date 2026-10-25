@@ -118,7 +118,9 @@ the `mgs4trainer/` package:
   `CODE_PATCHES` list), sound and alert (`sound_alert.py`), stats and
   location (`state.py`), live equipping (`equip.py`), Whole area
   (`zone.py`), camera and photo mode (`camera.py`), QUIT line of the
-  cutscene pause menu (`cutscene_menu.py`);
+  cutscene pause menu (`cutscene_menu.py`), Load in the pause menu
+  (`load_menu.py`), final fight against Liquid (`liquid_fight.py`),
+  Bosses tab and boss defeats (`boss.py`);
 - `ui/`: one file per tab, plus the help, the profiles and the banner,
   the photo mode controls (`photo_help.py`), the QUIT line drawn over the
   game (`cutscene_menu_overlay.py`) and the main window

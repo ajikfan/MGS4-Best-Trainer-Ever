@@ -51,12 +51,13 @@ L'onglet des réglages en direct, en plusieurs groupes :
   (bandeau "Vitesse : x %" par-dessus le jeu).
 - **Outils de partie** : case **Mode photo** (ou * du pavé numérique :
   caméra libre, voir le bouton **Commandes du mode photo…** et les
-  nouveautés de la V2.6.0), bouton **Salle blanche** (contre une Beauty,
+  nouveautés des V2.6.0 et V2.7.0), bouton **Salle blanche** (contre une Beauty,
   après la forme Bête : passage immédiat dans la salle blanche), bouton
   **Menu principal** (retour au menu principal à tout moment de la
   partie, après confirmation : la progression non sauvegardée est
-  perdue). Le menu pause des cinématiques gagne aussi une ligne
-  **QUITTER** tant que le trainer est ouvert.
+  perdue). Tant que le trainer est ouvert, le menu pause des
+  cinématiques gagne une ligne **Retourner à l'écran titre** et le menu
+  pause une entrée **Charger** (au-dessus de Sauvegarder).
 - **Alerte** :
   - **État réel** : l'état d'alerte en cours (Normal, Alerte, Évasion,
     Prudence) ;

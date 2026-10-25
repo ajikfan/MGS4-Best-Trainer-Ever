@@ -47,12 +47,13 @@ The live settings tab, in several groups:
   pause, numpad **+** / **−** for ±10 % and **0** to go back to 100 %
   (a "Speed: x %" banner over the game).
 - **Game Tools**: **Photo Mode** checkbox (or numpad *: free camera, see
-  the **Photo Mode Controls…** button and what's new in V2.6.0), **White
+  the **Photo Mode Controls…** button and what's new in V2.6.0 and V2.7.0), **White
   Room** button (against a Beauty, after the Beast form: the fight moves
   to the white room right away), **Main Menu** button (back to the main
   menu at any time during a game, after confirmation: unsaved progress is
-  lost). The cutscene pause menu also gets a **QUIT** line while the
-  trainer is open.
+  lost). While the trainer is open, the cutscene pause menu gets a
+  **Return to the title screen** line and the pause menu a **Load**
+  entry (above Save).
 - **Alert**:
   - **Real state**: the current alert state (Normal, Alert, Evasion,
     Caution);
