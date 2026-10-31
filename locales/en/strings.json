@@ -149,6 +149,8 @@
   "vitals.alert_force_tooltip": "Automatic: forces nothing, the real state above follows the game. Picking a state puts the game in that step of its own alert and keeps it there until you go back to Automatic; the game then resumes its countdown from where it is (Alert → Evasion → Caution → Normal). Alert, Evasion and Caution: if the area is not already on alert, a soldier really raises the alarm (music, reinforcements, search). Normal: ends the current alert. In an area with no soldiers, the game runs no alert: forcing has no effect.",
   "vitals.no_alerts": "No Alerts",
   "vitals.no_alerts_tooltip": "Code patch: the game no longer computes the global alert from the soldier units, so it stays on Normal whatever the cause. Enemies still react locally to you (\"!\", they come to check, they may shoot if they see you) but never trigger an alert, reinforcements or alert music. Takes priority over the forced alert.",
+  "vitals.spawn_soldier": "Spawn a soldier",
+  "vitals.spawn_soldier_tooltip": "Spawns a PMC soldier 2 m east of Snake through the game's own commands, even in an area with no soldiers. Prototype: it attacks and dies normally, but does not follow a patrol.",
   "vitals.zone_group": "Whole area",
   "vitals.rebels": "Rebels:",
   "vitals.rebels_neutral": "Neutral",

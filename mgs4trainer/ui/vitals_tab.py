@@ -212,6 +212,17 @@ class VitalsTab(QWidget):
         rebels_row.addStretch(1)
         zone_layout.addLayout(rebels_row)
         self.zone_buttons += [self.rebels_check, self.rebels_neutral_btn, self.rebels_hostile_btn]
+        # Apparition d'un soldat (prototype) : voir MGS4Live.spawn_soldier ; visible
+        # seulement si spawn_data/pmc existe.
+        self.spawn_btn = QPushButton(tr("vitals.spawn_soldier"))
+        self.spawn_btn.setToolTip(tr("vitals.spawn_soldier_tooltip"))
+        self.spawn_btn.clicked.connect(self._on_spawn_soldier)
+        self.spawn_btn.setVisible(self.live.spawn_available())
+        spawn_row = QHBoxLayout()
+        spawn_row.addWidget(self.spawn_btn)
+        spawn_row.addStretch(1)
+        zone_layout.addLayout(spawn_row)
+        self.zone_buttons.append(self.spawn_btn)
         layout.addWidget(zone_group)
 
         weapons_group = QGroupBox(tr("vitals.weapons_group"))
@@ -822,6 +833,10 @@ class VitalsTab(QWidget):
     def _on_zone_action(self, action: str):
         if self.live.connected and self.live.sane:
             self.live.zone_action(action, self.zone_target_combo.currentData())
+
+    def _on_spawn_soldier(self):
+        if self.live.connected and self.live.sane:
+            self.live.spawn_soldier()
 
     def _on_no_alerts_toggled(self, checked: bool):
         if not (self.live.connected and self.live.sane):

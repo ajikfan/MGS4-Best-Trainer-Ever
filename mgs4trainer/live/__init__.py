@@ -10,10 +10,11 @@ from mgs4trainer.live.liquid_fight import LiquidFightMixin
 from mgs4trainer.live.load_menu import LoadMenuMixin
 from mgs4trainer.live.player import PlayerMixin
 from mgs4trainer.live.sound_alert import SoundAlertMixin
+from mgs4trainer.live.spawn import SpawnMixin
 from mgs4trainer.live.state import GameStateMixin
 from mgs4trainer.live.weapons import WeaponsMixin
 from mgs4trainer.live.zone import ZoneMixin
 
 
-class MGS4Live(LiveBase, HooksMixin, PlayerMixin, WeaponsMixin, CodePatchesMixin, SoundAlertMixin, GameStateMixin, EquipMixin, ZoneMixin, CameraMixin, CutsceneMenuMixin, LoadMenuMixin, LiquidFightMixin, BossGaugeMixin):
+class MGS4Live(LiveBase, HooksMixin, PlayerMixin, WeaponsMixin, CodePatchesMixin, SoundAlertMixin, GameStateMixin, EquipMixin, ZoneMixin, CameraMixin, CutsceneMenuMixin, LoadMenuMixin, LiquidFightMixin, BossGaugeMixin, SpawnMixin):
     """Acces au jeu en cours : reunit les mixins de mgs4trainer.live."""

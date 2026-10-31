@@ -149,6 +149,8 @@
   "vitals.alert_force_tooltip": "Automatique : ne force rien, l'état réel ci-dessus suit le jeu. Choisir un état place le jeu dans cette étape de sa propre alerte et l'y maintient tant que tu ne reviens pas sur Automatique ; au retour, le jeu reprend son décompte là où il en est (Alerte → Évasion → Prudence → Normal). Alerte, Évasion et Prudence : si la zone n'est pas déjà en alerte, un soldat donne réellement l'alerte (musique, renforts, recherche). Normal : met fin à l'alerte en cours. Dans une zone sans soldat, le jeu ne gère pas d'alerte : forcer n'a aucun effet.",
   "vitals.no_alerts": "Pas d'alerte",
   "vitals.no_alerts_tooltip": "Patch de code : le jeu ne calcule plus l'alerte générale à partir des unités de soldats, elle reste en Normal quelle qu'en soit la cause. Les ennemis réagissent encore localement à ta présence (« ! », ils viennent voir, ils peuvent tirer s'ils te voient) mais ne déclenchent ni alerte, ni renforts, ni musique d'alerte. Prioritaire sur l'alerte forcée.",
+  "vitals.spawn_soldier": "Faire apparaître un soldat",
+  "vitals.spawn_soldier_tooltip": "Fait apparaître un soldat PMC à 2 m à l'est de Snake, par les commandes du jeu, même dans une zone sans soldats. Prototype : il attaque et meurt normalement, mais ne suit pas de patrouille.",
   "vitals.zone_group": "Toute la zone",
   "vitals.rebels": "Rebelles :",
   "vitals.rebels_neutral": "Neutres",
