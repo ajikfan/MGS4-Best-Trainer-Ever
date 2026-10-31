@@ -84,6 +84,7 @@ def fetch_latest_release() -> dict:
         "version": version,
         "notes": release.get("body") or "",
         "changelog": fetch_changelog(version),
+        "whats_new": fetch_whats_new(version),
         "page_url": release.get("html_url") or RELEASES_PAGE_URL,
         "manifest_url": manifest_url,
     }
@@ -102,6 +103,40 @@ def fetch_changelog(tag: str) -> dict:
     except (UpdateError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+WHATS_NEW_PATHS = {"fr": "docs/nouveautes.md", "en": "docs/en/whats-new.md"}
+BLOB_URL = f"https://github.com/{REPOSITORY}/blob/{{tag}}/{{path}}"
+
+
+def fetch_whats_new(tag: str) -> dict:
+    """Page des nouveautes de la documentation, dans la langue choisie, au
+    tag de la release : {"text", "base_url"} (base des liens relatifs),
+    {} si indisponible (2026-10-26)."""
+    from mgs4trainer.core.i18n import current_language
+    path = WHATS_NEW_PATHS.get(current_language())
+    if not tag or not path:
+        return {}
+    try:
+        text = _get(RAW_FILE_URL.format(tag=tag, path=path)).decode("utf-8")
+    except (UpdateError, UnicodeDecodeError):
+        return {}
+    return {"text": text, "base_url": BLOB_URL.format(tag=tag, path=path)}
+
+
+def whats_new_markdown(whats_new: dict, current: str) -> str:
+    """Les sections « ## ... Vx.y.z » de la page des nouveautes plus recentes
+    que `current` ; a jour, celle de `current`. Liens relatifs rendus absolus."""
+    sections = re.split(r"(?m)^(?=## )", whats_new.get("text") or "")[1:]
+    versions = [(re.search(r"V(\d+(?:\.\d+)*)", section.splitlines()[0]), section) for section in sections]
+    versions = [(match.group(1), section) for match, section in versions if match]
+    kept = [section for version, section in versions if is_newer(version, current)]
+    if not kept:
+        kept = [section for version, section in versions if parse_version(version) == parse_version(current)]
+    base_url = whats_new.get("base_url", "")
+    return re.sub(r"\]\((?!https?:|#|mailto:)([^)]+)\)",
+                  lambda match: f"]({urllib.parse.urljoin(base_url, match.group(1))})",
+                  "\n".join(kept).strip())
 
 
 def changelog_markdown(changelog: dict, current: str) -> str:
