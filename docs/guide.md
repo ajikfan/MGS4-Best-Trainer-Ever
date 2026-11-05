@@ -127,7 +127,14 @@ L'onglet des réglages en direct, en plusieurs groupes :
   - **Rire**, **Pleurer**, **Enrager**, **Crier** : les émotions des
     Beauty, sur les soldats éveillés, pendant une trentaine de secondes ;
   - **Rebelles : Neutres / Hostiles** : cochée, impose l'attitude des
-    rebelles envers Snake (une alerte déjà en cours suit son cours).
+    rebelles envers Snake (une alerte déjà en cours suit son cours) ;
+  - **Faire apparaître (expérimental)** : fait apparaître le personnage
+    choisi dans la liste à côté de Snake, même dans une zone sans soldats
+    (soldat PMC des trois régions, rebelle du Moyen-Orient, Gekko,
+    Meryl ; les personnages grisés ne sont pas encore disponibles).
+    Patrouille pas toujours suivie, rebelle qui ne combat pas les PMC,
+    Gekko qui traverse le sol de la salle blanche des Beauty : sauvegarde
+    avant d'essayer.
 
 ### Jauges
 

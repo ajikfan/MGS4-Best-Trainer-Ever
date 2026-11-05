@@ -236,10 +236,12 @@ the alert state (12 October 2026).
 
 ### Profiles, shortcuts, banner and forced alert (V2.4): how it works
 
-- **Global shortcuts**: the F1 to F11 keys that have a profile, the Pause
-  key and numpad + / − / 0 are registered with Windows
-  (`RegisterHotKey`): they work whatever program is in front. F keys
-  without a profile are not taken.
+- **Shortcuts**: the F1 to F11 keys that have a profile, the Pause key,
+  numpad + / − / 0 / * (and Space in photo mode) are registered with
+  Windows (`RegisterHotKey`) only while the game window is in front, and
+  released as soon as it is not (checked every 0.2 s): they work in game
+  without blocking those keys in other programs. F keys without a
+  profile are not taken.
 - **Going back**: when the first profile is turned on, the trainer keeps
   a copy of the current setup; the active profile's key restores it and
   forgets the copy.

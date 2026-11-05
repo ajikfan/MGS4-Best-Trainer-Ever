@@ -21,7 +21,7 @@ Sister project of [MGS4-SaveStats](https://github.com/ajikfan/MGS4-SaveStats)
 
 1. Download the zip of the [latest version](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases/latest).
 2. Unzip it anywhere (keep the whole folder).
-3. Start MGS4 (Steam version **1.4.1**) with a save loaded, then
+3. Start MGS4 (Steam version **1.4.1** or **1.4.2**) with a save loaded, then
    `MGS4Trainer.exe`.
 4. Afterwards, the trainer's **Update** button installs new versions
    without downloading the zip again (from V2.5 on).
@@ -67,9 +67,9 @@ Details in [What's new in each version](docs/en/whats-new.md).
 
 ## ⚠️ Warnings
 
-- **Game updates**: the trainer is calibrated for MGS4 Steam **1.4.1**.
-  After a game update, wait for a new trainer version before using it
-  (see the [FAQ](docs/en/faq.md)).
+- **Game updates**: the trainer recognizes MGS4 Steam versions **1.4.1**
+  and **1.4.2**. After a new game update, wait for a new trainer version
+  before using it (see the [FAQ](docs/en/faq.md)).
 - **Connection**: at startup, the trainer asks GitHub whether a new
   version exists (nothing is downloaded without your consent; can be
   turned off in the **Update** window).

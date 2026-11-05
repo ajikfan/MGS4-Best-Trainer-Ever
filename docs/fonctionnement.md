@@ -240,10 +240,13 @@ depuis l'instruction qui écrit l'état d'alerte (12 octobre 2026).
 
 ### Profils, raccourcis, bandeau et alerte forcée (V2.4) : comment ça marche
 
-- **Raccourcis globaux** : les touches F1 à F11 qui ont un profil, la
-  touche Pause et le pavé numérique + / − / 0 sont enregistrés auprès de
-  Windows (`RegisterHotKey`) : ils marchent quel que soit le programme au
-  premier plan. Les touches F sans profil ne sont pas prises.
+- **Raccourcis** : les touches F1 à F11 qui ont un profil, la touche
+  Pause, le pavé numérique + / − / 0 / * (et Espace en mode photo) sont
+  enregistrés auprès de Windows (`RegisterHotKey`) seulement quand la
+  fenêtre du jeu est au premier plan, et rendus dès qu'elle ne l'est plus
+  (vérifié toutes les 0,2 s) : ils marchent en jeu sans bloquer ces
+  touches dans les autres programmes. Les touches F sans profil ne sont
+  pas prises.
 - **Retour en arrière** : au premier profil activé, le trainer garde une
   copie de la configuration en cours ; la touche du profil actif la
   remet et oublie la copie.

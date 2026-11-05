@@ -220,7 +220,7 @@ class VitalsTab(QWidget):
         self.spawn_type_combo = QComboBox()
         for kind in self.live.SPAWN_ROSTER:
             self.spawn_type_combo.addItem(tr(f"vitals.spawn_type_{kind}"), kind)
-            if kind not in self.live.SPAWN_TYPES:
+            if kind not in self.live.SPAWN_TYPES or kind in self.live.SPAWN_BROKEN:
                 self.spawn_type_combo.model().item(self.spawn_type_combo.count() - 1).setEnabled(False)
         spawn_row.addWidget(self.spawn_type_combo)
         spawn_row.addWidget(self.spawn_btn)

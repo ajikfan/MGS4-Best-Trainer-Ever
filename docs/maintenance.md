@@ -19,15 +19,26 @@ dans `live_trainer.py`, voir le
 [notes.md](https://github.com/ajikfan/MGS4-SaveStats/blob/main/notes.md)
 de MGS4-SaveStats pour la méthode de diagnostic complète).
 
-**Trainer calibré et testé sur la version Steam actuelle de MGS4 :
-1.4.1.** Si une future mise à jour du jeu casse la détection (le trainer
-reste bloqué sur "Non connecté", ou le contrôle de cohérence échoue en
-boucle après reconnexion), c'est probablement la même cause : il faudra
-recalibrer ce décalage, vérifier les patchs de code (chacun refuse de
-s'appliquer si ses octets d'origine ne sont plus là) et publier une
-nouvelle version du trainer. Côté joueurs, la [FAQ](faq.md) leur
-conseille d'attendre cette mise à jour plutôt que de recalibrer
-eux-mêmes.
+**Versions du jeu prises en charge : 1.4.1 (référence) et 1.4.2.** La
+mise à jour 1.4.2 (5 novembre 2026) a recompilé le jeu : les adresses ont
+bougé de façon variable (de −85 Ko à −4,5 Mo), plus aucun décalage
+unique. Le code garde les adresses de la 1.4.1 ;
+`mgs4trainer/core/versions.py` reconnaît la version à la connexion
+(horodatage PE de l'exe en mémoire) et applique
+`mgs4trainer/versions/<version>.json`, qui donne constante par constante
+les nouvelles adresses et les nouveaux octets de signature (une adresse
+non retrouvée vaut 0 : la fonction refuse sans rien écrire).
+
+Pour une nouvelle version du jeu, les outils et la méthode sont dans
+`tools/versions/` (voir son LISEZMOI) : le `.text` de l'exe sur disque
+est chiffré par Steam, on compare donc des **images mémoire** (jeu lancé)
+de l'ancienne et de la nouvelle version, et on porte chaque adresse par
+signatures. Garder une copie de chaque image : sans l'ancienne, plus de
+portage automatique. Les motifs de la DLL (`native/speedhack.c`) sont à
+vérifier aussi (chacun doit rester unique), puis recompiler.
+
+Côté joueurs, la [FAQ](faq.md) leur conseille d'attendre une mise à jour
+du trainer plutôt que de recalibrer eux-mêmes.
 
 ## Empaqueter en .exe autonome
 

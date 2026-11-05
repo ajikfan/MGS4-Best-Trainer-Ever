@@ -4,6 +4,48 @@
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
+## Nouveautés de la V2.8.0
+
+### Compatible avec MGS4 1.4.2
+
+La mise à jour Steam du 5 novembre 2026 (MGS4 1.4.2) a recompilé le jeu :
+toutes les adresses ont bougé, de façon différente d'un endroit à
+l'autre. Le trainer reconnaît maintenant la version du jeu à la connexion
+et utilise les adresses qui lui correspondent ; la 1.4.1 reste prise en
+charge. Toutes les fonctions marchent dans les deux versions.
+
+### Faire apparaître (expérimental)
+
+Dans l'onglet État de jeu, groupe **Toute la zone** : choisis un
+personnage dans la liste, puis **Faire apparaître** ; il apparaît à côté
+de Snake, même dans une zone sans soldats. Disponibles : soldat PMC
+(Moyen-Orient, Amérique du Sud, Europe de l'Est), rebelle du Moyen-Orient
+(il suit le réglage **Rebelles : Neutres / Hostiles**), Gekko et Meryl.
+Le trainer lit leurs ressources dans les fichiers du jeu installé (rien
+n'est modifié) et les crée par les commandes du jeu.
+
+C'est une première version : la patrouille n'est pas toujours suivie, un
+rebelle ne combat pas les PMC, un Gekko traverse le sol de la salle
+blanche des Beauty. Les personnages grisés (boss, autres alliés,
+véhicules…) viendront plus tard. Sauvegarde avant d'essayer.
+
+### Raccourcis seulement en jeu
+
+Les raccourcis du trainer (touches F des profils, Pause, vitesse, * et
+Espace du mode photo) ne sont pris que quand la fenêtre du jeu est au
+premier plan : dans les autres programmes, ces touches marchent
+normalement (Espace dans Discord pendant le mode photo, par exemple).
+
+### Corrections
+
+- **Screaming Mantis** avec **Un coup, un mort** : une balle sur une
+  poupée la lui fait de nouveau seulement lâcher, sans finir le combat ;
+  plantage possible au moment de sa défaite corrigé.
+- La fenêtre **Mise à jour** affiche les nouveautés dans la langue du
+  trainer.
+
+La DLL du trainer a changé : relance le jeu après la mise à jour.
+
 ## Nouveautés de la V2.7.0
 
 ### Onglet Boss

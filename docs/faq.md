@@ -16,7 +16,7 @@ technique. Le code source complet est dans ce dépôt.
 ### De quoi ai-je besoin pour utiliser le trainer ?
 
 Windows 10 ou 11 en 64 bits, et Metal Gear Solid 4 (Steam) en version
-1.4.1. Rien d'autre à installer : Python, l'interface et le runtime
+1.4.1 ou 1.4.2. Rien d'autre à installer : Python, l'interface et le runtime
 Visual C++ sont inclus dans le dossier du trainer. Garde le dossier
 complet (l'exe ne démarre pas sans son dossier `_internal`).
 
@@ -39,8 +39,9 @@ droit administrateur n'est nécessaire.
 
 Lance le jeu et charge une partie : le trainer s'accroche tout seul.
 
-S'il ne s'accroche plus après une **mise à jour Steam du jeu**, les
-adresses du jeu ont probablement bougé et le trainer doit être recalibré.
+S'il ne s'accroche plus après une **mise à jour Steam du jeu** (message
+« Check failed » par exemple), les adresses du jeu ont probablement
+bougé : le trainer ne connaît pas encore cette version du jeu.
 Le mieux est d'**attendre une mise à jour du trainer** : le recalibrage
 demande des outils de débogage et des vérifications en jeu (le détail
 est dans [Maintenance](maintenance.md), pour qui veut s'y essayer).

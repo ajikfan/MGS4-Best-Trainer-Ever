@@ -123,7 +123,13 @@ The live settings tab, in several groups:
   - **Laugh**, **Cry**, **Rage**, **Scream**: the Beauties' emotions, on
     awake soldiers, for about thirty seconds;
   - **Rebels: Neutral / Hostile**: when checked, imposes the rebels'
-    attitude towards Snake (an alert already under way runs its course).
+    attitude towards Snake (an alert already under way runs its course);
+  - **Spawn (experimental)**: makes the character picked in the list
+    appear next to Snake, even in an area with no soldiers (PMC soldier
+    from the three regions, Middle East rebel, Gekko, Meryl; greyed-out
+    characters are not available yet). Patrol not always followed, a
+    rebel that does not fight the PMCs, a Gekko that falls through the
+    floor of the Beauties' white room: save before trying.
 
 ### Gauges
 

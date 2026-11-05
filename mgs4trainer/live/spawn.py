@@ -241,6 +241,9 @@ class SpawnMixin:
     SPAWN_STEP_ORIG = bytes.fromhex("66ff4130488b4150")
     SPAWN_STEP_SET = 0x8A910
     # Liste affichee, dans l'ordre. Sans entree dans SPAWN_TYPES : grise (pas de recette).
+    # SPAWN_BROKEN : recette connue mais plantage constate (rebelle d'Europe
+    # de l'Est : a sa creation), grise aussi.
+    SPAWN_BROKEN = frozenset({"rebel_ee"})
     SPAWN_ROSTER = (
         "pmc", "pmc_sa", "pmc_ee", "rebel", "rebel_sa", "rebel_ee",
         "gekko", "gekko_dwarf", "frog", "zombie", "laughing", "raging",
@@ -281,7 +284,7 @@ class SpawnMixin:
     def spawn_enemy(self, kind: str) -> bool:
         """Lance l'apparition dans un fil separe (les appels au jeu se font
         une image a la fois). Une seule a la fois."""
-        if getattr(self, "_spawn_busy", False):
+        if getattr(self, "_spawn_busy", False) or kind in self.SPAWN_BROKEN:
             return False
         if not (self.connected and self.sane and self.pid and self.speed.ensure_injected(self.pid)):
             return False

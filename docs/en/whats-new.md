@@ -4,6 +4,47 @@
 
 Details of the latest versions. The full history is also in the trainer's **Help** button and on the [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases) page.
 
+## What's new in V2.8.0
+
+### Compatible with MGS4 1.4.2
+
+The Steam update of November 5, 2026 (MGS4 1.4.2) recompiled the game:
+every address moved, differently from one place to another. The trainer
+now recognizes the game version when it connects and uses the matching
+addresses; 1.4.1 is still supported. Every feature works in both
+versions.
+
+### Spawn (experimental)
+
+In the Game state tab, **Whole area** group: pick a character in the
+list, then **Spawn**; it appears next to Snake, even in an area with no
+soldiers. Available: PMC soldier (Middle East, South America, Eastern
+Europe), Middle East rebel (it follows the **Rebels: Neutral / Hostile**
+setting), Gekko and Meryl. The trainer reads their resources from the
+installed game files (nothing is modified) and creates them through the
+game's own commands.
+
+This is a first version: the patrol is not always followed, a rebel does
+not fight the PMCs, a Gekko falls through the floor of the Beauties'
+white room. The greyed-out characters (bosses, other allies, vehicles…)
+will come later. Save before trying.
+
+### Shortcuts only in game
+
+The trainer's shortcuts (profile F keys, Pause, speed, * and the photo
+mode's Space) are only taken while the game window is in front: in other
+programs, those keys work normally (Space in Discord during photo mode,
+for example).
+
+### Fixes
+
+- **Screaming Mantis** with **One Shot, One Kill**: a bullet on a doll
+  again only makes her drop it, without ending the fight; a possible
+  crash at the moment of her defeat is fixed.
+- The **Update** window shows what's new in the trainer's language.
+
+The trainer DLL changed: restart the game after updating.
+
 ## What's new in V2.7.0
 
 ### Bosses tab
