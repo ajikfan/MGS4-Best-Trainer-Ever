@@ -80,7 +80,7 @@ class BossGaugeMixin:
     # +0x58, voir mantis_one_hit_tick), code (+0x60), modele (+0x200).
     BOSS_TOUCH_RVA = 0xB88260
     BOSS_TOUCH_PROLOGUE = bytes.fromhex("4053574155" "4883ec60")  # push rbx/rdi/r13 ; sub rsp,60
-    BOSS_TOUCH_MAGIC = b"MGS4TCH4"
+    BOSS_TOUCH_MAGIC = b"MGS4TCH5"
     BOSS_TOUCH_CODE = 0x60
     BOSS_TOUCH_OLD_CODE = (0x40,)  # versions precedentes (code a +0x40)
     BOSS_TOUCH_SLOTS = 4
@@ -159,7 +159,9 @@ class BossGaugeMixin:
         mark("watch")
         emit(bytes.fromhex("483b0d"), block + 0x50)                        # cmp rcx,[surveillance]
         jump(0x75, "slots")
-        emit(bytes.fromhex("f74168b72fe301"))                              # test [rcx+68],coups
+        # Sans 0x2000 : pose seul sur Mantis quand une poupee est touchee (sa
+        # reaction, mesure en 1.4.2) ; un vrai tir sur elle ajoute 0x1.
+        emit(bytes.fromhex("f74168b70fe301"))                              # test [rcx+68],coups sans 0x2000
         jump(0x75, "count")
         emit(bytes.fromhex("83796c00"))                                    # cmp dword [rcx+6c],0
         jump(0x74, "slots")
@@ -479,10 +481,23 @@ class BossGaugeMixin:
     def _mantis_defeat_stub(self, funcs: dict[str, int]) -> int:
         if getattr(self, "_mantis_stub_pid", None) == self.pid:
             return self._mantis_stub_addr
-        code = (bytes.fromhex("48895c2408488974241057" "4883ec50" "0f29742440" "0f297c2430")  # prologue de F08CF0
-                + bytes.fromhex("4889cf" "0f57f6" "b80000803f" "660f6ef8" "31f6")       # rdi, xmm6, xmm7 = 1.0, esi
-                + bytes.fromhex("488b87b8420000")                                      # rax = objet de vie
-                + bytes.fromhex("48b9") + struct.pack("<Q", funcs["block"]) + bytes.fromhex("ffe1"))
+        offset, machine_id = self.MANTIS_DEFEAT_MACHINE
+        inner = (bytes.fromhex("48895c2408488974241057" "4883ec50" "0f29742440" "0f297c2430")  # prologue de F08CF0
+                 + bytes.fromhex("4889cf" "0f57f6" "b80000803f" "660f6ef8" "31f6")       # rdi, xmm6, xmm7 = 1.0, esi
+                 + bytes.fromhex("488b87b8420000")                                      # rax = objet de vie
+                 + bytes.fromhex("48b9") + struct.pack("<Q", funcs["block"]) + bytes.fromhex("ffe1"))
+        # Machine posee et remise dans le fil du jeu, le temps du bloc seulement :
+        # ecrite depuis le trainer, la mise a jour de Mantis la voyait avant
+        # l'appel et passait une machine nulle a B0F9B0 (plantage en 1.4.2).
+        outer = (bytes.fromhex("5356" "4883ec28" "4889cb")                              # push rbx/rsi ; rbx = Mantis
+                 + bytes.fromhex("8bb1") + struct.pack("<I", offset)                    # mov esi, [rcx+machine]
+                 + bytes.fromhex("c781") + struct.pack("<Ii", offset, machine_id))      # mov dword [rcx+machine], id
+        outer += bytes.fromhex("e8") + struct.pack("<i", 0)  # call inner (decalage pose ci-dessous)
+        call_end = len(outer)
+        outer += (bytes.fromhex("89b3") + struct.pack("<I", offset)                    # mov [rbx+machine], esi
+                  + bytes.fromhex("4883c428" "5e5b" "c3"))                              # add rsp,28 ; pop ; ret
+        outer = outer[:call_end - 4] + struct.pack("<i", len(outer) - call_end) + outer[call_end:]
+        code = outer + inner
         stub = kernel32.VirtualAllocEx(self.proc.handle, None, 0x1000, MEM_COMMIT | 0x2000, PAGE_EXECUTE_READWRITE)
         if not stub:
             return 0
@@ -507,13 +522,7 @@ class BossGaugeMixin:
         stub = self._mantis_defeat_stub(funcs)
         if not stub:
             return False
-        saved = self.proc.read_bytes(mantis + offset, 4)
-        self.proc.write_bytes(mantis + offset, struct.pack("<i", machine_id))
-        try:
-            done = self.speed.game_call(stub, mantis) is not None
-        finally:
-            self.proc.write_bytes(mantis + offset, saved)
-        return done
+        return self.speed.game_call(stub, mantis) is not None
 
     def mantis_one_hit_tick(self, one_hit: bool) -> None:
         """A appeler souvent : avec Un coup, un mort, le premier impact recu
