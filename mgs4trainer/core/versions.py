@@ -74,6 +74,13 @@ def _remap(value, mapping: dict[int, int], sigs: dict[str, str]):
     return value
 
 
+def _as_tuples(value):
+    """Listes JSON -> tuples (les constantes du trainer sont des tuples)."""
+    if isinstance(value, list):
+        return tuple(_as_tuples(v) for v in value)
+    return value
+
+
 def activate(table: dict | None) -> None:
     """Remet les constantes d'origine puis applique la table (None : reference)."""
     global _active
@@ -83,14 +90,18 @@ def activate(table: dict | None) -> None:
     _active = table
     if not table:
         return
+    replace = {n: _as_tuples(v) for n, v in table.get("replace", {}).items()}
     values = {n: {int(k, 16): int(v, 16) for k, v in m.items()} for n, m in table["values"].items()}
     sigs = table.get("signatures", {})
     for owner, namespace in _owners():
         for attr in list(namespace):
-            if attr not in values:
+            if attr not in values and attr not in replace:
                 continue
             old = namespace[attr]
-            new = _remap(old, values[attr], {k.lower(): v for k, v in sigs.get(attr, {}).items()})
+            if attr in replace:  # constante entiere propre a la version (ex. liste de longueur differente)
+                new = replace[attr]
+            else:
+                new = _remap(old, values[attr], {k.lower(): v for k, v in sigs.get(attr, {}).items()})
             if new != old:
                 _original[(owner, attr)] = old
                 setattr(owner, attr, new)

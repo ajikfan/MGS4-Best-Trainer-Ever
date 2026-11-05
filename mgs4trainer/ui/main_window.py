@@ -95,6 +95,13 @@ class TrainerWindow(QMainWindow):
         self._cutscene_timer.timeout.connect(self._cutscene_tick)
         self._cutscene_timer.start()
         self._hotkeys: list[int] = []
+        # Raccourcis pris seulement quand le jeu est au premier plan
+        # (RegisterHotKey les vole a tout Windows : Espace du mode photo
+        # bloquee dans Discord, F1... dans les autres fenetres).
+        self._hotkey_timer = QTimer(self)
+        self._hotkey_timer.setInterval(200)
+        self._hotkey_timer.timeout.connect(self._sync_hotkeys)
+        self._hotkey_timer.start()
         self.profile_label = QLabel()
         self.profile_label.setToolTip(tr("profile.label_tooltip"))
         top_row.addWidget(self.profile_label)
@@ -414,9 +421,10 @@ class TrainerWindow(QMainWindow):
         if not ok:
             self.drebin_ventes_label.setText("invalide (actuel < 0)")
 
-    # Raccourcis globaux F1-F11 (RegisterHotKey) : seulement les touches
-    # qui ont un profil, pour laisser les autres au jeu. WM_HOTKEY arrive
-    # dans nativeEvent meme quand le jeu a le focus.
+    # Raccourcis F1-F11 (RegisterHotKey) : seulement les touches qui ont un
+    # profil, pour laisser les autres au jeu. WM_HOTKEY arrive dans
+    # nativeEvent meme quand le jeu a le focus. Tous les raccourcis ne sont
+    # pris que si le jeu est au premier plan (_sync_hotkeys).
     WM_HOTKEY = 0x0312
     MOD_NOREPEAT = 0x4000
     VK_F1 = 0x70
@@ -438,24 +446,46 @@ class TrainerWindow(QMainWindow):
     # sert a teleporter Snake a la camera (comme croix/A a la manette).
     PHOTO_BLOCKED_KEYS = {0xB111: 0x20}
 
-    def register_profile_hotkeys(self):
+    def _wanted_hotkeys(self) -> dict[int, tuple[int, int]]:
+        """Raccourcis voulus : id -> (modificateurs, touche)."""
+        wanted = {self.HOTKEY_ID_BASE + index: (self.MOD_NOREPEAT, self.VK_F1 + index)
+                  for index, key in enumerate(PROFILE_KEYS) if key in self.profiles}
+        wanted[self.HOTKEY_ID_PAUSE] = (self.MOD_NOREPEAT, self.VK_PAUSE)
+        for hotkey_id, (vk, _step) in self.SPEED_HOTKEYS.items():
+            wanted[hotkey_id] = (0, vk)  # repetition autorisee (touche maintenue)
+        wanted[self.HOTKEY_ID_PHOTO] = (self.MOD_NOREPEAT, self.VK_MULTIPLY)
+        if self.vitals_tab.photo_check.isChecked():
+            for hotkey_id, vk in self.PHOTO_BLOCKED_KEYS.items():
+                wanted[hotkey_id] = (0, vk)
+        return wanted
+
+    def _game_in_foreground(self) -> bool:
+        pid = self.live.pid
+        if not pid:
+            return False
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        window = user32.GetForegroundWindow()
+        owner = wintypes.DWORD(0)
+        if window:
+            user32.GetWindowThreadProcessId(window, ctypes.byref(owner))
+        return owner.value == pid
+
+    def _sync_hotkeys(self, force: bool = False):
+        """Prend les raccourcis voulus si le jeu est au premier plan, les
+        rend sinon ; force : tout reprendre (liste des profils changee)."""
         user32 = ctypes.WinDLL("user32", use_last_error=True)
         hwnd = wintypes.HWND(int(self.winId()))
-        for hotkey_id in self._hotkeys:
-            user32.UnregisterHotKey(hwnd, hotkey_id)
-        self._hotkeys = []
-        for index, key in enumerate(PROFILE_KEYS):
-            if key in self.profiles:
-                hotkey_id = self.HOTKEY_ID_BASE + index
-                if user32.RegisterHotKey(hwnd, hotkey_id, self.MOD_NOREPEAT, self.VK_F1 + index):
-                    self._hotkeys.append(hotkey_id)
-        if user32.RegisterHotKey(hwnd, self.HOTKEY_ID_PAUSE, self.MOD_NOREPEAT, self.VK_PAUSE):
-            self._hotkeys.append(self.HOTKEY_ID_PAUSE)
-        for hotkey_id, (vk, _step) in self.SPEED_HOTKEYS.items():
-            if user32.RegisterHotKey(hwnd, hotkey_id, 0, vk):  # repetition autorisee (touche maintenue)
+        wanted = self._wanted_hotkeys() if self._game_in_foreground() else {}
+        for hotkey_id in list(self._hotkeys):
+            if force or hotkey_id not in wanted:
+                user32.UnregisterHotKey(hwnd, hotkey_id)
+                self._hotkeys.remove(hotkey_id)
+        for hotkey_id, (modifiers, vk) in wanted.items():
+            if hotkey_id not in self._hotkeys and user32.RegisterHotKey(hwnd, hotkey_id, modifiers, vk):
                 self._hotkeys.append(hotkey_id)
-        if user32.RegisterHotKey(hwnd, self.HOTKEY_ID_PHOTO, self.MOD_NOREPEAT, self.VK_MULTIPLY):
-            self._hotkeys.append(self.HOTKEY_ID_PHOTO)
+
+    def register_profile_hotkeys(self):
+        self._sync_hotkeys(force=True)
 
     def nativeEvent(self, event_type, message):
         if event_type == b"windows_generic_MSG" or event_type == "windows_generic_MSG":
@@ -512,14 +542,7 @@ class TrainerWindow(QMainWindow):
         else:
             self._photo_timer.stop()
             pause.setChecked(self._photo_pause_before)
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
-        hwnd = wintypes.HWND(int(self.winId()))
-        for hotkey_id, vk in self.PHOTO_BLOCKED_KEYS.items():
-            user32.UnregisterHotKey(hwnd, hotkey_id)
-            if hotkey_id in self._hotkeys:
-                self._hotkeys.remove(hotkey_id)
-            if enabled and user32.RegisterHotKey(hwnd, hotkey_id, 0, vk):
-                self._hotkeys.append(hotkey_id)
+        self._sync_hotkeys()  # Espace prise ou rendue (si le jeu est au premier plan)
         self.overlay.show_message(tr("overlay.photo_on" if enabled else "overlay.photo_off"), enabled, self.live.pid)
 
     def _on_pause_overlay(self, paused: bool):
@@ -710,9 +733,11 @@ class TrainerWindow(QMainWindow):
             self.vitals_tab.photo_check.setChecked(False)
         if self.vitals_tab.pause_check.isChecked():  # sinon le jeu resterait en pause
             self.vitals_tab.pause_check.setChecked(False)
+        self._hotkey_timer.stop()
         user32 = ctypes.WinDLL("user32", use_last_error=True)
         for hotkey_id in self._hotkeys:
             user32.UnregisterHotKey(wintypes.HWND(int(self.winId())), hotkey_id)
+        self._hotkeys = []
         self._cutscene_timer.stop()
         self.live.cutscene_quit_remove()
         self.live.load_menu_remove()

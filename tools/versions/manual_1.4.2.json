@@ -110,5 +110,9 @@
  "0xc528a7": [
   0,
   "manuel : fonction C52810 integree a ses appelants en 1.4.2, introuvable ; site ignore (protection partielle)"
+ ],
+ "0x1d77aa8": [
+  23884456,
+  "manuel : drapeaux du HUD, 101 votes sur 101 references (l'outil n'en essayait que 16)"
  ]
 }

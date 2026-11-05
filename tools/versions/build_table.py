@@ -6,7 +6,7 @@ import re
 import sys
 
 version, stamp, image_path, port_path = sys.argv[1:5]
-DISABLED = ["load_menu", "photo"]  # code machine embarque avec des adresses du jeu : a porter a part
+DISABLED = ["load_menu"]  # code machine embarque avec des adresses du jeu : a porter a part
 new = open(image_path, "rb").read()
 read = lambda rva, n: new[rva - 0x1000:rva - 0x1000 + n]
 port = {int(k, 16): v[0] for k, v in json.load(open(port_path)).items()}
@@ -58,8 +58,17 @@ for attr in dir(MGS4Live):
             values.setdefault(attr, {})[f"{old_rva:#x}"] = f"{new_rva:#x}"
             if nb != orig.hex():
                 sigs.setdefault(attr, {})[orig.hex()] = nb
+# constantes calculees au chargement a partir d'une adresse portee
+PAD_A = 0x23D2AEA0
+if f"{PAD_A:#x}" in values.get("PHOTO_PAD_A_RVA", {}):
+    values["PHOTO_PAD_LO"] = {f"{PAD_A - 0x40:#x}": f"{int(values['PHOTO_PAD_A_RVA'][f'{PAD_A:#x}'], 16) - 0x40:#x}"}
+# constantes entieres propres a la version (replace_<version>.json : {nom: valeur JSON})
+try:
+    replace = json.load(open(f"replace_{version}.json"))
+except FileNotFoundError:
+    replace = {}
 table = {"version": version, "timestamp": f"{int(stamp, 16):#x}", "disabled": DISABLED,
-         "values": values, "signatures": sigs}
+         "values": values, "signatures": sigs, "replace": replace}
 json.dump(table, sys.stdout, indent=1, sort_keys=True)
 print(f"{sum(len(v) for v in values.values())} valeurs, {sum(len(v) for v in sigs.values())} signatures, "
       f"{len(failed)} non portees", file=sys.stderr)
