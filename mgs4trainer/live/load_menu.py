@@ -46,6 +46,9 @@ class LoadMenuMixin:
         0x4E3AB3: bytes.fromhex("b9ffffffff"),
         0x4E37B7: bytes.fromhex("e85424ffff"),
     }
+    # Sites nommes (comparaisons et allocation) : action de l'entree 5,
+    # description du bas (call, les autres detours sont des jmp), compactage.
+    LM_ACTION_SITE, LM_DESC_SITE, LM_COMPACT_SITE = 0x4E34FA, 0x4E37B7, 0x4D8039
     # call 4D6D10 ; mov ecx,eax ; call 4C5150 ; nop x5 ; jmp 4E3551
     LM_ACTION = bytes.fromhex("e81138ffff8bc8e84a1cfeff9090909090eb44")
     LM_FUNCS = {
@@ -119,7 +122,7 @@ class LoadMenuMixin:
         if native is None:
             return False
         name, desc = self.LM_LANGUAGES.get(native, self.LM_LANGUAGES["View the Database."])
-        page = proc.alloc_near(b + 0x4D8039, 0x1000)
+        page = proc.alloc_near(b + self.LM_COMPACT_SITE, 0x1000)
         if not page:
             return False
         table = [b + self.LM_FLAGS, b] + [b + rva for rva in self.LM_TABLE[2:]]
@@ -127,10 +130,10 @@ class LoadMenuMixin:
         proc.write_bytes(page + 0x80, name.encode("latin-1", "replace")[:63] + b"\0")
         proc.write_bytes(page + 0xC0, desc.encode("utf-8")[:255] + b"\0")
         proc.write_bytes(page + 0x200, self.LM_CODE)
-        proc.write_bytes(b + 0x4E34FA, self.LM_ACTION)
+        proc.write_bytes(b + self.LM_ACTION_SITE, self.LM_ACTION)
         for rva, entry in self.LM_ENTRY.items():
             site, target = b + rva, page + entry
-            opcode = b"\xe8" if rva == 0x4E37B7 else b"\xe9"
+            opcode = b"\xe8" if rva == self.LM_DESC_SITE else b"\xe9"
             patch = opcode + struct.pack("<i", target - (site + 5))
             proc.write_bytes(site, patch + b"\x90" * (len(self.LM_SITES[rva]) - 5))
         self._lm = {"pid": self.pid, "page": page, "phase": "idle", "since": 0.0, "data": 0, "data_state": None}
@@ -148,7 +151,7 @@ class LoadMenuMixin:
             data = current[rva]
             if data == original:
                 continue
-            if rva == 0x4E34FA:
+            if rva == self.LM_ACTION_SITE:
                 if data != self.LM_ACTION:
                     return False
                 continue

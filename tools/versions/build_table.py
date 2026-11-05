@@ -6,7 +6,7 @@ import re
 import sys
 
 version, stamp, image_path, port_path = sys.argv[1:5]
-DISABLED = ["load_menu"]  # code machine embarque avec des adresses du jeu : a porter a part
+DISABLED = []
 new = open(image_path, "rb").read()
 read = lambda rva, n: new[rva - 0x1000:rva - 0x1000 + n]
 port = {int(k, 16): v[0] for k, v in json.load(open(port_path)).items()}

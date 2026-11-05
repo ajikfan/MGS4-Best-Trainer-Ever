@@ -114,5 +114,33 @@
  "0x1d77aa8": [
   23884456,
   "manuel : drapeaux du HUD, 101 votes sur 101 references (l'outil n'en essayait que 16)"
+ ],
+ "0x4e34fa": [
+  3792682,
+  "manuel : menu Charger, fonction identique en 1.4.2 (meme decalage)"
+ ],
+ "0x4e3a2a": [
+  3794010,
+  "manuel : menu Charger, fonction identique en 1.4.2 (meme decalage)"
+ ],
+ "0x4d7e74": [
+  3755524,
+  "manuel : menu Charger, fonction identique en 1.4.2 (meme decalage)"
+ ],
+ "0x4d8039": [
+  3755977,
+  "manuel : menu Charger, fonction identique en 1.4.2 (meme decalage)"
+ ],
+ "0x4e3ab3": [
+  3794147,
+  "manuel : menu Charger, fonction identique en 1.4.2 (meme decalage)"
+ ],
+ "0x4e37b7": [
+  3793383,
+  "manuel : menu Charger, fonction identique en 1.4.2 (meme decalage)"
+ ],
+ "0x1c2cfe8": [
+  22539688,
+  "manuel : table de cles du menu, lue dans 4D7E60 (identique)"
  ]
 }

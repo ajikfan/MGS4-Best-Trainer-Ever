@@ -75,9 +75,14 @@ def _remap(value, mapping: dict[int, int], sigs: dict[str, str]):
 
 
 def _as_tuples(value):
-    """Listes JSON -> tuples (les constantes du trainer sont des tuples)."""
+    """JSON -> constantes du trainer : listes en tuples, {"hex": ...} en
+    octets, {"dict": [[cle, valeur], ...]} en dictionnaire."""
     if isinstance(value, list):
         return tuple(_as_tuples(v) for v in value)
+    if isinstance(value, dict) and set(value) == {"hex"}:
+        return bytes.fromhex(value["hex"])
+    if isinstance(value, dict) and set(value) == {"dict"}:
+        return {_as_tuples(k): _as_tuples(v) for k, v in value["dict"]}
     return value
 
 
