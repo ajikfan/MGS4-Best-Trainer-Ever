@@ -46,5 +46,69 @@
  "0x23cf9ee0": [
   593781216,
   "manuel : liste des taches du menu de personnalisation, meme fonction 740370, se referme sur sa tete"
+ ],
+ "0xb800cc": [
+  8760348,
+  "manuel : knockout identique (85AC00 +0x1C)"
+ ],
+ "0xb80109": [
+  8760409,
+  "manuel : knockout +0x59, meme instruction"
+ ],
+ "0xb80135": [
+  8760453,
+  "manuel : knockout +0x85, meme instruction"
+ ],
+ "0xb801b3": [
+  8760579,
+  "manuel : knockout +0x103, meme instruction"
+ ],
+ "0x4d5f7e": [
+  3747838,
+  "manuel : fonction 4D5F70 -> 392FF0, +0xE"
+ ],
+ "0x4d5f83": [
+  3747843,
+  "manuel : fonction 4D5F70 -> 392FF0, +0x13"
+ ],
+ "0x4c0b80": [
+  3667504,
+  "manuel : menu des cinematiques, fonction 4C0B80 -> 37F630 meme disposition (debut, confirme par noop et table_lea portes a part)"
+ ],
+ "0x4c0dc1": [
+  3668081,
+  "manuel : menu des cinematiques, fonction 4C0B80 -> 37F630 meme disposition (confirm, confirme par noop et table_lea portes a part)"
+ ],
+ "0x4c0d09": [
+  3667897,
+  "manuel : menu des cinematiques, fonction 4C0B80 -> 37F630 meme disposition (count, confirme par noop et table_lea portes a part)"
+ ],
+ "0x4c0dae": [
+  3668062,
+  "manuel : menu des cinematiques, fonction 4C0B80 -> 37F630 meme disposition (continue, confirme par noop et table_lea portes a part)"
+ ],
+ "0x4c0dca": [
+  3668090,
+  "manuel : menu des cinematiques, fonction 4C0B80 -> 37F630 meme disposition (skip, confirme par noop et table_lea portes a part)"
+ ],
+ "0x4c0dfa": [
+  3668138,
+  "manuel : menu des cinematiques, fonction 4C0B80 -> 37F630 meme disposition (noop, confirme par noop et table_lea portes a part)"
+ ],
+ "0x4c0de4": [
+  3668116,
+  "manuel : menu des cinematiques, fonction 4C0B80 -> 37F630 meme disposition (table_lea, confirme par noop et table_lea portes a part)"
+ ],
+ "0x13cb420": [
+  15397472,
+  "manuel : mise a jour du Slider de boss, fonction identique"
+ ],
+ "0xeb6486": [
+  0,
+  "manuel : absent en 1.4.2 (un seul saut vers E98D00 = AB82D0 reste, celui d'EB1421), ignore par le trainer"
+ ],
+ "0xc528a7": [
+  0,
+  "manuel : fonction C52810 integree a ses appelants en 1.4.2, introuvable ; site ignore (protection partielle)"
  ]
 }

@@ -43,6 +43,21 @@ for target, sources in DERIVED.items():
         values.setdefault(target, {}).update(values.get(src, {}))
         if src in sigs:
             sigs.setdefault(target, {}).update(sigs[src])
+# dictionnaires {adresse: octets d'origine} (CSM_ORIGINAL, LM_SITES...) : octets relus a la nouvelle adresse
+sys.path.insert(0, r"D:\Documents\GitHub\MGS4-Trainer")
+from mgs4trainer.live import MGS4Live
+for attr in dir(MGS4Live):
+    value = getattr(MGS4Live, attr, None)
+    if not (isinstance(value, dict) and value and all(type(k) is int and isinstance(v, bytes) for k, v in value.items())):
+        continue
+    mapping = {int(k, 16): int(v, 16) for k, v in values.get(attr, {}).items()}
+    for old_rva, orig in value.items():
+        new_rva = mapping.get(old_rva, port.get(old_rva))
+        if new_rva:
+            nb = read(new_rva, len(orig)).hex()
+            values.setdefault(attr, {})[f"{old_rva:#x}"] = f"{new_rva:#x}"
+            if nb != orig.hex():
+                sigs.setdefault(attr, {})[orig.hex()] = nb
 table = {"version": version, "timestamp": f"{int(stamp, 16):#x}", "disabled": DISABLED,
          "values": values, "signatures": sigs}
 json.dump(table, sys.stdout, indent=1, sort_keys=True)

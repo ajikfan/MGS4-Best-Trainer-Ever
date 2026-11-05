@@ -12,7 +12,12 @@ ROOT = r"D:\Documents\GitHub\MGS4-Trainer\mgs4trainer"
 OLD = open(os.path.join(os.path.dirname(__file__), "old", "image_rva1000.bin"), "rb").read()
 BASE = 0x1000
 CODE_END = 0x165F000
-NOT_ADDRESSES = {"SNAKE_MOTIONS", "ALERT_SECOND_TIMER"}  # identifiants d'animation, duree
+NOT_ADDRESSES = {"SNAKE_MOTIONS", "ALERT_SECOND_TIMER", "OCTOPUS_PHASE_FLAGS", "CSM_HIGHLIGHTS"}
+# identifiants de personnage (+0xC08) ranges a cote des classes
+NOT_ADDRESS_VALUES = {("ALLIES", 0x86A795), ("ALLIES", 0xC13869), ("ALLIES", 0xF1379E), ("ALLIES", 0xF13930), ("ALLIES", 0x213715)}
+# adresses que les indices ne reconnaissent pas
+FORCE_ADDRESSES = {"ZONE_SLIDER_HOOK_RVA", "ZOOM_HOOK_RVA", "(CSM_CONTINUE, CSM_SKIP, CSM_NOOP)",
+                   "(CSM_ENTRY, CSM_CONFIRM, CSM_COUNT, CSM_TABLE_LEA)"}  # identifiants d'animation, duree
 NAME_HINT = re.compile(r"RVA|SITE|FUNC|ADDR|ENTRY|CALL|VTABLE|TABLE|HOOK|PATCH|ROOT|LOOKUP|APPLY|PLAY|FIND|_SET\b|STATE|GLOBAL|LIST|PTR|MANAGER|CTOR|UPDATE|PROC", re.I)
 
 
@@ -92,8 +97,10 @@ def main():
                 if v in refs: why.append("ref")
                 if old and v < CODE_END and OLD[v - BASE - 1] in (0xCC, 0xC3) and old[0] != 0xCC: why.append("debut fn")
                 if NAME_HINT.search(name): why.append("nom")
-                if name in NOT_ADDRESSES:
+                if name in NOT_ADDRESSES or (name, v) in NOT_ADDRESS_VALUES:
                     cls = "autre"
+                elif name in FORCE_ADDRESSES:
+                    cls = "adresse"
                 elif "sig OK" in why or "call/jmp" in why or ("ref" in why and v >= CODE_END):
                     cls = "adresse"
                 elif "sig DIFF" in why:

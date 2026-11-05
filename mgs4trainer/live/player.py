@@ -587,6 +587,8 @@ class PlayerMixin:
             return cache[0]
         block, missing = 0, []
         for index, (rva, original, length, _compare, _list) in enumerate(self.ALLY_WRITE_SITES):
+            if not rva:
+                continue  # site absent de cette version du jeu (versions/*.json)
             site = self.base + rva
             current = self.proc.read_bytes(site, len(original))
             if current[0] == 0xE9 and current[length:] == original[length:]:
@@ -605,7 +607,7 @@ class PlayerMixin:
                 return 0
         if missing and (block or install):
             if not block:
-                block = self.proc.alloc_near(self.base + self.ALLY_WRITE_SITES[0][0])
+                block = self.proc.alloc_near(self.base + next(s[0] for s in self.ALLY_WRITE_SITES if s[0]))
                 if not block:
                     return 0
                 self.proc.write_bytes(block, bytes(0x80) + self.ALLY_LOCK_MAGIC)

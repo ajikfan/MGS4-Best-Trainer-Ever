@@ -44,6 +44,15 @@
    "e8f1c4d8ff": "e841e3ddff",
    "ff8e58080000488d1555": "ff8e58080000488d1565"
   },
+  "CSM_LAYER_CALL": {
+   "e88d0d0000": "e89d0c0000"
+  },
+  "CSM_LAYER_ORIGINAL": {
+   "e88d0d0000": "e89d0c0000"
+  },
+  "CSM_ORIGINAL": {
+   "488d0d25bc7601": "488d0d35ef1f01"
+  },
   "LM_SITES": {
    "44896c2468": "e91e890848",
    "e85137ffff8bc8e8fa007f00e8555a0100eb44": "e8115dffff8bc8e81a445b00e8754d0100eb44",
@@ -95,10 +104,7 @@
    "0x18e5870": "0x130c760",
    "0x18e5ef8": "0x130cde8",
    "0x18e65c8": "0x130d4b8",
-   "0x190ef18": "0x1332e88",
-   "0x86a795": "0x0",
-   "0xc13869": "0x0",
-   "0xf1379e": "0xb0988e"
+   "0x190ef18": "0x1332e88"
   },
   "ALLY_DEATH_CLASSES": {
    "0x190ef18": "0x1332e88"
@@ -128,9 +134,9 @@
   "ALLY_WRITE_SITES": {
    "0x14b0160": "0xf52880",
    "0x14b038d": "0xf52aad",
-   "0xb80109": "0x0",
-   "0xb80135": "0x0",
-   "0xb801b3": "0x0",
+   "0xb80109": "0x85ac59",
+   "0xb80135": "0x85ac85",
+   "0xb801b3": "0x85ad03",
    "0xc5244d": "0x8f1f7d",
    "0xc528a7": "0x0"
   },
@@ -258,7 +264,7 @@
    "0xb4e48a": "0x83421a",
    "0xb5fc0d": "0x84231d",
    "0xb5fc33": "0x842343",
-   "0xb800cc": "0x0",
+   "0xb800cc": "0x85ac1c",
    "0xb9c03": "0xa06b3",
    "0xb9c0a": "0xa06ba",
    "0xb9c12": "0xa06c2",
@@ -393,16 +399,21 @@
    "0x1d841fa": "0x16d38fa"
   },
   "CSM_CONFIRM": {
-   "0x4c0b80": "0x38b17f",
-   "0x4c0dc1": "0x37f6da"
+   "0x4c0b80": "0x37f630",
+   "0x4c0d09": "0x37f7b9",
+   "0x4c0dc1": "0x37f871",
+   "0x4c0de4": "0x37f894"
   },
   "CSM_CONTINUE": {
    "0x4c0dae": "0x37f85e",
-   "0x4c0dca": "0x37f87a"
+   "0x4c0dca": "0x37f87a",
+   "0x4c0dfa": "0x37f8aa"
   },
   "CSM_COUNT": {
-   "0x4c0b80": "0x38b17f",
-   "0x4c0dc1": "0x37f6da"
+   "0x4c0b80": "0x37f630",
+   "0x4c0d09": "0x37f7b9",
+   "0x4c0dc1": "0x37f871",
+   "0x4c0de4": "0x37f894"
   },
   "CSM_DLG_FUNCS": {
    "0x438c00": "0x30f140",
@@ -413,48 +424,53 @@
    "0x740d30": "0x52c490"
   },
   "CSM_ENTRY": {
-   "0x4c0b80": "0x38b17f",
-   "0x4c0dc1": "0x37f6da"
-  },
-  "CSM_HIGHLIGHTS": {
-   "0x4a2371": "0x0"
+   "0x4c0b80": "0x37f630",
+   "0x4c0d09": "0x37f7b9",
+   "0x4c0dc1": "0x37f871",
+   "0x4c0de4": "0x37f894"
   },
   "CSM_LAYER_CALL": {
-   "0x4d5f7e": "0x0"
+   "0x4d5f7e": "0x392ffe"
   },
   "CSM_LAYER_ORIGINAL": {
-   "0x4d5f7e": "0x0"
+   "0x4d5f7e": "0x392ffe"
   },
   "CSM_LIST_MENU": {
-   "0x4d5f83": "0x0"
+   "0x4d5f83": "0x393003"
   },
   "CSM_LIST_ORIGINAL": {
-   "0x4d5f83": "0x0"
+   "0x4d5f83": "0x393003"
   },
   "CSM_LIST_PARAM": {
-   "0x4d5f83": "0x0"
+   "0x4d5f83": "0x393003"
   },
   "CSM_NOOP": {
    "0x4c0dae": "0x37f85e",
-   "0x4c0dca": "0x37f87a"
+   "0x4c0dca": "0x37f87a",
+   "0x4c0dfa": "0x37f8aa"
   },
   "CSM_ORIGINAL": {
-   "0x4c0b80": "0x38b17f",
-   "0x4c0dc1": "0x37f6da"
+   "0x4c0b80": "0x37f630",
+   "0x4c0d09": "0x37f7b9",
+   "0x4c0dc1": "0x37f871",
+   "0x4c0de4": "0x37f894"
   },
   "CSM_RESOURCE_ROOTS": {
    "0x23d2f6d0": "0x2367b9d0"
   },
   "CSM_SKIP": {
    "0x4c0dae": "0x37f85e",
-   "0x4c0dca": "0x37f87a"
+   "0x4c0dca": "0x37f87a",
+   "0x4c0dfa": "0x37f8aa"
   },
   "CSM_TABLE_LEA": {
-   "0x4c0b80": "0x38b17f",
-   "0x4c0dc1": "0x37f6da"
+   "0x4c0b80": "0x37f630",
+   "0x4c0d09": "0x37f7b9",
+   "0x4c0dc1": "0x37f871",
+   "0x4c0de4": "0x37f894"
   },
   "CSM_TASK_UPDATE_RVA": {
-   "0x4c0b80": "0x38b17f"
+   "0x4c0b80": "0x37f630"
   },
   "CSM_UI_FLAGS": {
    "0x3b7c0e0": "0x34ca7e0"
@@ -526,6 +542,14 @@
   "LIQUID_RUN_PROC": {
    "0x3ed630": "0x2da1a0"
   },
+  "LIQUID_SEND_MESSAGE": {
+   "0x1138210": "0xc97310",
+   "0x73ff90": "0x52b8f0"
+  },
+  "LIQUID_STAGE_EVENT": {
+   "0x1138210": "0xc97310",
+   "0x73ff90": "0x52b8f0"
+  },
   "LIQUID_STATES": {
    "0x10fe110": "0xc6b8c0",
    "0x18fa3d8": "0x131fc08",
@@ -535,6 +559,24 @@
    "0x10fe110": "0xc6b8c0",
    "0x18fa3d8": "0x131fc08",
    "0x1d2c710": "0x167d730"
+  },
+  "LIQUID_TRANSITION": {
+   "0x112f430": "0xc90490",
+   "0xb0fa60": "0x7fcce0"
+  },
+  "LIQUID_TRANSITION_END": {
+   "0x112f430": "0xc90490",
+   "0xb0fa60": "0x7fcce0"
+  },
+  "LM_CLOSE_MENU": {
+   "0x432790": "0x309960",
+   "0x4d40a0": "0x391810",
+   "0x5bcb0": "0x4e4f0"
+  },
+  "LM_CONTINUE": {
+   "0x432790": "0x309960",
+   "0x4d40a0": "0x391810",
+   "0x5bcb0": "0x4e4f0"
   },
   "LM_CONTINUE_COUNT": {
    "0x5bd6a": "0x4e5aa"
@@ -565,6 +607,11 @@
    "0x439e40": "0x30ff50",
    "0x4d40a0": "0x391810",
    "0x4d5c10": "0x392c90",
+   "0x5bcb0": "0x4e4f0"
+  },
+  "LM_GET_TEXT": {
+   "0x432790": "0x309960",
+   "0x4d40a0": "0x391810",
    "0x5bcb0": "0x4e4f0"
   },
   "LM_PAUSE": {
@@ -624,9 +671,6 @@
    "0xa15f0": "0x89e40",
    "0xd25800": "0x993ff0",
    "0xe80960": "0xaaa0f0"
-  },
-  "OCTOPUS_PHASE_FLAGS": {
-   "0x267d0": "0x0"
   },
   "PHOTO_PAD_A_RVA": {
    "0x23d2aea0": "0x236771a0"
@@ -863,7 +907,7 @@
    "0x86f20": "0x72e00"
   },
   "ZONE_BOSS_SLIDER_UPDATE_RVA": {
-   "0x13cb420": "0x0"
+   "0x13cb420": "0xeaf260"
   },
   "ZONE_EMOTIONS": {
    "0xb64b80": "0x846120",
@@ -915,6 +959,9 @@
    "0xb88260": "0x862830",
    "0xfdc180": "0xb9af40"
   },
+  "ZONE_SLIDER_HOOK_RVA": {
+   "0xfdc1d0": "0xb9af90"
+  },
   "ZONE_SLIDER_UPDATE_RVA": {
    "0xf71f90": "0xb4c3a0"
   },
@@ -929,6 +976,9 @@
   },
   "ZONE_VEHICLE_MANAGER_RVA": {
    "0x23f810f0": "0x238b8cf0"
+  },
+  "ZOOM_HOOK_RVA": {
+   "0xb9b88": "0xa0638"
   },
   "_STEALTH_CHECK_CALLS": {
    "0x1002017": "0xbba7b7",
@@ -945,9 +995,6 @@
    "0xb3ade5": "0x821da5",
    "0xb46f20": "0x82cfa0",
    "0xb4e48a": "0x83421a"
-  },
-  "address": {
-   "0x432790": "0x309960"
   }
  },
  "version": "1.4.2"

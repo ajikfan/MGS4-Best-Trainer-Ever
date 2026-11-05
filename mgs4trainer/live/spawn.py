@@ -412,6 +412,8 @@ class SpawnMixin:
 
     def _spawn_patch_death_camera(self) -> bool:
         for rva, orig in self.SPAWN_DEATH_CAMERA_SITES:
+            if not rva:
+                continue  # chemin absent de cette version du jeu (versions/*.json)
             current = self.proc.read_bytes(self.base + rva, len(orig))
             if current == orig:
                 self.proc.write_bytes(self.base + rva, bytes((0xC3,)) + bytes((0x90,)) * (len(orig) - 1))
