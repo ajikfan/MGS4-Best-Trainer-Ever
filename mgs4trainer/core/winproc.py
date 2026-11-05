@@ -167,14 +167,13 @@ class ProcessHandle:
             kernel32.CloseHandle(self.handle)
             self.handle = None
 
-    def alloc_near(self, target: int, size: int = 0x1000) -> int:
+    def alloc_near(self, target: int, size: int = 0x1000, reach: int = 0x7F000000) -> int:
         """Memoire executable a moins de ~2 Go de `target` (pour un saut
         rel32 depuis le code du jeu) ; 0 si aucune place libre."""
         kernel32.VirtualAllocEx.argtypes = [wintypes.HANDLE, wintypes.LPVOID, ctypes.c_size_t,
                                             wintypes.DWORD, wintypes.DWORD]
         kernel32.VirtualAllocEx.restype = wintypes.LPVOID
         granularity = 0x10000
-        reach = 0x7F000000
         mbi = MEMORY_BASIC_INFORMATION()
         # D'abord au-dessus de `target` (juste apres le module), puis en
         # dessous : la place la plus proche, loin de la limite du saut.
