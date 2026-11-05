@@ -4,7 +4,8 @@ import threading
 
 import mgs4save
 
-from mgs4trainer.core.gamedata import LINKVARBUF_POINTER_RVA, PROCESS_NAME, VARBUF_POINTER_RVA
+from mgs4trainer.core import gamedata, versions
+from mgs4trainer.core.gamedata import PROCESS_NAME
 from mgs4trainer.core.i18n import tr
 from mgs4trainer.core.speedhack import SpeedController
 from mgs4trainer.core.winproc import ProcessHandle, find_module_base, find_pid
@@ -38,8 +39,10 @@ class LiveBase:
         try:
             self.proc = ProcessHandle(pid)
             self.base = base
-            self.linkvarbuf = struct.unpack("<Q", self.proc.read_bytes(base + LINKVARBUF_POINTER_RVA, 8))[0]
-            self.varbuf = struct.unpack("<Q", self.proc.read_bytes(base + VARBUF_POINTER_RVA, 8))[0]
+            # Adresses de la version en cours (table versions/*.json), avant toute lecture.
+            versions.activate(versions.detect(self.proc, base))
+            self.linkvarbuf = struct.unpack("<Q", self.proc.read_bytes(base + gamedata.LINKVARBUF_POINTER_RVA, 8))[0]
+            self.varbuf = struct.unpack("<Q", self.proc.read_bytes(base + gamedata.VARBUF_POINTER_RVA, 8))[0]
             if self.varbuf == 0:
                 self.status = tr("status.null_varbuf")
                 return False

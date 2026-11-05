@@ -132,6 +132,9 @@ class LiquidFightMixin:
     # 0x330131 puis procedure de fin du script du stage [boss+0x4908],
     # arguments (4, boss+0x48E0) via 3ED630. Sert au « un coup, un mort ».
     LIQUID_END_MESSAGE, LIQUID_RUN_PROC = 0x330131, 0x3ED630
+    # Fonctions appelees (signatures dans LIQUID_FUNCS)
+    LIQUID_SEND_MESSAGE, LIQUID_STAGE_EVENT = 0x73FF90, 0x1138210
+    LIQUID_TRANSITION, LIQUID_TRANSITION_END = 0xB0FA60, 0x112F430
     LIQUID_RUN_PROC_SIG = "48895c2410564883ec30488b"
     LIQUID_RESCAN = 1.0  # s entre deux recherches quand Liquid est absent
 
@@ -150,7 +153,7 @@ class LiquidFightMixin:
         if not self._lq_args:
             return False
         self.proc.write_bytes(self._lq_args, struct.pack("<QQ", 4, boss + 0x48E0))
-        self.speed.game_call(b + 0x73FF90, self._lq(boss + 0x4718), self.LIQUID_END_MESSAGE, 0)
+        self.speed.game_call(b + self.LIQUID_SEND_MESSAGE, self._lq(boss + 0x4718), self.LIQUID_END_MESSAGE, 0)
         self.speed.game_call(b + self.LIQUID_RUN_PROC, proc, self._lq_args)
         return True
 
@@ -213,8 +216,8 @@ class LiquidFightMixin:
             return False
         call, b = self.speed.game_call, self.base
         if event is not None:
-            call(b + 0x1138210, boss, self._ld(boss + 0x4904), event)
-        call(b + 0x73FF90, self._lq(boss + 0x4718), self.LIQUID_MESSAGE, 0)
-        call(b + 0xB0FA60, boss, 0, transition, b + self.LIQUID_STATES)
-        call(b + 0x112F430, boss)
+            call(b + self.LIQUID_STAGE_EVENT, boss, self._ld(boss + 0x4904), event)
+        call(b + self.LIQUID_SEND_MESSAGE, self._lq(boss + 0x4718), self.LIQUID_MESSAGE, 0)
+        call(b + self.LIQUID_TRANSITION, boss, 0, transition, b + self.LIQUID_STATES)
+        call(b + self.LIQUID_TRANSITION_END, boss)
         return True

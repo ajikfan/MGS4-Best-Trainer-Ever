@@ -2,6 +2,8 @@
 import struct
 import time
 
+from mgs4trainer.core import versions
+
 
 class LoadMenuMixin:
     """Charger une sauvegarde depuis le menu Mk. II, sans repasser par le menu
@@ -55,6 +57,9 @@ class LoadMenuMixin:
     }
     LM_CONTINUE_COUNT, LM_COUNT_ORIGINAL = 0x5BD6A, bytes.fromhex("66898a58010000")
     LM_FLAGS, LM_PAUSE, LM_DATA_TASK = 0x3B7C0E0, 0x3B7C8B0, 0x4C2C80
+    # Fonctions appelees (signatures dans LM_FUNCS) : texte du menu, fermeture
+    # du menu pause, Continuer (5BCB0(0), menu ferme).
+    LM_GET_TEXT, LM_CLOSE_MENU, LM_CONTINUE = 0x432790, 0x4D40A0, 0x5BCB0
     LM_TEXTS = 0x17BA49  # descriptions du menu : 432790(groupe, numero), langue du jeu
     # Table du bloc : FLAGS, IMG, FIND, GETTXT, SETTXT, GETIMG, SETIMG, DESCFN,
     # DESCBODY, retours LBL, BLD, BFL, LFL ; nom en +0x80, description en +0xC0.
@@ -98,8 +103,8 @@ class LoadMenuMixin:
         state = getattr(self, "_lm", None)
         if state and state["pid"] == self.pid:
             return True
-        if not (self.connected and self.sane):
-            return False
+        if not (self.connected and self.sane) or versions.disabled("load_menu"):
+            return False  # LM_CODE et LM_ACTION contiennent des adresses de la version de reference
         b, proc = self.base, self.proc
         if not self._lm_restore_leftover():
             return False
@@ -174,7 +179,7 @@ class LoadMenuMixin:
 
     def game_menu_text(self, number: int) -> str | None:
         """Texte numero `number` des descriptions du menu, dans la langue du jeu."""
-        address = self.speed.game_call(self.base + 0x432790, self.LM_TEXTS, number)
+        address = self.speed.game_call(self.base + self.LM_GET_TEXT, self.LM_TEXTS, number)
         if not address:
             return None
         raw = b""
@@ -228,7 +233,7 @@ class LoadMenuMixin:
             if now - state["since"] < self.LM_CURTAIN_TIME:
                 return None
             if menu and not self._lm_task(q(menu + 0x1B8)) and d(menu + 0xA0) == 1:
-                self.speed.game_call(b + 0x4D40A0, menu + 0x90, 3)
+                self.speed.game_call(b + self.LM_CLOSE_MENU, menu + 0x90, 3)
                 state["phase"], state["since"] = "closing", now
             elif now - state["since"] > self.LM_TIMEOUT:
                 state["phase"] = "idle"
@@ -243,7 +248,7 @@ class LoadMenuMixin:
             count = b + self.LM_CONTINUE_COUNT
             self.proc.write_bytes(count, b"\x90" * 7)
             try:
-                self.speed.game_call(b + 0x5BCB0, 0)
+                self.speed.game_call(b + self.LM_CONTINUE, 0)
             finally:
                 self.proc.write_bytes(count, self.LM_COUNT_ORIGINAL)
             state["phase"], state["since"] = "continued", now

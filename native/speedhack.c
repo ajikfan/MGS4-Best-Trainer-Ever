@@ -678,8 +678,11 @@ static BOOL install_r12_probe_hook(void) {
     PIMAGE_NT_HEADERS nt = (PIMAGE_NT_HEADERS)((BYTE *)base + dos->e_lfanew);
     SIZE_T imageSize = nt->OptionalHeader.SizeOfImage;
 
-    static const BYTE pattern[] = {0x8B, 0xD3, 0x41, 0x8B, 0xCC, 0xE8};
-    static const char mask[] = "xxxxxx";
+    /* "mov [rdi+imm32],eax" apres le call : le motif court existe deux fois
+     * en 1.4.2 (le premier n'est pas le bon), unique ainsi dans les deux
+     * versions. */
+    static const BYTE pattern[] = {0x8B, 0xD3, 0x41, 0x8B, 0xCC, 0xE8, 0, 0, 0, 0, 0x89, 0x87};
+    static const char mask[] = "xxxxxx????xx";
 
     BYTE *objProbe = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
     if (!objProbe) {
@@ -1377,13 +1380,24 @@ static BOOL install_main_loop_hook(void) {
                                        0x00, 0x00, 0xE8, 0, 0, 0, 0, 0xE8};
     static const char loopMask[] = "xxxx????xxxxxxxx????x";
 
-    BYTE *raw = find_pattern((BYTE *)base, imageSize, loopPattern, loopMask, sizeof(loopPattern));
-    if (!raw) {
-        g_shared->main_loop_hook_error = 1;
-        return FALSE;
-    }
+    /* 1.4.2 (2026-11-05) : plus de "nop dword [rax]" entre le je et le
+     * premier call ; l'appel du gestionnaire passe de +0x14 a +0x0D. */
+    static const BYTE loopPattern2[] = {0x84, 0xC0, 0x0F, 0x84, 0, 0, 0, 0, 0xE8, 0, 0, 0, 0,
+                                        0xE8, 0, 0, 0, 0, 0xE8};
+    static const char loopMask2[] = "xxxx????x????x????x";
 
-    BYTE *callSite = raw + 0x14; /* call <gestionnaire de taches> */
+    BYTE *callSite;
+    BYTE *raw = find_pattern((BYTE *)base, imageSize, loopPattern, loopMask, sizeof(loopPattern));
+    if (raw) {
+        callSite = raw + 0x14; /* call <gestionnaire de taches> */
+    } else {
+        raw = find_pattern((BYTE *)base, imageSize, loopPattern2, loopMask2, sizeof(loopPattern2));
+        if (!raw) {
+            g_shared->main_loop_hook_error = 1;
+            return FALSE;
+        }
+        callSite = raw + 0x0D;
+    }
     INT32 callRel;
     memcpy(&callRel, callSite + 1, 4);
     BYTE *taskRunner = callSite + 5 + callRel;
@@ -1560,9 +1574,11 @@ static BOOL install_combat_array_hook(void) {
     /* call xxxxxxxx ; mov [rsp+30],rax ; mov r15,rax ; test rax,rax -
      * signature de 16 octets, point reel d'injection a +5 (juste apres
      * le call, debut de "mov [rsp+30],rax"). */
+    /* + "jnz" : sans lui, deux occurrences en 1.4.2 (la premiere n'est pas
+     * la bonne). */
     static const BYTE pattern[] = {0xE8, 0, 0, 0, 0, 0x48, 0x89, 0x44, 0x24, 0x30,
-                                    0x4C, 0x8B, 0xF8, 0x48, 0x85, 0xC0};
-    static const char mask[] = "x????xxxxxxxxxxx";
+                                    0x4C, 0x8B, 0xF8, 0x48, 0x85, 0xC0, 0x0F, 0x85};
+    static const char mask[] = "x????xxxxxxxxxxxxx";
 
     BYTE *raw = find_pattern((BYTE *)base, imageSize, pattern, mask, sizeof(pattern));
     if (!raw) {

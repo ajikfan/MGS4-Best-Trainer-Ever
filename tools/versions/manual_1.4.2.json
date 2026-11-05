@@ -1,0 +1,50 @@
+{
+ "0xb4e48a": [
+  8602138,
+  "manuel : 14 appels mov ecx,0xA9 ; call 8DA980 (612560 en 1.4.2) apparies dans l'ordre"
+ ],
+ "0x6d2d0": [
+  370528,
+  "manuel : appelants (vote majoritaire)"
+ ],
+ "0x2c0740": [
+  2256704,
+  "manuel : appelants (1 vote), code identique a une autre fonction FMOD"
+ ],
+ "0x2cad90": [
+  2264640,
+  "manuel : appelants (vote majoritaire)"
+ ],
+ "0x2cefa0": [
+  2267632,
+  "manuel : appelants (1 vote), code identique a 3 autres fonctions FMOD"
+ ],
+ "0x73fdc0": [
+  5420864,
+  "manuel : appelants (vote majoritaire)"
+ ],
+ "0x7513c0": [
+  5134416,
+  "manuel : appelants (vote majoritaire)"
+ ],
+ "0xb800b0": [
+  8760320,
+  "manuel : jumelle de B80300, meme ecart 0x250"
+ ],
+ "0xb80300": [
+  8760912,
+  "manuel : jumelle de B800B0, meme ecart 0x250"
+ ],
+ "0xd20488": [
+  10023704,
+  "manuel : appelants (vote majoritaire)"
+ ],
+ "0x23d044d0": [
+  593823696,
+  "manuel : liste des taches, initialisee par 740370 (52BB80 en 1.4.2), parcours verifie en jeu (102 taches)"
+ ],
+ "0x23cf9ee0": [
+  593781216,
+  "manuel : liste des taches du menu de personnalisation, meme fonction 740370, se referme sur sa tete"
+ ]
+}

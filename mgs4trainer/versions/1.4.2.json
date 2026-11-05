@@ -1,0 +1,954 @@
+{
+ "disabled": [
+  "load_menu",
+  "photo"
+ ],
+ "signatures": {
+  "ALLY_GUARDS": {
+   "ba00001000488bcee812adf9ff85c00f85df090000": "33c04881c4a8000000415f415e5f5e5d5bc390e127"
+  },
+  "BOSS_PLAYER_ENTRY": {
+   "8b05caaf5d23488d0dd3af5d23ffc048": "8b054af41e23488d0d53f41e23ffc048"
+  },
+  "CODE_PATCHES": {
+   "41898814030000e884": "41898814030000e874",
+   "41899614030000e89c03": "41899614030000e87c02",
+   "428984a65c080000e85d": "428984a65c080000e87d",
+   "4883ec28e8a71100": "4883ec28e8c70d00",
+   "66418988520b0000c3c200": "66418988520b0000c3488b",
+   "66458982480b0000e818d9": "66458982480b0000e86817",
+   "66458982480b0000e8eace": "66458982480b0000e83a0d",
+   "740ae874540200": "740ae8a4060200",
+   "7f08488bcbe890f3": "7f08488bcbe8d04d",
+   "890d44b1ad2239b3ac00": "890d4475972239b3ac00",
+   "898314030000e84d": "898314030000e80d",
+   "898314030000e88a": "898314030000e84a",
+   "89831c030000e815": "89831c030000e805",
+   "89831c030000e8bd": "89831c030000e8ad",
+   "89831c030000e8d8": "89831c030000e8c8",
+   "8bd6488bcde8397478": "8bd6488bcde8e97c98",
+   "e805259dff4c8bf04885": "e8c564b4ff4c8bf04885",
+   "e83054daff": "e8e053dfff",
+   "e8554edbff": "e87527e0ff",
+   "e85b3ad9ff": "e8bb55deff",
+   "e864898dff": "e8a47da5ff",
+   "e867fdd9ff": "e88709dfff",
+   "e87754dbff": "e8f72ce0ff",
+   "e88844dbff": "e83820e0ff",
+   "e896fbd9ff": "e8b607dfff",
+   "e8b9f758ff": "e889b57cff",
+   "e8ba7e8cff": "e82a9ea4ff",
+   "e8bb53daff": "e86b53dfff",
+   "e8dcfed9ff": "e8fc0adfff",
+   "e8df0bdbff": "e82feedfff",
+   "e8f1c4d8ff": "e841e3ddff",
+   "ff8e58080000488d1555": "ff8e58080000488d1565"
+  },
+  "LM_SITES": {
+   "44896c2468": "e91e890848",
+   "e85137ffff8bc8e8fa007f00e8555a0100eb44": "e8115dffff8bc8e81a445b00e8754d0100eb44",
+   "e85424ffff": "e8a44affff"
+  },
+  "MANTIS_DEFEAT": {
+   "f30f10058a9d900089b01c0300000f2f": "f30f10050a2c750089b01c0300000f2f"
+  },
+  "SNAKE_SOUND_SITE": {
+   "e80d6af7ff": "e82dc7f7ff"
+  },
+  "SPAWN_DEATH_CAMERA_SITES": {
+   "e9da78feff": "e9aa2fffff"
+  },
+  "ZONE_BOSS_SLIDER_FUNCS": {
+   "4533c0418d500de9b40b0000": "4533c0418d500de9240b0000",
+   "488b154999be224885d2742748b8ffff": "488b15a99aa3224885d2742748b8ffff"
+  },
+  "ZONE_SLIDER_FUNCS": {
+   "8b05caaf5d23488d0dd3af5d23ffc048": "8b054af41e23488d0d53f41e23ffc048"
+  },
+  "_STEALTH_CHECK_CALLS": {
+   "e83054daff": "e8e053dfff",
+   "e8554edbff": "e87527e0ff",
+   "e85b3ad9ff": "e8bb55deff",
+   "e864898dff": "e8a47da5ff",
+   "e867fdd9ff": "e88709dfff",
+   "e87754dbff": "e8f72ce0ff",
+   "e88844dbff": "e83820e0ff",
+   "e896fbd9ff": "e8b607dfff",
+   "e8b9f758ff": "e889b57cff",
+   "e8ba7e8cff": "e82a9ea4ff",
+   "e8bb53daff": "e86b53dfff",
+   "e8dcfed9ff": "e8fc0adfff",
+   "e8df0bdbff": "e82feedfff",
+   "e8f1c4d8ff": "e841e3ddff"
+  }
+ },
+ "timestamp": "0x6ae07392",
+ "values": {
+  "ALERT_MANAGER_PTR_RVA": {
+   "0x23f0b5b0": "0x23857630"
+  },
+  "ALERT_STATE_RVA": {
+   "0x1d77ab8": "0x16c72b8"
+  },
+  "ALLIES": {
+   "0x18e4fa8": "0x130bed8",
+   "0x18e5870": "0x130c760",
+   "0x18e5ef8": "0x130cde8",
+   "0x18e65c8": "0x130d4b8",
+   "0x190ef18": "0x1332e88",
+   "0x86a795": "0x0",
+   "0xc13869": "0x0",
+   "0xf1379e": "0xb0988e"
+  },
+  "ALLY_DEATH_CLASSES": {
+   "0x190ef18": "0x1332e88"
+  },
+  "ALLY_DEATH_FUNCS": {
+   "0x144a020": "0xf17eb0",
+   "0x144a5a0": "0xf18380",
+   "0x149c0f0": "0xf4a070"
+  },
+  "ALLY_GUARDS": {
+   "0x14afbc1": "0xf522e1",
+   "0x14b05b5": "0xf52cd5",
+   "0x18e4fa8": "0x130bed8",
+   "0x18e5870": "0x130c760",
+   "0x18e5ef8": "0x130cde8",
+   "0x18e65c8": "0x130d4b8",
+   "0x190ef18": "0x1332e88",
+   "0xc52190": "0x8f1cc0"
+  },
+  "ALLY_HIT_STATES": {
+   "0x18e4fa8": "0x130bed8",
+   "0x18e5870": "0x130c760",
+   "0x18e5ef8": "0x130cde8",
+   "0x18e65c8": "0x130d4b8",
+   "0xeb13f0": "0xac52f0"
+  },
+  "ALLY_WRITE_SITES": {
+   "0x14b0160": "0xf52880",
+   "0x14b038d": "0xf52aad",
+   "0xb80109": "0x0",
+   "0xb80135": "0x0",
+   "0xb801b3": "0x0",
+   "0xc5244d": "0x8f1f7d",
+   "0xc528a7": "0x0"
+  },
+  "AMMO_TABLE_RVA": {
+   "0x1d81f20": "0x16d1620"
+  },
+  "BEAUTY_STATE_UPDATE_RVA": {
+   "0x116ccf0": "0xcc33d0"
+  },
+  "BOSS_HUD_WINDOW": {
+   "0x80000": "0x6c3c0"
+  },
+  "BOSS_KILL_FORCE": {
+   "0x1172a99": "0xcc7c89",
+   "0x1172ab2": "0xcc7ca2"
+  },
+  "BOSS_PLAYER_ENTRY": {
+   "0x8da180": "0x611e80"
+  },
+  "BOSS_TOUCH_RVA": {
+   "0xb88260": "0x862830"
+  },
+  "CAMERA_RVA": {
+   "0x1dddc70": "0x172d460"
+  },
+  "CODE_PATCHES": {
+   "0x1002017": "0xbba7b7",
+   "0x1012ac1": "0xbc8731",
+   "0x102daf3": "0xbdc173",
+   "0x10301ce": "0xbde78e",
+   "0x1048184": "0xbef144",
+   "0x104818e": "0xbef14e",
+   "0x1048243": "0xbef203",
+   "0x10482a1": "0xbef261",
+   "0x104831a": "0xbef2da",
+   "0x1048362": "0xbef322",
+   "0x10483ef": "0xbef3af",
+   "0x1123568": "0xc86c58",
+   "0x112717a": "0xc89c1a",
+   "0x1127255": "0xc89cf5",
+   "0x116cdc8": "0xcc34a8",
+   "0x1173bc7": "0xcc8db7",
+   "0x1173cf9": "0xcc8ee9",
+   "0x1173d8d": "0xcc8f7d",
+   "0x11dc059": "0xd116d9",
+   "0x11fbf78": "0xd2c0f8",
+   "0x11fbf86": "0xd2c106",
+   "0x11fc2ae": "0xd2c42e",
+   "0x11fc2ce": "0xd2c44e",
+   "0x11fc72e": "0xd2c8ae",
+   "0x11fc7a5": "0xd2c925",
+   "0x11fc7e3": "0xd2c963",
+   "0x11fc807": "0xd2c987",
+   "0x11fc857": "0xd2c9d7",
+   "0x1216cbf": "0xd4360f",
+   "0x1216cc9": "0xd43619",
+   "0x1263342": "0xd879b2",
+   "0x1263364": "0xd879d4",
+   "0x126385f": "0xd87ecf",
+   "0x12b3ab6": "0xdc58e6",
+   "0x134b1c2": "0xe46fd2",
+   "0x13528c5": "0xe4c755",
+   "0x13528f5": "0xe4c785",
+   "0x13532a0": "0xe4d130",
+   "0x136f2c3": "0xe64123",
+   "0x136f467": "0xe64287",
+   "0x136f5a4": "0xe643c4",
+   "0x136f5b6": "0xe643d6",
+   "0x136f8f9": "0xe64719",
+   "0x1374bb2": "0xe691f2",
+   "0x1375578": "0xe69b58",
+   "0x1375871": "0xe69e51",
+   "0x138209e": "0xe7478e",
+   "0x13820c6": "0xe747b6",
+   "0x1382167": "0xe74857",
+   "0x138d493": "0xe7d753",
+   "0x138d4d8": "0xe7d798",
+   "0x13f8bff": "0xed2e9f",
+   "0x13f8c0d": "0xed2ead",
+   "0x13f8c6d": "0xed2f0d",
+   "0x1434bcf": "0xf070bf",
+   "0x1434cc7": "0xf071b7",
+   "0x1434cce": "0xf071be",
+   "0x1434d26": "0xf07216",
+   "0x1434d68": "0xf07258",
+   "0x14d4596": "0xf6fd96",
+   "0x6e2aa": "0x5b4da",
+   "0x6e2b2": "0x5b4e2",
+   "0x87750": "0x73530",
+   "0x89360": "0x74ca0",
+   "0x89410": "0x74d50",
+   "0x96c0b0": "0x68ff40",
+   "0x96c53b": "0x6903cb",
+   "0x96c60d": "0x69049d",
+   "0x96c933": "0x6907c3",
+   "0x96c996": "0x690826",
+   "0x96ca3b": "0x6908cb",
+   "0x96d146": "0x690fd6",
+   "0x96d1b7": "0x691047",
+   "0x96d21f": "0x6910af",
+   "0x96d39c": "0x69122c",
+   "0x96d469": "0x6912f9",
+   "0x9700ae": "0x693dbe",
+   "0x971ac1": "0x695781",
+   "0x971b34": "0x6957f4",
+   "0x971b8f": "0x69584f",
+   "0x9763b5": "0x6999a5",
+   "0x9764a5": "0x699a15",
+   "0x9dfc6f": "0x6feb7f",
+   "0xa053eb": "0x7224eb",
+   "0xa0543c": "0x72253c",
+   "0xa46117": "0x75ee67",
+   "0xb2200e": "0x80cc1e",
+   "0xb22042": "0x80cc52",
+   "0xb25504": "0x80f864",
+   "0xb25b26": "0x80fde6",
+   "0xb264f3": "0x810523",
+   "0xb29d9c": "0x81372c",
+   "0xb3554b": "0x81d17b",
+   "0xb355c0": "0x81d1f0",
+   "0xb3aa9f": "0x821a5f",
+   "0xb3ac14": "0x821bd4",
+   "0xb3ade5": "0x821da5",
+   "0xb46f20": "0x82cfa0",
+   "0xb4e48a": "0x83421a",
+   "0xb5fc0d": "0x84231d",
+   "0xb5fc33": "0x842343",
+   "0xb800cc": "0x0",
+   "0xb9c03": "0xa06b3",
+   "0xb9c0a": "0xa06ba",
+   "0xb9c12": "0xa06c2",
+   "0xb9c2c": "0xa06dc",
+   "0xc5223e": "0x8f1d6e",
+   "0xc523c3": "0x8f1ef3",
+   "0xf00f0d": "0xafa7cd",
+   "0xf08fc2": "0xb01ed2",
+   "0xf08ff0": "0xb01f00",
+   "0xf09038": "0xb01f48",
+   "0xfe7e21": "0xba5e31",
+   "0xfe7e2f": "0xba5e3f",
+   "0xfe7e9e": "0xba5eae",
+   "0xfe7eac": "0xba5ebc",
+   "0xfe7fb7": "0xba5fc7",
+   "0xfe7fc8": "0xba5fd8",
+   "0xfe805f": "0xba606f",
+   "0xfe8070": "0xba6080",
+   "0xfe80b4": "0xba60c4",
+   "0xfe80c2": "0xba60d2",
+   "0xfe8157": "0xba6167",
+   "0xfe816a": "0xba617a",
+   "0xfe823c": "0xba624c",
+   "0xfe824f": "0xba625f",
+   "0xfe835b": "0xba636b",
+   "0xfe836c": "0xba637c",
+   "0xfe8425": "0xba6435",
+   "0xfe8435": "0xba6445",
+   "0xfe84e0": "0xba64f0",
+   "0xfe84f1": "0xba6501",
+   "0xfe85bd": "0xba65cd",
+   "0xfe85cb": "0xba65db",
+   "0xfe8654": "0xba6664",
+   "0xfe8665": "0xba6675",
+   "0xfe87a7": "0xba67b7",
+   "0xfe87b8": "0xba67c8",
+   "0xfe8864": "0xba6874",
+   "0xfe8872": "0xba6882",
+   "0xfe88f3": "0xba6903",
+   "0xfe8901": "0xba6911",
+   "0xfe896a": "0xba697a",
+   "0xfe897b": "0xba698b",
+   "0xfe89fc": "0xba6a0c",
+   "0xfe8a0d": "0xba6a1d",
+   "0xfe8a96": "0xba6aa6",
+   "0xfe8aa7": "0xba6ab7",
+   "0xfe8b30": "0xba6b40",
+   "0xfe8b3e": "0xba6b4e",
+   "0xff938b": "0xbb31db"
+  },
+  "CONFIRMED_WEAPON_AMMO_RVAS": {
+   "0x1d81f28": "0x16d1628",
+   "0x1d81fa0": "0x16d16a0",
+   "0x1d82018": "0x16d1718",
+   "0x1d82030": "0x16d1730",
+   "0x1d82048": "0x16d1748",
+   "0x1d82060": "0x16d1760",
+   "0x1d82078": "0x16d1778",
+   "0x1d82090": "0x16d1790",
+   "0x1d820a8": "0x16d17a8",
+   "0x1d820c0": "0x16d17c0",
+   "0x1d820d8": "0x16d17d8",
+   "0x1d820f0": "0x16d17f0",
+   "0x1d82108": "0x16d1808",
+   "0x1d82120": "0x16d1820",
+   "0x1d82138": "0x16d1838",
+   "0x1d82150": "0x16d1850",
+   "0x1d82168": "0x16d1868",
+   "0x1d82180": "0x16d1880",
+   "0x1d82198": "0x16d1898",
+   "0x1d821b0": "0x16d18b0",
+   "0x1d821f8": "0x16d18f8",
+   "0x1d82210": "0x16d1910",
+   "0x1d82270": "0x16d1970",
+   "0x1d82288": "0x16d1988",
+   "0x1d822a0": "0x16d19a0",
+   "0x1d822b8": "0x16d19b8",
+   "0x1d822d0": "0x16d19d0",
+   "0x1d822e8": "0x16d19e8",
+   "0x1d82300": "0x16d1a00",
+   "0x1d82318": "0x16d1a18",
+   "0x1d82330": "0x16d1a30",
+   "0x1d82348": "0x16d1a48",
+   "0x1d82360": "0x16d1a60",
+   "0x1d82378": "0x16d1a78",
+   "0x1d82390": "0x16d1a90",
+   "0x1d823a8": "0x16d1aa8",
+   "0x1d823c0": "0x16d1ac0",
+   "0x1d823d8": "0x16d1ad8",
+   "0x1d82408": "0x16d1b08",
+   "0x1d82420": "0x16d1b20",
+   "0x1d82438": "0x16d1b38",
+   "0x1d82450": "0x16d1b50",
+   "0x1d82468": "0x16d1b68",
+   "0x1d82480": "0x16d1b80",
+   "0x1d82498": "0x16d1b98",
+   "0x1d824b0": "0x16d1bb0"
+  },
+  "CONFIRMED_WEAPON_RVAS": {
+   "0x1d825da": "0x16d1cda",
+   "0x1d8262a": "0x16d1d2a",
+   "0x1d8267a": "0x16d1d7a",
+   "0x1d8285a": "0x16d1f5a",
+   "0x1d828aa": "0x16d1faa",
+   "0x1d828fa": "0x16d1ffa",
+   "0x1d82a8a": "0x16d218a",
+   "0x1d82c6a": "0x16d236a",
+   "0x1d82d0a": "0x16d240a",
+   "0x1d82d5a": "0x16d245a",
+   "0x1d82e9a": "0x16d259a",
+   "0x1d82eea": "0x16d25ea",
+   "0x1d8366a": "0x16d2d6a",
+   "0x1d839da": "0x16d30da",
+   "0x1d83aca": "0x16d31ca",
+   "0x1d83b1a": "0x16d321a",
+   "0x1d83caa": "0x16d33aa",
+   "0x1d83cfa": "0x16d33fa",
+   "0x1d83d4a": "0x16d344a",
+   "0x1d83d9a": "0x16d349a",
+   "0x1d83dea": "0x16d34ea",
+   "0x1d83e3a": "0x16d353a",
+   "0x1d83e8a": "0x16d358a",
+   "0x1d83eda": "0x16d35da",
+   "0x1d83f2a": "0x16d362a",
+   "0x1d83f7a": "0x16d367a",
+   "0x1d83fca": "0x16d36ca",
+   "0x1d8401a": "0x16d371a",
+   "0x1d8406a": "0x16d376a",
+   "0x1d840ba": "0x16d37ba",
+   "0x1d8410a": "0x16d380a",
+   "0x1d841aa": "0x16d38aa",
+   "0x1d841fa": "0x16d38fa"
+  },
+  "CSM_CONFIRM": {
+   "0x4c0b80": "0x38b17f",
+   "0x4c0dc1": "0x37f6da"
+  },
+  "CSM_CONTINUE": {
+   "0x4c0dae": "0x37f85e",
+   "0x4c0dca": "0x37f87a"
+  },
+  "CSM_COUNT": {
+   "0x4c0b80": "0x38b17f",
+   "0x4c0dc1": "0x37f6da"
+  },
+  "CSM_DLG_FUNCS": {
+   "0x438c00": "0x30f140",
+   "0x4c0dfa": "0x37f8aa",
+   "0x4ee0c0": "0x3a8320",
+   "0x526980": "0x3debb0",
+   "0x740a90": "0x52c1f0",
+   "0x740d30": "0x52c490"
+  },
+  "CSM_ENTRY": {
+   "0x4c0b80": "0x38b17f",
+   "0x4c0dc1": "0x37f6da"
+  },
+  "CSM_HIGHLIGHTS": {
+   "0x4a2371": "0x0"
+  },
+  "CSM_LAYER_CALL": {
+   "0x4d5f7e": "0x0"
+  },
+  "CSM_LAYER_ORIGINAL": {
+   "0x4d5f7e": "0x0"
+  },
+  "CSM_LIST_MENU": {
+   "0x4d5f83": "0x0"
+  },
+  "CSM_LIST_ORIGINAL": {
+   "0x4d5f83": "0x0"
+  },
+  "CSM_LIST_PARAM": {
+   "0x4d5f83": "0x0"
+  },
+  "CSM_NOOP": {
+   "0x4c0dae": "0x37f85e",
+   "0x4c0dca": "0x37f87a"
+  },
+  "CSM_ORIGINAL": {
+   "0x4c0b80": "0x38b17f",
+   "0x4c0dc1": "0x37f6da"
+  },
+  "CSM_RESOURCE_ROOTS": {
+   "0x23d2f6d0": "0x2367b9d0"
+  },
+  "CSM_SKIP": {
+   "0x4c0dae": "0x37f85e",
+   "0x4c0dca": "0x37f87a"
+  },
+  "CSM_TABLE_LEA": {
+   "0x4c0b80": "0x38b17f",
+   "0x4c0dc1": "0x37f6da"
+  },
+  "CSM_TASK_UPDATE_RVA": {
+   "0x4c0b80": "0x38b17f"
+  },
+  "CSM_UI_FLAGS": {
+   "0x3b7c0e0": "0x34ca7e0"
+  },
+  "CSM_YES_ORIGINAL": {
+   "0x5268de": "0x3deb0e"
+  },
+  "CSM_YES_PATH": {
+   "0x5268de": "0x3deb0e"
+  },
+  "CSM_YES_SKIP": {
+   "0x5268de": "0x3deb0e"
+  },
+  "CUSTOM_MENU_FUNCS": {
+   "0x51e720": "0x3d6a00",
+   "0x51f7a0": "0x3d7a80",
+   "0x522f10": "0x3db170"
+  },
+  "CUSTOM_MENU_TASK_LIST_RVA": {
+   "0x23cf9ee0": "0x236461e0"
+  },
+  "CUTSCENE_TASK_LIST_RVA": {
+   "0x3b49340": "0x3497a40"
+  },
+  "EXIT_STAGE_RVA": {
+   "0x1b00df0": "0x1452c70"
+  },
+  "FMOD_FUNCS": {
+   "0x2b7050": "0x222150",
+   "0x2c0740": "0x226f40",
+   "0x2cad90": "0x228e40",
+   "0x2cefa0": "0x2299f0"
+  },
+  "FMOD_SYSTEM_PTR_RVA": {
+   "0x22a8f90": "0x1bf7e10"
+  },
+  "GRIP_COMPONENT_VTABLE_RVA": {
+   "0x18af720": "0x12e2760"
+  },
+  "HUD_FLAGS_RVA": {
+   "0x1d77aa8": "0x0"
+  },
+  "ITEM_STRUCT_BASE_RVA": {
+   "0x1d84310": "0x16d3a10"
+  },
+  "LINKVARBUF_POINTER_RVA": {
+   "0x1c28b28": "0x157a8e8"
+  },
+  "LIQUID_CLASS": {
+   "0x10fe110": "0xc6b8c0",
+   "0x18fa3d8": "0x131fc08",
+   "0x1d2c710": "0x167d730"
+  },
+  "LIQUID_END_MESSAGE": {
+   "0x3ed630": "0x2da1a0"
+  },
+  "LIQUID_FUNCS": {
+   "0x112f430": "0xc90490",
+   "0x1138210": "0xc97310",
+   "0x73ff90": "0x52b8f0",
+   "0xb0fa60": "0x7fcce0"
+  },
+  "LIQUID_REGISTRY": {
+   "0x1da3000": "0x16f2700"
+  },
+  "LIQUID_REGISTRY_SIZE": {
+   "0x1da3000": "0x16f2700"
+  },
+  "LIQUID_RUN_PROC": {
+   "0x3ed630": "0x2da1a0"
+  },
+  "LIQUID_STATES": {
+   "0x10fe110": "0xc6b8c0",
+   "0x18fa3d8": "0x131fc08",
+   "0x1d2c710": "0x167d730"
+  },
+  "LIQUID_TASK_UPDATE": {
+   "0x10fe110": "0xc6b8c0",
+   "0x18fa3d8": "0x131fc08",
+   "0x1d2c710": "0x167d730"
+  },
+  "LM_CONTINUE_COUNT": {
+   "0x5bd6a": "0x4e5aa"
+  },
+  "LM_COUNT_ORIGINAL": {
+   "0x5bd6a": "0x4e5aa"
+  },
+  "LM_DATA_TASK": {
+   "0x3b7c0e0": "0x34ca7e0",
+   "0x3b7c8b0": "0x34cafb0",
+   "0x4c2c80": "0x381560"
+  },
+  "LM_ENTRY": {
+   "0x4e3a2a": "0x0"
+  },
+  "LM_FLAGS": {
+   "0x3b7c0e0": "0x34ca7e0",
+   "0x3b7c8b0": "0x34cafb0",
+   "0x4c2c80": "0x381560"
+  },
+  "LM_FUNCS": {
+   "0x1c2cfe8": "0x0",
+   "0x432790": "0x309960",
+   "0x437580": "0x30db40",
+   "0x437b40": "0x30e100",
+   "0x438c00": "0x30f140",
+   "0x438dd0": "0x30f1e0",
+   "0x439e40": "0x30ff50",
+   "0x4d40a0": "0x391810",
+   "0x4d5c10": "0x392c90",
+   "0x5bcb0": "0x4e4f0"
+  },
+  "LM_PAUSE": {
+   "0x3b7c0e0": "0x34ca7e0",
+   "0x3b7c8b0": "0x34cafb0",
+   "0x4c2c80": "0x381560"
+  },
+  "LM_SITES": {
+   "0x4d7e74": "0x0",
+   "0x4d8039": "0x393d68",
+   "0x4e34fa": "0x39df2a",
+   "0x4e37b7": "0x39e1e7",
+   "0x4e3a2a": "0x0",
+   "0x4e3ab3": "0x0"
+  },
+  "LM_TABLE": {
+   "0x437580": "0x30db40",
+   "0x437b40": "0x30e100",
+   "0x438c00": "0x30f140",
+   "0x438dd0": "0x30f1e0",
+   "0x439e40": "0x30ff50",
+   "0x4d5c10": "0x392c90"
+  },
+  "MANTIS_DEFEAT": {
+   "0xb0f9b0": "0x7fcca0",
+   "0xf08cf0": "0xb01c00",
+   "0xf0903e": "0xb01f4e",
+   "0xf09241": "0xb02151"
+  },
+  "MANTIS_STRINGS_VTABLE_RVA": {
+   "0x1904da0": "0x13292a0"
+  },
+  "MODEL_LIVE_FUNCS": {
+   "0x73fdc0": "0x52b740",
+   "0x73fdd0": "0x52b750",
+   "0x73fe60": "0x52b7e0",
+   "0x8fcc70": "0x6317a0",
+   "0x8fcef0": "0x631a20"
+  },
+  "MODEL_MANAGER_PTR_RVA": {
+   "0x23eb5f58": "0x238020d8"
+  },
+  "OCTOCAMO_ACCOUNT_FLAG_RVAS": {
+   "0x1d7ab30": "0x16ca330",
+   "0x1d7ab31": "0x16ca331"
+  },
+  "OCTOCAMO_CONTROLLER_PTR_RVA": {
+   "0x23eb5f50": "0x238020d0"
+  },
+  "OCTOCAMO_LIVE_FUNCS": {
+   "0x7513c0": "0x4e5850",
+   "0x9fc10": "0x88500",
+   "0xa0240": "0x88b30",
+   "0xa0e70": "0x896c0",
+   "0xa0ed0": "0x89720",
+   "0xa1060": "0x898b0",
+   "0xa15f0": "0x89e40",
+   "0xd25800": "0x993ff0",
+   "0xe80960": "0xaaa0f0"
+  },
+  "OCTOPUS_PHASE_FLAGS": {
+   "0x267d0": "0x0"
+  },
+  "PHOTO_PAD_A_RVA": {
+   "0x23d2aea0": "0x236771a0"
+  },
+  "PHOTO_PAD_B_RVA": {
+   "0x23d2af50": "0x23677250"
+  },
+  "PHOTO_PAD_SITES": {
+   "0x235da529": "0x0",
+   "0x235da52a": "0x0",
+   "0x235da53a": "0x0",
+   "0x235da54f": "0x0",
+   "0x235da567": "0x0",
+   "0x235da57d": "0x0",
+   "0x235da58f": "0x0",
+   "0x235da5d0": "0x0",
+   "0x235da5d2": "0x0",
+   "0x235da5e0": "0x0",
+   "0x235da5f9": "0x0",
+   "0x235da60c": "0x0",
+   "0x235da611": "0x0",
+   "0x235da627": "0x0",
+   "0x235da639": "0x0",
+   "0x235da761": "0x0",
+   "0x235da807": "0x0",
+   "0x235da9eb": "0x0",
+   "0x235daa08": "0x0",
+   "0x235daa2f": "0x0",
+   "0x235daa4a": "0x0",
+   "0x235daa4c": "0x0",
+   "0x235daa4f": "0x0",
+   "0x235daa6c": "0x0",
+   "0x235daa84": "0x0",
+   "0x235daa9d": "0x0",
+   "0x235dab18": "0x0",
+   "0x235dab37": "0x0",
+   "0x235dab42": "0x0",
+   "0x235dab4d": "0x0",
+   "0x235dab8f": "0x0",
+   "0x235dab96": "0x0",
+   "0x235dab9d": "0x0",
+   "0x235daba4": "0x0",
+   "0x235dabab": "0x0",
+   "0x235dabb1": "0x0",
+   "0x235dabb7": "0x0",
+   "0x235dabbd": "0x0",
+   "0x235dabc4": "0x0",
+   "0x235dabcc": "0x0",
+   "0x235dabee": "0x0",
+   "0x235dabf8": "0x0",
+   "0x235dac58": "0x0",
+   "0x235dac9c": "0x0",
+   "0x235daca2": "0x0",
+   "0x235daca7": "0x0",
+   "0x235dacb6": "0x0",
+   "0x235dacd0": "0x0",
+   "0x235dad4c": "0x0",
+   "0x235dada7": "0x0",
+   "0x235dadb2": "0x0",
+   "0x235dadc0": "0x0",
+   "0x235dae4a": "0x0",
+   "0x235dae55": "0x0",
+   "0x235dae9d": "0x0",
+   "0x235daea0": "0x0",
+   "0x235daeb2": "0x0",
+   "0x235daf40": "0x0",
+   "0x235daf43": "0x0",
+   "0x235e4c06": "0x0",
+   "0x75002c": "0x0",
+   "0x750346": "0x0",
+   "0x750374": "0x0",
+   "0x7503a6": "0x0",
+   "0x75043c": "0x0",
+   "0x75093f": "0x0",
+   "0x750945": "0x0"
+  },
+  "PLAYER_INDEX_RVA": {
+   "0x23eb5150": "0x238012d0"
+  },
+  "PLAYER_TABLE_RVA": {
+   "0x23eb5160": "0x238012e0"
+  },
+  "RETURN_TO_TITLE": {
+   "0x5bcb0": "0x4e4f0"
+  },
+  "REX_UPDATE_RVA": {
+   "0x135ed40": "0xe56480"
+  },
+  "REX_VTABLE_RVA": {
+   "0x1908368": "0x132c658"
+  },
+  "SNAKE_ACTIVATE": {
+   "0x90a350": "0x63da00"
+  },
+  "SNAKE_ACTIVATE_RESUME": {
+   "0x90a380": "0x63da30"
+  },
+  "SNAKE_CROUCH_BACK_PAIN": {
+   "0x9dd440": "0x6fc350"
+  },
+  "SNAKE_CROUCH_STATE": {
+   "0x9df1e0": "0x6fe0f0"
+  },
+  "SNAKE_MACHINE_VTABLE_RVA": {
+   "0x18b1518": "0x12e4478"
+  },
+  "SNAKE_MOTION_SITE": {
+   "0xa05ddb": "0x722edb"
+  },
+  "SNAKE_RESUME_STATES": {
+   "0x9d4fe0": "0x6f4650",
+   "0x9d54d0": "0x6f4b40",
+   "0x9df1e0": "0x6fe0f0",
+   "0x9e9850": "0x7075b0",
+   "0x9e9d30": "0x707a90"
+  },
+  "SNAKE_SOUND_SITE": {
+   "0xa05c7e": "0x722d7e"
+  },
+  "SNAKE_SPECIAL_VTABLE_RVA": {
+   "0x18b1ec8": "0x12e4de8"
+  },
+  "SNAKE_STAND_BACK_PAIN": {
+   "0xa05b20": "0x722c20"
+  },
+  "SNAKE_STAND_STATE": {
+   "0x9e4fc0": "0x702d20"
+  },
+  "SOLDIER_REPORT_FUNC": {
+   "0xb43750": "0x829a80"
+  },
+  "SPAWN_ARGS_RVA": {
+   "0x23ffac20": "0x239322e0"
+  },
+  "SPAWN_CURRENT_UNIT_RVA": {
+   "0x23f0b5b8": "0x23857638"
+  },
+  "SPAWN_DEATH_CAMERA_SITES": {
+   "0xeb1421": "0xac5321",
+   "0xeb6486": "0x0"
+  },
+  "SPAWN_FUNCS": {
+   "0x3eef10": "0x2db840",
+   "0x3eef20": "0x2db850",
+   "0x3eefc0": "0x2db8b0",
+   "0x5c440": "0x4ec50",
+   "0x5c4d0": "0x4ece0",
+   "0x74c9b0": "0x534600",
+   "0xb39c90": "0x821170",
+   "0xb4bbc0": "0x8319f0",
+   "0xd20488": "0x98f318"
+  },
+  "SPAWN_LINKVARBUF_RVA": {
+   "0x1c28b28": "0x157a8e8"
+  },
+  "SPAWN_MANAGER_RVA": {
+   "0x23f0b5b0": "0x23857630"
+  },
+  "SPAWN_OFFSET_BASE_RVA": {
+   "0x22864b0": "0x1bd54b0"
+  },
+  "SPAWN_RESOURCES_RVA": {
+   "0x23d2f6d0": "0x2367b9d0"
+  },
+  "SPAWN_ROUTE_APPLY": {
+   "0xb83f50": "0x85e7b0"
+  },
+  "SPAWN_ROUTE_FIND": {
+   "0x40d420": "0x2f51b0"
+  },
+  "SPAWN_ROUTE_LOOKUP": {
+   "0xb680c0": "0x845fa0"
+  },
+  "SPAWN_ROUTE_PLAY": {
+   "0xb83ed0": "0x85e730"
+  },
+  "SPAWN_STEP_SET": {
+   "0x8a910": "0x75d90"
+  },
+  "SPAWN_STEP_SITE": {
+   "0x8a9d0": "0x75e50"
+  },
+  "SPAWN_TASK_LIST_RVA": {
+   "0x23d044d0": "0x236507d0"
+  },
+  "SPAWN_TYPES": {
+   "0x18be1c8": "0x12efa28",
+   "0x18c26a8": "0x12f3d28",
+   "0x18c31b8": "0x12f4838",
+   "0x18cad80": "0x12fba00",
+   "0x18e65c8": "0x130d4b8",
+   "0x18ec5b8": "0x1312ea8",
+   "0x18f8588": "0x131ddb0"
+  },
+  "SPAWN_UNIT_VTABLE_RVA": {
+   "0x18ba610": "0x12ec870"
+  },
+  "SPECIAL_ITEM_EQUIPPED_RVA": {
+   "0x23fed44a": "0x0"
+  },
+  "VAMP_FUNCS": {
+   "0xb0f9b0": "0x7fcca0"
+  },
+  "VARBUF_POINTER_RVA": {
+   "0x1c28b38": "0x157a8f8"
+  },
+  "VEHICLE_COMPONENT_VTABLE_RVAS": {
+   "0x18eb690": "0x1311fa0",
+   "0x18eb748": "0x1312058"
+  },
+  "VEHICLE_PTR_RVA": {
+   "0x23f81090": "0x238b8c90"
+  },
+  "WEAPON_ALLOWED_ACCESSORIES_RVA": {
+   "0x1b00f34": "0x1452db4"
+  },
+  "WEAPON_ETAT_BASE_RVA": {
+   "0x1d8258a": "0x16d1c8a"
+  },
+  "WEAPON_LIVE_FUNCS": {
+   "0x6d2d0": "0x5a760",
+   "0x6d490": "0x5a830"
+  },
+  "WEAPON_TABLE_RVA": {
+   "0x1d82580": "0x16d1c80"
+  },
+  "ZONE_BOSS_SLIDER_FUNCS": {
+   "0x13b4820": "0xe9c2c0",
+   "0x13cc8a0": "0xeb0300",
+   "0x13ec2f7": "0xec8377",
+   "0x13f4440": "0xecf290",
+   "0x40b110": "0x2f32c0",
+   "0x4cf5a0": "0x38da10",
+   "0x86f20": "0x72e00"
+  },
+  "ZONE_BOSS_SLIDER_UPDATE_RVA": {
+   "0x13cb420": "0x0"
+  },
+  "ZONE_EMOTIONS": {
+   "0xb64b80": "0x846120",
+   "0xb64ed0": "0x846470",
+   "0xb65180": "0x8466d0",
+   "0xb65260": "0x8467b0"
+  },
+  "ZONE_ESCAPE_GEKKO_VTABLE_RVA": {
+   "0x18ed768": "0x1314058"
+  },
+  "ZONE_FUNCS": {
+   "0xb21ff0": "0x80cc00",
+   "0xb2fb00": "0x818730",
+   "0xb65930": "0x846e80",
+   "0xb800b0": "0x85ac00",
+   "0xb80300": "0x85ae50",
+   "0xf61670": "0xb3fa60"
+  },
+  "ZONE_GEKKO_HIT_STATE_ENTER_RVA": {
+   "0x10637d0": "0xc07750"
+  },
+  "ZONE_GEKKO_VTABLES_RVA": {
+   "0x18ec5b8": "0x1312ea8",
+   "0x18ecbd8": "0x13134c8"
+  },
+  "ZONE_GEKKO_VTABLE_RVA": {
+   "0x18ec5b8": "0x1312ea8"
+  },
+  "ZONE_HELICOPTER_UPDATE_RVA": {
+   "0x133fd00": "0xe3e530"
+  },
+  "ZONE_HIT_STATE_ENTER_RVA": {
+   "0xc7ef70": "0x916af0"
+  },
+  "ZONE_LIFE_OBJECT_VTABLE_RVA": {
+   "0x18bc1b0": "0x12ee380"
+  },
+  "ZONE_MINI_GEKKO_FUNCS": {
+   "0x11ec150": "0xd1f0f0"
+  },
+  "ZONE_MINI_GEKKO_MANAGER_RVA": {
+   "0x23f82da0": "0x238ba9b0"
+  },
+  "ZONE_MINI_GEKKO_VTABLE_RVA": {
+   "0x1902c58": "0x1327518"
+  },
+  "ZONE_SLIDER_FUNCS": {
+   "0x8da180": "0x611e80",
+   "0xb88260": "0x862830",
+   "0xfdc180": "0xb9af40"
+  },
+  "ZONE_SLIDER_UPDATE_RVA": {
+   "0xf71f90": "0xb4c3a0"
+  },
+  "ZONE_TASK_LIST_RVA": {
+   "0x23d044d0": "0x236507d0"
+  },
+  "ZONE_UNIT_VTABLE_RVA": {
+   "0x18bb860": "0x12eda58"
+  },
+  "ZONE_VEHICLE_FUNCS": {
+   "0xff7ba0": "0xbb1c40"
+  },
+  "ZONE_VEHICLE_MANAGER_RVA": {
+   "0x23f810f0": "0x238b8cf0"
+  },
+  "_STEALTH_CHECK_CALLS": {
+   "0x1002017": "0xbba7b7",
+   "0x1012ac1": "0xbc8731",
+   "0x134b1c2": "0xe46fd2",
+   "0xb25504": "0x80f864",
+   "0xb25b26": "0x80fde6",
+   "0xb264f3": "0x810523",
+   "0xb29d9c": "0x81372c",
+   "0xb3554b": "0x81d17b",
+   "0xb355c0": "0x81d1f0",
+   "0xb3aa9f": "0x821a5f",
+   "0xb3ac14": "0x821bd4",
+   "0xb3ade5": "0x821da5",
+   "0xb46f20": "0x82cfa0",
+   "0xb4e48a": "0x83421a"
+  },
+  "address": {
+   "0x432790": "0x309960"
+  }
+ },
+ "version": "1.4.2"
+}

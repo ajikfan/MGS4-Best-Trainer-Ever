@@ -2,6 +2,8 @@
 import math
 import struct
 
+from mgs4trainer.core import versions
+
 
 class CameraMixin:
     """Camera libre du mode photo."""
@@ -83,6 +85,8 @@ class CameraMixin:
     def photo_mode_available(self) -> bool:
         """La DLL injectee sait piloter la camera (sinon : relancer le jeu
         pour charger la nouvelle DLL)."""
+        if versions.disabled("photo"):
+            return False  # sites de la manette pas encore portes sur cette version
         return bool(self.pid and self.speed.ensure_injected(self.pid) and self.speed.photo_supported())
 
     def set_photo_mode(self, enabled: bool) -> bool:
