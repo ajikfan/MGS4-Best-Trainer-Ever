@@ -225,9 +225,12 @@ class SpawnMixin:
     # Suivi de route : une quinzaine de sites appellent B680C0 (animation du
     # point de route) puis B83F50 sans tenir compte de l'echec, et appliquent
     # une structure locale non remplie : sans route, valeurs de la pile et
-    # plantage dans 8AA00. B680C0 vide donc l'id en +0x44 en entrant (le
-    # succes l'ecrase) ; B83F50 garde alors l'animation en cours, et sans
-    # aucune animation en pose une (8A9D0 planterait sur +0x80 nul).
+    # plantage dans 8AA00. B680C0 note en entrant la structure et son id
+    # (+0x44), sans rien y ecrire : un appelant passe un tampon plus petit,
+    # et y ecrire mettait a 0 la moitie haute d'un rbp sauve (plantage au
+    # rechargement apres Continuer, 2026-11-06). B83F50 : meme structure et
+    # meme id = rien n'a ete ecrit = echec ; il garde alors l'animation en
+    # cours, et sans aucune animation en pose une (8A9D0 planterait sur +0x80 nul).
     SPAWN_ROUTE_LOOKUP = 0xB680C0
     SPAWN_ROUTE_LOOKUP_ORIG = bytes.fromhex("48895c2408")
     SPAWN_ROUTE_APPLY = 0xB83F50
@@ -436,12 +439,18 @@ class SpawnMixin:
         cave = self.proc.alloc_near(lookup)
         if not cave:
             return False
-        lookup_code = (
-            b"\x48\x85\xD2\x74\x07"                    # test rdx, rdx ; jz suite
-            + b"\xC7\x42\x44\x00\x00\x00\x00"          # mov dword ptr [rdx + 0x44], 0
-            + self.SPAWN_ROUTE_LOOKUP_ORIG
-            + b"\xFF\x25\x00\x00\x00\x00" + struct.pack("<Q", lookup + len(self.SPAWN_ROUTE_LOOKUP_ORIG))
-        )
+        noted = cave + 0x1F0  # structure (+0), son id a l'entree (+8)
+
+        def rip(end: int, target: int) -> bytes:
+            return struct.pack("<i", target - end)
+        lookup_code = bytearray()
+        lookup_code += bytes.fromhex("488915") + rip(cave + len(lookup_code) + 7, noted)       # mov [note], rdx
+        lookup_code += bytes.fromhex("4885d27409")                                              # test rdx, rdx ; jz suite
+        lookup_code += bytes.fromhex("8b4244")                                                  # mov eax, [rdx + 0x44] (lecture seule)
+        lookup_code += bytes.fromhex("8905") + rip(cave + len(lookup_code) + 6, noted + 8)      # mov [note + 8], eax
+        lookup_code += self.SPAWN_ROUTE_LOOKUP_ORIG                                             # suite :
+        lookup_code += b"\xFF\x25\x00\x00\x00\x00" + struct.pack("<Q", lookup + len(self.SPAWN_ROUTE_LOOKUP_ORIG))
+        lookup_code = bytes(lookup_code)
         motion = struct.pack("<I", self.SPAWN_ROUTE_MOTION)
         fallback = (
             b"\x51\x48\x83\xEC\x20"                    # push rcx ; sub rsp, 0x20
@@ -456,13 +465,23 @@ class SpawnMixin:
             + b"\x83\xB9\x90\x00\x00\x00\x00"          # cmp dword ptr [rcx + 0x90], 0
             + b"\x75" + bytes((len(fallback),))           # jne jeu
         )
+        apply_cave = cave + 0x40
+        # Structure notee par B680C0 et id inchange : la recherche a echoue.
+        check = bytearray(self.SPAWN_ROUTE_APPLY_ORIG[:5])                                      # movsx r8d, word [rdx + 0x30]
+        check += bytes.fromhex("483b15") + rip(apply_cave + len(check) + 7, noted)              # cmp rdx, [note]
+        check += bytes.fromhex("750f")                                                          # jne lire
+        check += bytes.fromhex("8b4244")                                                        # mov eax, [rdx + 0x44]
+        check += bytes.fromhex("3b05") + rip(apply_cave + len(check) + 6, noted + 8)            # cmp eax, [note + 8]
+        check += bytes.fromhex("7504")                                                          # jne lire
+        check += bytes.fromhex("31d2")                                                          # xor edx, edx (echec)
+        check += bytes.fromhex("eb03")                                                          # jmp tester
+        check += self.SPAWN_ROUTE_APPLY_ORIG[5:]                                                # lire : mov edx, [rdx + 0x44]
         apply_code = (
-            self.SPAWN_ROUTE_APPLY_ORIG
-            + b"\x85\xD2\x75" + bytes((len(keep) + len(fallback),))  # test edx, edx ; jnz jeu
+            bytes(check)
+            + b"\x85\xD2\x75" + bytes((len(keep) + len(fallback),))  # tester : test edx, edx ; jnz jeu
             + keep + fallback
             + b"\xFF\x25\x00\x00\x00\x00" + struct.pack("<Q", self.base + self.SPAWN_ROUTE_PLAY)  # jeu: jmp [rip]
         )
-        apply_cave = cave + 0x40
         step_cave = cave + 0x100
         step = self.base + self.SPAWN_STEP_SITE
         if self.proc.read_bytes(step, len(self.SPAWN_STEP_ORIG)) != self.SPAWN_STEP_ORIG:
