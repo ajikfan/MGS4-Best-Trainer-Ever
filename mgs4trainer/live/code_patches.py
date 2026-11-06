@@ -267,6 +267,12 @@ class CodePatchesMixin:
             (0xFE87B8, bytes.fromhex("898314030000e84d"), bytes.fromhex("89831c030000")),
             (0xFE8901, bytes.fromhex("898314030000e945"), bytes.fromhex("89831c030000")),
             (0xFE897B, bytes.fromhex("898314030000e88a"), bytes.fromhex("89831c030000")),
+            # Tir sur l'armure (forme bete) : traite par l'aiguilleur FE7B..
+            # (bit 7 de [vie+0x3E0]), vie - degat reduit (min 1) ; meme
+            # traitement, l'endurance tombe a 0 et la fin de combat (B87420
+            # -> B8CA90, la meme que l'endurance videe) suit.
+            (0xFE7C4D, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
+            (0xFE7C5E, bytes.fromhex("8983140300007e07"), bytes.fromhex("89831c030000")),
         ],
         "health_freeze": [
             (0x96C53B, bytes.fromhex("66418989480b00004489a7"), bytes.fromhex("9090909090909090")),
@@ -399,6 +405,10 @@ class CodePatchesMixin:
             (0xFE8A0D, bytes.fromhex("89831c030000e8d8"), bytes.fromhex("898314030000")),
             (0xFE8AA7, bytes.fromhex("89831c0300008d42"), bytes.fromhex("898314030000")),
             (0xFE8B3E, bytes.fromhex("89831c030000488b"), bytes.fromhex("898314030000")),
+            # Crying Wolf, tir sur l'armure en forme bete (2026-11-06) : pas
+            # par FE7D80 mais par l'aiguilleur qui l'appelle, "vie - degat
+            # reduit" (min 1, ~11 au M4) en FE7C4D -> vie a 0.
+            (0xFE7C4D, bytes.fromhex("2bc84863c148f7d8"), bytes.fromhex("31c9")),
             (0x1434CCE, bytes.fromhex("0f8e67010000496386"), bytes.fromhex("909090909090")),
             (0x1434CC7, bytes.fromhex("448b456f4585c0"), bytes.fromhex("41b8ffffff7f90")),
             (0x1173BC7, bytes.fromhex("0f845d010000448b8d"), bytes.fromhex("e95e01000090")),

@@ -150,5 +150,13 @@
  "0x3b845f0": [
   55389424,
   "manuel : fin de la table des paquets, meme fonction"
+ ],
+ "0xfe7c4d": [
+  12213341,
+  "manuel : Crying Wolf, aiguilleur des tirs sur l'armure, sub vie (octets identiques verifies)"
+ ],
+ "0xfe7c5e": [
+  12213358,
+  "manuel : meme aiguilleur, ecriture de la vie"
  ]
 }
