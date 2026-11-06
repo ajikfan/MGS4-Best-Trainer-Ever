@@ -595,8 +595,12 @@ class TrainerWindow(QMainWindow):
 
     def _curtain_to_title(self):
         """Rideau opaque : retour au menu principal, puis rideau retire une
-        fois l'ecran titre en place."""
+        fois l'ecran titre en place. Apres QUITTER en cinematique, attend
+        d'abord que la tache de chargement du menu soit terminee."""
         try:
+            if not self.live.cutscene_title_ready():
+                QTimer.singleShot(50, self._curtain_to_title)
+                return
             self.live.return_to_title()
         except OSError:
             pass

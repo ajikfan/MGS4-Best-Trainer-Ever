@@ -100,10 +100,21 @@ class CutsceneMenuMixin:
     CSM_YES_PATH, CSM_YES_ORIGINAL, CSM_YES_SKIP = 0x5268DE, bytes.fromhex("4881"), bytes.fromhex("ebca")
     CSM_DLG_LAYER = 1
     CSM_PACKAGE, CSM_DLG_RESOURCE = 0x38118E, 0x5F15E2AE
+    # Table globale des paquets chargeables (4EDEE0 la parcourt) : entrees de
+    # 0x18 octets (id, pointeur vers le nom du fichier slot, position et
+    # taille en secteurs), remplie par la commande de script 0x3A89B3 de la
+    # zone. Le nom pointe dans la memoire du script : une cinematique qui
+    # charge son script sans refaire la table (acte 4, s04a75l) laisse un
+    # pointeur perime, la lecture echoue et rien n'est installe (pas de
+    # confirmation, 2026-11-06). Le trainer repose alors le bon nom.
+    CSM_PACKAGE_TABLE, CSM_PACKAGE_TABLE_END = 0x3B829D0, 0x3B845F0
+    CSM_PACKAGE_SLOT = b"slot_chibrowser"
     CSM_RESOURCE_ROOTS = 0x23D2F6D0   # arbres des ressources chargees (74C0B0)
     CSM_UI_FLAGS = 0x3B7C0E0          # bit 0x2000 = fenetre de confirmation ouverte
     CSM_MENU_ROOT = 0x2A4634          # noeud racine de la scene du menu
-    CSM_HIDE_DELAY, CSM_NO_DELAY, CSM_LOAD_TIMEOUT = 0.12, 0.6, 5.0
+    # Chargement du paquet de la confirmation : quelques images d'habitude, bien
+    # plus long dans certaines cinematiques (acte 4) ; 5 s ne suffisaient pas.
+    CSM_HIDE_DELAY, CSM_NO_DELAY, CSM_LOAD_TIMEOUT = 0.12, 0.6, 60.0
     HANDLE_MASK = 0xFFFFFFFFFFFFF
 
     def cutscene_quit_install(self) -> bool:
@@ -156,7 +167,7 @@ class CutsceneMenuMixin:
                      "quit": struct.unpack("<I", self.proc.read_bytes(quit_count, 4))[0],
                      "task": None, "key": None, "anchor": None, "anchor_try": 0.0,
                      "confirm_ok": confirm_ok, "confirm": None,
-                     "title": False, "label": None}
+                     "title": False, "title_wait": None, "label": None}
         return True
 
     def cutscene_title_request(self) -> bool:
@@ -234,6 +245,7 @@ class CutsceneMenuMixin:
         task, tick, quit_count = struct.unpack("<QII", self.proc.read_bytes(page + 0x10, 16))
         now = time.monotonic()
         self._csm_late_loader(state, now)
+        self._csm_title_wait(state, now)
         confirm = state["confirm"]
         if tick != state["tick"]:
             state["tick"], state["seen"] = tick, now
@@ -322,7 +334,16 @@ class CutsceneMenuMixin:
         stage = c["stage"]
         if stage == "hide" and now - c["since"] >= self.CSM_HIDE_DELAY:
             if not self._csm_resource_loaded(self.CSM_DLG_RESOURCE):
-                c["loader"] = call(b + self.CSM_DLG_FUNCS["load"][0], self.CSM_PACKAGE)
+                # Un seul chargement a la fois : une tache laissee en cours est
+                # reprise. En relancer une par clic (lecture lente, acte 4)
+                # finissait par enregistrer le paquet en double (plantage
+                # 538F8F en 1.4.2, 2026-11-06).
+                late = state.get("late_loader")
+                if late and self._csm_alive(late[0]):
+                    c["loader"], state["late_loader"] = late[0], None
+                else:
+                    self._csm_fix_package_slot(state)
+                    c["loader"] = call(b + self.CSM_DLG_FUNCS["load"][0], self.CSM_PACKAGE)
             c["stage"], c["since"] = "load", now
         elif stage == "load":
             if self._csm_resource_loaded(self.CSM_DLG_RESOURCE):
@@ -374,12 +395,10 @@ class CutsceneMenuMixin:
         # la couper en pleine lecture peut corrompre la memoire (plantage
         # du 2026-10-25 dans la lecture 128DD0, apres le mode photo) ; sinon
         # elle est terminee plus tard (_csm_late_loader).
-        # Retour au titre (OUI) : la tache n'est pas terminee par le trainer.
-        # Liberer le paquet juste avant le chargement des paquets du titre
-        # plantait dans la meme lecture 128DD0 (2026-10-25, deux fois, apres
-        # Liquid vaincu puis retour au titre) ; le retour au titre detruit de
-        # toute facon les taches de la partie. Hypothese, a confirmer.
-        if self._csm_alive(c["loader"]) and not to_title:
+        # Retour au titre (OUI) : voir _csm_title_wait.
+        if to_title:
+            state["title_wait"] = [c["loader"], time.monotonic(), False] if self._csm_alive(c["loader"]) else None
+        elif self._csm_alive(c["loader"]):
             if self._csm_resource_loaded(self.CSM_DLG_RESOURCE):
                 call(b + self.CSM_DLG_FUNCS["end"][0], c["loader"] & self.HANDLE_MASK)
             else:
@@ -387,7 +406,71 @@ class CutsceneMenuMixin:
         if show_menu:
             self._csm_menu_root(True, c["root"])
 
-    CSM_LATE_LOADER_TIMEOUT = 20.0  # s ; au-dela, la tache se termine seule (delai du jeu)
+    # Une tache laissee en cours au nettoyage reste suivie tant qu'elle vit :
+    # l'abandonner (ancien delai de 20 s) laissait le clic suivant en lancer
+    # une seconde, et le paquet finissait enregistre en double.
+
+    # Retour au titre apres OUI (2026-11-06) : la tache de chargement du paquet
+    # (4ED9A0, 3A7D00 en 1.4.2) lit en asynchrone dans son tampon +0xB0 ;
+    # tant que +0xA8 vaut 0, elle interroge la lecture a chaque image (129090).
+    # La terminer, ou lancer le retour au titre (qui libere ce tampon) pendant
+    # ce temps, plantait dans cette lecture (128DD0 en 1.4.1, ED070 en 1.4.2).
+    # On attend donc +0xA8 = 1 (lecture finie, fichier ferme), on la termine,
+    # puis le retour au titre part un peu apres, derriere le rideau.
+    CSM_LOADER_READ_DONE = 0xA8
+    CSM_TITLE_READ_TIMEOUT = 10.0  # s ; au-dela, retour au titre quand meme
+    CSM_TITLE_SETTLE = 0.2         # s entre la fin de la tache et le retour au titre
+
+    def _csm_title_wait(self, state: dict, now: float) -> None:
+        wait = state.get("title_wait")
+        if not wait:
+            return
+        loader, since, ended = wait
+        if not ended:
+            if self._csm_alive(loader):
+                done = struct.unpack("<i", self.proc.read_bytes(
+                    (loader & self.HANDLE_MASK) + self.CSM_LOADER_READ_DONE, 4))[0]
+                if not done and now - since < self.CSM_TITLE_READ_TIMEOUT:
+                    return
+                if done:
+                    self.speed.game_call(self.base + self.CSM_DLG_FUNCS["end"][0], loader & self.HANDLE_MASK)
+            wait[1], wait[2] = now, True
+            return
+        if now - since >= self.CSM_TITLE_SETTLE:
+            state["title_wait"] = None
+
+    def cutscene_title_ready(self) -> bool:
+        """Faux tant que la tache de chargement du menu n'est pas terminee
+        proprement apres OUI (voir _csm_title_wait)."""
+        state = getattr(self, "_csm", None)
+        return not (state and state["pid"] == self.pid and state.get("title_wait"))
+
+    def _csm_fix_package_slot(self, state: dict) -> None:
+        """Repose le nom du fichier slot du paquet de la confirmation s'il
+        pointe ailleurs (voir CSM_PACKAGE_TABLE)."""
+        b, proc = self.base, self.proc
+        size = self.CSM_PACKAGE_TABLE_END - self.CSM_PACKAGE_TABLE
+        table = proc.read_bytes(b + self.CSM_PACKAGE_TABLE, size)
+        for offset in range(0, size, 0x18):
+            if struct.unpack_from("<I", table, offset)[0] != self.CSM_PACKAGE:
+                continue
+            entry = b + self.CSM_PACKAGE_TABLE + offset
+            name = struct.unpack_from("<Q", table, offset + 8)[0]
+            wanted = self.CSM_PACKAGE_SLOT + b"\0"
+            try:
+                if proc.read_bytes(name, len(wanted)) == wanted:
+                    return
+            except OSError:
+                pass
+            if state.get("slot_name_pid") != self.pid:
+                page = proc.alloc_near(b + self.CSM_PACKAGE_TABLE, 0x1000)
+                if not page:
+                    return
+                # meme forme que dans le script : type 07, longueur, texte
+                proc.write_bytes(page, bytes((0x07, len(wanted))) + wanted)
+                state["slot_name"], state["slot_name_pid"] = page + 2, self.pid
+            proc.write_bytes(entry + 8, struct.pack("<Q", state["slot_name"]))
+            return
 
     def _csm_late_loader(self, state: dict, now: float) -> None:
         """Termine une tache de chargement laissee en cours au nettoyage, une
@@ -396,8 +479,8 @@ class CutsceneMenuMixin:
         if not late:
             return
         loader, since = late
-        if not self._csm_alive(loader) or now - since > self.CSM_LATE_LOADER_TIMEOUT:
-            state["late_loader"] = None
+        if not self._csm_alive(loader):
+            state["late_loader"] = None  # terminee par le jeu
         elif self._csm_resource_loaded(self.CSM_DLG_RESOURCE):
             state["late_loader"] = None
             self.speed.game_call(self.base + self.CSM_DLG_FUNCS["end"][0], loader & self.HANDLE_MASK)

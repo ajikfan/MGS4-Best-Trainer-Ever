@@ -718,6 +718,14 @@
    "0x4c0dc1": "0x37f871",
    "0x4c0de4": "0x37f894"
   },
+  "CSM_PACKAGE_TABLE": {
+   "0x3b829d0": "0x34d10d0",
+   "0x3b845f0": "0x34d2cf0"
+  },
+  "CSM_PACKAGE_TABLE_END": {
+   "0x3b829d0": "0x34d10d0",
+   "0x3b845f0": "0x34d2cf0"
+  },
   "CSM_RESOURCE_ROOTS": {
    "0x23d2f6d0": "0x2367b9d0"
   },

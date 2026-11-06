@@ -18,7 +18,8 @@ NOT_ADDRESS_VALUES = {("ALLIES", 0x86A795), ("ALLIES", 0xC13869), ("ALLIES", 0xF
 # adresses que les indices ne reconnaissent pas
 FORCE_ADDRESSES = {"ZONE_SLIDER_HOOK_RVA", "ZOOM_HOOK_RVA", "(CSM_CONTINUE, CSM_SKIP, CSM_NOOP)",
                    "(CSM_ENTRY, CSM_CONFIRM, CSM_COUNT, CSM_TABLE_LEA)",
-                   "(LM_ACTION_SITE, LM_DESC_SITE, LM_COMPACT_SITE)", "LM_ENTRY", "LM_SITES"}  # identifiants d'animation, duree
+                   "(LM_ACTION_SITE, LM_DESC_SITE, LM_COMPACT_SITE)", "LM_ENTRY", "LM_SITES",
+                   "(CSM_PACKAGE_TABLE, CSM_PACKAGE_TABLE_END)"}  # identifiants d'animation, duree
 NAME_HINT = re.compile(r"RVA|SITE|FUNC|ADDR|ENTRY|CALL|VTABLE|TABLE|HOOK|PATCH|ROOT|LOOKUP|APPLY|PLAY|FIND|_SET\b|STATE|GLOBAL|LIST|PTR|MANAGER|CTOR|UPDATE|PROC", re.I)
 
 

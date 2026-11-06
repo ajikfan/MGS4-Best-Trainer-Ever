@@ -142,5 +142,13 @@
  "0x1c2cfe8": [
   22539688,
   "manuel : table de cles du menu, lue dans 4D7E60 (identique)"
+ ],
+ "0x3b829d0": [
+  55382224,
+  "manuel : table des paquets, lue dans 4EDEE0 (3A8140 en 1.4.2), ecart 0x6B1900 aux deux bouts"
+ ],
+ "0x3b845f0": [
+  55389424,
+  "manuel : fin de la table des paquets, meme fonction"
  ]
 }
