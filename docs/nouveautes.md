@@ -4,6 +4,32 @@
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
+## Nouveautés de la V2.8.1
+
+### Crying Wolf
+
+Avec **Un coup, un mort**, un tir sur son armure en forme Bête l'achève
+aussi (Létal) ou la met K.O. (Non létal). Avant, seuls les tirs sur le
+corps comptaient.
+
+### Menu pause des cinématiques
+
+- La confirmation de **Retourner à l'écran titre** s'ouvre dans toutes
+  les cinématiques : dans certaines (acte 4), rien ne se passait.
+- Le retour à l'écran titre ne fait plus planter le jeu.
+- En 1.4.2, la barre de sélection passe de nouveau sous la ligne.
+
+### Faire apparaître (expérimental)
+
+- Plus de plantage en rechargeant une partie (**Continuer**) après une
+  apparition.
+- Nouveau : **rebelle d'Amérique du Sud**.
+- Meryl et les rebelles ne courent plus contre un mur quand aucun
+  personnage du même type n'est dans la zone : ils prennent la route
+  d'un autre.
+- Meryl apparaît mais reste en garde sur place : un allié n'agit que sur
+  ordre du scénario. Évite de lui tirer dessus (plantage constaté).
+
 ## Nouveautés de la V2.8.0
 
 ### Compatible avec MGS4 1.4.2

@@ -126,10 +126,12 @@ The live settings tab, in several groups:
     attitude towards Snake (an alert already under way runs its course);
   - **Spawn (experimental)**: makes the character picked in the list
     appear next to Snake, even in an area with no soldiers (PMC soldier
-    from the three regions, Middle East rebel, Gekko, Meryl; greyed-out
-    characters are not available yet). Patrol not always followed, a
-    rebel that does not fight the PMCs, a Gekko that falls through the
-    floor of the Beauties' white room: save before trying.
+    from the three regions, Middle East or South American rebel, Gekko,
+    Meryl; greyed-out characters are not available yet). Patrol not
+    always followed, a rebel that does not fight the PMCs, a Gekko that
+    falls through the floor of the Beauties' white room, Meryl staying on
+    guard where she is (do not shoot her, a crash was seen): save before
+    trying.
 
 ### Gauges
 

@@ -4,6 +4,30 @@
 
 Details of the latest versions. The full history is also in the trainer's **Help** button and on the [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases) page.
 
+## What's new in V2.8.1
+
+### Crying Wolf
+
+With **One Shot One Kill**, a shot on her armor in Beast form now
+finishes her too (Lethal) or knocks her out (Non-lethal). Before, only
+shots on her body counted.
+
+### Cutscene pause menu
+
+- The **Return to title screen** confirmation opens in every cutscene:
+  in some of them (Act 4), nothing happened.
+- Returning to the title screen no longer crashes the game.
+- On 1.4.2, the selection bar moves under the line again.
+
+### Spawn (experimental)
+
+- No more crash when reloading a game (**Continue**) after a spawn.
+- New: **South American rebel**.
+- Meryl and the rebels no longer run into a wall when no character of
+  the same type is in the area: they take another one's route.
+- Meryl appears but stays on guard where she is: an ally only acts on
+  the story's orders. Avoid shooting her (a crash was seen).
+
 ## What's new in V2.8.0
 
 ### Compatible with MGS4 1.4.2

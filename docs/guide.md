@@ -130,11 +130,12 @@ L'onglet des réglages en direct, en plusieurs groupes :
     rebelles envers Snake (une alerte déjà en cours suit son cours) ;
   - **Faire apparaître (expérimental)** : fait apparaître le personnage
     choisi dans la liste à côté de Snake, même dans une zone sans soldats
-    (soldat PMC des trois régions, rebelle du Moyen-Orient, Gekko,
-    Meryl ; les personnages grisés ne sont pas encore disponibles).
-    Patrouille pas toujours suivie, rebelle qui ne combat pas les PMC,
-    Gekko qui traverse le sol de la salle blanche des Beauty : sauvegarde
-    avant d'essayer.
+    (soldat PMC des trois régions, rebelle du Moyen-Orient ou d'Amérique
+    du Sud, Gekko, Meryl ; les personnages grisés ne sont pas encore
+    disponibles). Patrouille pas toujours suivie, rebelle qui ne combat
+    pas les PMC, Gekko qui traverse le sol de la salle blanche des
+    Beauty, Meryl qui reste en garde sur place (ne lui tire pas dessus,
+    plantage constaté) : sauvegarde avant d'essayer.
 
 ### Jauges
 
