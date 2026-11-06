@@ -172,7 +172,10 @@ included. Confirmed in game (2026-10-10):
   Beast and Beauty forms), **Laughing Octopus** and the Beauties: stamina
   drained in Non-lethal; in Lethal, Crying Wolf and Screaming Mantis
   confirmed with any weapon, Octopus, Beauty and Raven prepared for
-  stamina weapons but not checked again in game yet;
+  stamina weapons but not checked again in game yet. Crying Wolf: shots
+  on the Beast form's armor don't go through her damage function, but
+  through the one that calls it, which takes a small reduced damage off
+  her health; that path is patched too (V2.8.1);
 - **Liquid Ocelot** (final fight, with fists): in both modes, health
   **and** stamina at the phase floor at the first hit, the next one starts
   the next phase. The last 7 scripted hits are not covered.
@@ -376,6 +379,18 @@ on it, the trainer moves the game's selection bar down one line and greys
 out the two other texts, directly in the interface scene in memory. The
 patches are removed when the trainer closes.
 
+**Reliability (V2.8.1).** The game's confirmation comes from a package
+the trainer has loaded on demand. The game reads that package over
+several frames: the trainer waits for the read to finish before going
+back to the title (going back during the read crashed the game). The
+package is found through a global game table, filled by the area's
+script, whose entries each point to the name of their file. Some
+cutscenes (Act 4) reload their script without rebuilding that table: the
+name then points to reused memory, the read fails and the confirmation
+doesn't open. The trainer checks that name and puts it back if needed.
+On 1.4.2, the text the selection bar must follow is found through the
+scene's node table rather than by a search around the scene.
+
 ### Bosses tab (V2.7.0)
 
 The executable keeps the game's class names (C++ type information): the
@@ -399,6 +414,36 @@ the game's language), which opens the game's load screen. After loading,
 the trainer puts up a black curtain, closes the menu like the game does,
 then starts "Continue" once the menu is closed, without counting a
 continue. Nothing is written to the game files.
+
+### Spawn (V2.8.0, experimental)
+
+The game creates its characters through script commands (each area's
+`.gcx` files). The trainer replays those commands with its own
+arguments, taken from the script of the character's home area: a unit,
+then the actor, named by the trainer. Options that start a procedure of
+the original script are removed, and those that refer to variables of
+that script are replaced by their value.
+
+Before creation, the character's resources (models, animations…) are
+read from the installed game's archives, following the `data.cnf` of its
+home area, then registered in the game's resource dictionary. The area
+name is swapped for the time of that registration: the game works out
+the HD texture folder by itself. Nothing is written to the game files.
+
+The character is then placed in front of Snake and its AI started. It
+takes the patrol route of an actor of the area: one of the same type for
+Meryl and the rebels when there is one, otherwise another one's (V2.8.1;
+without a route, the AI aimed at a default point and ran into a wall).
+When the area lacks the required managers (the Beauties' white room),
+the trainer creates them with the same commands. The game's route
+following sometimes ignores a failed lookup and applied an unfilled
+structure: two detours catch that failure, without writing anything in
+the caller's structures (V2.8.1: writing in one crashed the game when
+reloading after Continue).
+
+Meryl is an ally: her AI only acts on the story's orders, so she stays
+on guard where she is. The Eastern European rebel crashes when created:
+it is greyed out in the list.
 
 ### Teleportation
 

@@ -174,7 +174,10 @@ armes létales. Confirmé en jeu (2026-10-10) :
   poupée, formes bête et Beauty), **Laughing Octopus** et les Beauty :
   endurance vidée en Non létal ; en Létal, Crying Wolf et Screaming
   Mantis confirmés avec toute arme, Octopus, Beauty et Raven préparés
-  pour les armes d'endurance mais pas encore revus en jeu ;
+  pour les armes d'endurance mais pas encore revus en jeu. Crying Wolf :
+  les tirs sur l'armure de la forme bête ne passent pas par sa fonction
+  de dégâts, mais par celle qui l'appelle, qui retire un petit dégât
+  réduit à la vie ; ce chemin est patché aussi (V2.8.1) ;
 - **Liquid Ocelot** (combat final, aux poings) : dans les deux modes,
   vie **et** endurance au plancher de la phase au premier coup, le
   suivant lance la phase suivante. Les 7 derniers coups scénarisés ne
@@ -387,6 +390,19 @@ descend la barre de sélection du jeu d'une ligne et grise les deux autres
 textes, directement dans la scène d'interface en mémoire. Les patchs sont
 retirés à la fermeture du trainer.
 
+**Fiabilité (V2.8.1).** La confirmation du jeu vient d'un paquet que le
+trainer fait charger à la demande. Le jeu lit ce paquet en plusieurs
+images : le trainer attend la fin de la lecture avant de revenir au
+titre (revenir pendant la lecture faisait planter le jeu). Le paquet est
+retrouvé par une table globale du jeu, remplie par le script de la zone,
+dont chaque entrée pointe vers le nom de son fichier. Certaines
+cinématiques (acte 4) rechargent leur script sans refaire cette table :
+le nom pointe alors vers une mémoire réutilisée, la lecture échoue et la
+confirmation ne s'ouvre pas. Le trainer vérifie ce nom et le repose au
+besoin. En 1.4.2, le texte que la barre de sélection doit suivre est
+retrouvé par le tableau des nœuds de la scène, et non plus par une
+recherche autour de la scène.
+
 ### Onglet Boss (V2.7.0)
 
 L'exécutable garde les noms des classes du jeu (informations de type
@@ -410,6 +426,37 @@ description dans la langue du jeu), qui ouvre l'écran de chargement du
 jeu. Après le chargement, le trainer pose un rideau noir, ferme le menu
 comme le jeu, puis lance « Continuer » une fois le menu fermé, sans
 compter de continue. Rien n'est écrit dans les fichiers du jeu.
+
+### Faire apparaître (V2.8.0, expérimental)
+
+Le jeu crée ses personnages par des commandes de script (les fichiers
+`.gcx` de chaque zone). Le trainer rejoue ces commandes avec ses propres
+arguments, tirés du script de la zone d'origine du personnage : une
+unité, puis l'acteur, nommés par le trainer. Les options qui lancent une
+procédure du script d'origine sont retirées, et celles qui renvoient à
+des variables de ce script sont remplacées par leur valeur.
+
+Avant la création, les ressources du personnage (modèles, animations…)
+sont lues dans les archives du jeu installé, d'après le `data.cnf` de sa
+zone d'origine, puis enregistrées dans le dictionnaire de ressources du
+jeu. Le nom de zone est échangé le temps de cet enregistrement : le jeu
+en déduit lui-même le dossier des textures HD. Rien n'est écrit dans les
+fichiers du jeu.
+
+Le personnage est ensuite placé devant Snake, et son IA démarrée. Il
+reprend la route de patrouille d'un acteur de la zone : de même type
+pour Meryl et les rebelles quand il y en a un, sinon celle d'un autre
+(V2.8.1 ; sans route, l'IA visait un point par défaut et courait contre
+un mur). Quand la zone n'a pas les gestionnaires nécessaires (salle
+blanche des Beauty), le trainer les crée par les mêmes commandes. Le
+suivi de route du jeu ignore parfois l'échec d'une recherche et
+appliquait une structure non remplie : deux détours repèrent cet échec,
+sans rien écrire dans les structures de l'appelant (V2.8.1 : en écrire
+une faisait planter le jeu au rechargement après Continuer).
+
+Meryl est une alliée : son IA n'agit que sur ordre du scénario, elle
+reste donc en garde sur place. Le rebelle d'Europe de l'Est plante à sa
+création : il est grisé dans la liste.
 
 ### Téléportation
 

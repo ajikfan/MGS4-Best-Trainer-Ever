@@ -14,7 +14,7 @@ are still handled by the game.
 | Laughing Beauty | one hit (confirmed) | stamina drained (confirmed) |
 | Raging Raven | one hit (lethal weapon: confirmed; non-lethal weapon: prepared, to be confirmed) | stamina drained, any weapon (confirmed) |
 | Raging Beauty | one hit, any weapon (confirmed) | stamina drained (confirmed) |
-| Crying Wolf | one hit, any weapon (confirmed) | stamina drained, any weapon (confirmed) |
+| Crying Wolf | one hit, any weapon, on the body as well as on the Beast form's armor (confirmed) | stamina drained, any weapon, body and armor (confirmed) |
 | Crying Beauty | one hit, any weapon (confirmed) | stamina drained, any weapon (confirmed) |
 | Screaming Mantis (Beast and Beauty) | Beast: defeated by the first bullet, dolls dropped with one bullet each, no Mantis doll needed (confirmed); Beauty: one hit with the doll (confirmed) | same for the Beast (confirmed); Beauty: stamina drained with the doll (confirmed) |
 | Metal Gear RAY | destroyed in one hit (confirmed) | destroyed in one hit (confirmed) |

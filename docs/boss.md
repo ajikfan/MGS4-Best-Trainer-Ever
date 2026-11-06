@@ -14,7 +14,7 @@ gérées par le jeu.
 | Laughing Beauty | un coup (confirmé) | endurance vidée (confirmé) |
 | Raging Raven | un coup (arme létale : confirmé ; arme non létale : préparé, à confirmer) | endurance vidée, toute arme (confirmé) |
 | Raging Beauty | un coup, toute arme (confirmé) | endurance vidée (confirmé) |
-| Crying Wolf | un coup, toute arme (confirmé) | endurance vidée, toute arme (confirmé) |
+| Crying Wolf | un coup, toute arme, sur le corps comme sur l'armure de la forme bête (confirmé) | endurance vidée, toute arme, corps et armure (confirmé) |
 | Crying Beauty | un coup, toute arme (confirmé) | endurance vidée, toute arme (confirmé) |
 | Screaming Mantis (bête et Beauty) | bête : vaincue à la première balle, poupées lâchées en une balle chacune, sans la poupée Mantis (confirmé) ; Beauty : un coup avec la poupée (confirmé) | même chose pour la bête (confirmé) ; Beauty : endurance vidée avec la poupée (confirmé) |
 | Metal Gear RAY | détruit en un coup (confirmé) | détruit en un coup (confirmé) |
