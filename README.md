@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.7.0
+# MGS4 Trainer — V2.8.1
 
 *[English version](README.en.md)*
 
@@ -6,9 +6,10 @@ Trainer en direct pour Metal Gear Solid 4 (portage PC Steam) : il lit et
 écrit la mémoire du jeu pendant que tu joues. Armes, objets, statistiques
 et jauges modifiables, tenue, visage, gilet, motif OctoCamo ou arme
 changés sans passer par les menus, Snake intouchable ou invisible,
-ennemis et boss en un coup, toute la zone neutralisée d'un clic, vitesse
-du jeu, téléportation, et toute une configuration rappelée d'une touche
-(profils F1 à F11).
+ennemis et boss en un coup, toute la zone neutralisée d'un clic,
+personnages ajoutés à côté de Snake (expérimental), vitesse du jeu,
+téléportation, mode photo, et toute une configuration rappelée d'une
+touche (profils F1 à F11). Compatible avec MGS4 1.4.1 et 1.4.2.
 
 Interface en français et en anglais. Usage solo uniquement.
 
@@ -50,22 +51,20 @@ des versions.
 - [Comment ça marche](docs/fonctionnement.md)
 - [Maintenance](docs/maintenance.md) (compatibilité, build, organisation du code)
 
-## Dernière version : V2.7.0
+## Dernière version : V2.8.1
 
-- **Onglet Boss** : vie et endurance de chaque boss (Bête et Beauty côte à
-  côte), barres à l'écran synchronisées ; jauge relâchée à 0 = boss achevé
-  ou mis K.O. par le jeu.
-- **Charger** depuis le menu pause, avec fondu au noir.
-- **Un coup, un mort** : Laughing Octopus, Screaming Mantis (sans la poupée
-  Mantis), Vamp (sans seringue) et Liquid vaincus au premier coup.
-- **Intouchable** : les ficelles de Screaming Mantis ne retiennent plus
-  Snake.
-- **Toute la zone** : ennemis de l'acte 3 et Sliders ; motos alliées
-  épargnées.
-- **Menu pause des cinématiques** : texte du jeu dans sa langue, fondu au
-  noir avant le retour au titre.
-- **Mode photo** : clics de la souris inversés et corrections.
-- Livrée par la **mise à jour intégrée** ; DLL modifiée : relancer le jeu.
+- **Crying Wolf** : Un coup, un mort fonctionne aussi en tirant sur son
+  armure (forme Bête).
+- **Menu pause des cinématiques** : confirmation dans toutes les
+  cinématiques (acte 4 compris), retour au titre sans plantage.
+- **Faire apparaître** : plus de plantage au rechargement, nouveau
+  rebelle d'Amérique du Sud, Meryl et les rebelles ne courent plus contre
+  un mur.
+- Livrée par la **mise à jour intégrée** ; DLL inchangée.
+
+Avec la **V2.8.0** : compatibilité avec **MGS4 1.4.2**, nouveau **Faire
+apparaître** (expérimental), raccourcis pris seulement quand le jeu est
+au premier plan.
 
 Détail dans [Nouveautés par version](docs/nouveautes.md).
 

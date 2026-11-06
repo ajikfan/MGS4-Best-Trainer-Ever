@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.7.0
+# MGS4 Trainer — V2.8.1
 
 *[Version française](README.md)*
 
@@ -6,9 +6,10 @@ Live trainer for Metal Gear Solid 4 (Steam PC port): it reads and writes
 the game's memory while you play. Editable weapons, items, stats and
 gauges, outfit, face, vest, OctoCamo pattern or weapon changed without
 going through the menus, untouchable or invisible Snake, enemies and
-bosses in one hit, the whole area neutralized in one click, game speed,
-teleportation, and a whole setup recalled with one key (profiles F1 to
-F11).
+bosses in one hit, the whole area neutralized in one click, characters
+spawned next to Snake (experimental), game speed, teleportation, photo
+mode, and a whole setup recalled with one key (profiles F1 to F11).
+Compatible with MGS4 1.4.1 and 1.4.2.
 
 Interface in French and English. Single-player only.
 
@@ -48,20 +49,18 @@ up the compatible version, the warnings and the version history.
 - [How it works](docs/en/how-it-works.md)
 - [Maintenance](docs/en/maintenance.md) (compatibility, build, code layout)
 
-## Latest version: V2.7.0
+## Latest version: V2.8.1
 
-- **Bosses tab**: health and stamina of every boss (Beast and Beauty side
-  by side), on-screen bars kept in sync; a gauge released at 0 = the boss
-  is finished or knocked out by the game.
-- **Load** from the pause menu, with a fade to black.
-- **One Shot, One Kill**: Laughing Octopus, Screaming Mantis (no Mantis
-  doll needed), Vamp (no syringe) and Liquid defeated by the first hit.
-- **Untouchable**: Screaming Mantis's strings no longer hold Snake.
-- **Whole area**: act 3 enemies and Sliders; allied bikes spared.
-- **Cutscene pause menu**: the game's text in its language, fade to black
-  before returning to the title.
-- **Photo mode**: mouse clicks swapped and fixes.
-- Delivered by the **built-in update**; DLL changed: restart the game.
+- **Crying Wolf**: One Shot, One Kill also works when shooting her armor
+  (Beast form).
+- **Cutscene pause menu**: confirmation in every cutscene (Act 4
+  included), return to the title without a crash.
+- **Spawn**: no more crash on reload, new South American rebel, Meryl
+  and the rebels no longer run into a wall.
+- Delivered by the **built-in update**; DLL unchanged.
+
+With **V2.8.0**: **MGS4 1.4.2** support, new **Spawn** (experimental),
+shortcuts only taken while the game is in front.
 
 Details in [What's new in each version](docs/en/whats-new.md).
 
