@@ -68,6 +68,7 @@ class CutsceneMenuMixin:
     # Enregistrement du texte PASSER dans la scene (type 0x0A, cle, noeud
     # 0x17, parent 0x16) ; decalages relatifs a sa cle.
     CSM_TEXT_RECORD = bytes.fromhex("0a004e0345155800" "17001600")
+    CSM_SCENE_NODES, CSM_TEXT_NODE = 0x180, 0x17  # tableau des noeuds de la scene ; noeud de PASSER
     CSM_BAR_NODE = ((-0x148, 0x3C0), (-0x144, 0x3C00000), (-0x10C, 0x3C00000))
     CSM_TEXT_COLORS = (-0x28, -0x10, 0x88, 0xA0)
     # Liste d'affichage : commande couleur clignotante de la barre (repere),
@@ -485,6 +486,23 @@ class CutsceneMenuMixin:
             state["late_loader"] = None
             self.speed.game_call(self.base + self.CSM_DLG_FUNCS["end"][0], loader & self.HANDLE_MASK)
 
+    def _csm_text_record(self, scene: int) -> int | None:
+        """Cle de l'enregistrement du texte PASSER (+4), 0 si introuvable. Lu
+        par le tableau des noeuds de la scene (case = numero de noeud) : en
+        1.4.2 l'enregistrement est a ~13 Mo de la scene, hors de la fenetre
+        de recherche (barre restee sur CONTINUER, 2026-11-06)."""
+        try:
+            nodes = struct.unpack("<Q", self.proc.read_bytes(scene + self.CSM_SCENE_NODES, 8))[0]
+            record = struct.unpack("<Q", self.proc.read_bytes(nodes + 8 * self.CSM_TEXT_NODE, 8))[0] if nodes else 0
+            if record and self.proc.read_bytes(record, len(self.CSM_TEXT_RECORD)) == self.CSM_TEXT_RECORD:
+                return record + 4
+        except OSError:
+            pass
+        low = scene - 0x1000
+        data = self.proc.read_bytes(low, 0x21000)
+        found = data.find(self.CSM_TEXT_RECORD)
+        return low + found + 4 if found >= 0 else 0
+
     def _csm_highlight_quit(self, state: dict, task: int) -> None:
         now = time.monotonic()
         if state["task"] != task:
@@ -493,12 +511,9 @@ class CutsceneMenuMixin:
             state["scene"] = scene
             if not scene:
                 return
-            low = scene - 0x1000
-            data = self.proc.read_bytes(low, 0x21000)
-            found = data.find(self.CSM_TEXT_RECORD)
-            if found < 0:
+            state["key"] = self._csm_text_record(scene)
+            if not state["key"]:
                 return
-            state["key"] = low + found + 4
         key = state["key"]
         # Repere cherche dans la liste d'affichage de la scene (adresse en
         # scene+0x148, taille en +0x150) ; nouvel essai tant qu'il manque.
