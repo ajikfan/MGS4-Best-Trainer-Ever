@@ -159,6 +159,26 @@ class SpawnMixin:
                 "0930910000556596618ac4556d912c3ec158656fcc2bc1c1c1c100"),
             "setup": None,
         },
+        # Rebelle d'Amerique du Sud (ENEMY_SOUTHAMERICA_MIL, id 0xABDA77, 2026-11-06) :
+        # creation tiree du script de s02a10l, comme le PMC de la meme zone.
+        "rebel_sa": {
+            "zone": "s02a10l",
+            "vtable": 0x18CA7F8,
+            "group": SPAWN_GROUP_REBEL,
+            "own_route": True,
+            "distance": 2000.0,
+            "unit": bytes.fromhex(
+                "0679690709000000005873e5303b068bba375d0d62efca9e065e2cea09901e22"
+                "00597465f23b0904000000000000"),
+            "actor": bytes.fromhex(
+                "0677daab0900000000586585a301190002c0586892a035190002c45868a3a54a"
+                "190002c8586ec5ca38190002cc586585a301190002d0586892a035190002d45c"
+                "6c25b13719000300190003045976cc309909000000005977424f820930910000"
+                "556596618ac45565b5362fe1556d912c3ec15d0e72ec625909e2cfcc00090000"
+                "0000586813ee2d12000342586edf26ed120003475d0e67aa12ac09567d480009"
+                "7017000000"),
+            "setup": None,
+        },
         "rebel_ee": {
             "zone": "s03a10l",
             "vtable": 0x18F8588,
@@ -517,11 +537,14 @@ class SpawnMixin:
 
     def _spawn_copy_route(self, soldier: int, kind: dict) -> None:
         """Reprend la route d'un acteur de la zone, s'il y en a un : sans
-        acteur a copier, le soldat garde ses fiches vides. own_route : pas
-        celle d'un autre camp."""
-        for actor, _life, _gauges in self._zone_soldiers():
-            if kind.get("own_route") and self._spawn_q(actor) != self._spawn_q(soldier):
-                continue
+        acteur a copier, le soldat garde ses fiches vides. own_route : de
+        preference celle d'un acteur du meme type ; a defaut, celle d'un autre
+        (sans route, l'IA vise un point par defaut et court contre un mur :
+        Meryl en s01a57l, 2026-11-06)."""
+        actors = self._zone_soldiers()
+        same = [a for a, _life, _gauges in actors if self._spawn_q(a) == self._spawn_q(soldier)]
+        others = [a for a, _life, _gauges in actors if a not in same] if kind.get("own_route") else []
+        for actor in (same + others) if kind.get("own_route") else [a for a, _l, _g in actors]:
             record = self.proc.read_bytes(actor + self.SPAWN_ROUTE_RECORD, self.SPAWN_ROUTE_RECORD_SIZE)
             if actor != soldier and struct.unpack_from("<i", record, 8)[0] > 0:
                 groups = self.proc.read_bytes(actor + self.SPAWN_ROUTE_GROUPS, self.SPAWN_ROUTE_GROUPS_SIZE)
