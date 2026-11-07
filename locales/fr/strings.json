@@ -150,6 +150,8 @@
   "vitals.no_alerts": "Pas d'alerte",
   "vitals.no_alerts_tooltip": "Patch de code : le jeu ne calcule plus l'alerte générale à partir des unités de soldats, elle reste en Normal quelle qu'en soit la cause. Les ennemis réagissent encore localement à ta présence (« ! », ils viennent voir, ils peuvent tirer s'ils te voient) mais ne déclenchent ni alerte, ni renforts, ni musique d'alerte. Prioritaire sur l'alerte forcée.",
   "vitals.spawn_soldier": "Faire apparaître (expérimental)",
+  "vitals.ally_follow": "Meryl me suit (expérimental)",
+  "vitals.ally_follow_tooltip": "Meryl ajoutée avec « Faire apparaître » suit Snake : elle passe là où il est passé, marche, court ou s'accroupit comme lui, et s'arrête à une dizaine de mètres derrière lui, debout ou accroupie. Pendant une alerte, le trainer la laisse faire et rend les rebelles ajoutés ennemis des PMC (ils se battent) ; hors alerte, les ennemis l'ignorent. Limite : elle ne se défend pas encore. Le trainer emprunte pour elle une route de la zone que personne ne suit et la rend telle quelle à la fin.",
   "vitals.spawn_type_pmc": "Soldat PMC (Moyen-Orient)",
   "vitals.spawn_type_pmc_sa": "Soldat PMC (Amérique du Sud)",
   "vitals.spawn_type_pmc_ee": "Soldat PMC (Europe de l'Est)",

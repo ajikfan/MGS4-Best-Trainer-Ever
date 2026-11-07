@@ -9,9 +9,11 @@ textures HD (textures/PC_TXN_UP/stageNN/<zone>/...) et les lit lui-meme.
 Les ressources sont lues dans les archives du jeu installe (core/vpak.py),
 d'apres le data.cnf de la zone d'origine du soldat."""
 import ctypes
+import math
 import os
 import struct
 import threading
+import time
 from ctypes import wintypes
 
 from mgs4trainer.core.speedhack import kernel32
@@ -73,10 +75,18 @@ class SpawnMixin:
     SPAWN_GROUPS_MAX = 4
     SPAWN_GROUP_PMC = 0x971E5A
     SPAWN_GROUP_REBEL = 0x37BA8B
+    # Cote du QG (option 0x9737C968). Le combat de l'acte 1 met -1 (0xC0) aux
+    # deux ; essaye pour les rebelles le 2026-11-07 : aucun changement.
     SPAWN_GROUP_SIDES = {SPAWN_GROUP_PMC: 0xC0, SPAWN_GROUP_REBEL: 0xC1}
     SPAWN_GROUP_ARGS = "0690ca3006{name}5568c93797{side}00"
     SPAWN_GROUP_RELATION_ARGS = "06354e66065a1e97068bba3700"
     SPAWN_GROUP_RELATION_POSITIONAL = 12
+    # Relation d'hostilite PMC / rebelles (commande 0x664E35) a la creation du
+    # groupe rebelle : coupee (2026-11-07). Dans une zone sans rebelles
+    # (s01a57l), elle mettait les escouades PMC en posture de bataille,
+    # visant d'ou viendraient les rebelles, meme apres leur mort ; un rebelle
+    # ajoute ne combattait de toute facon pas les PMC.
+    SPAWN_DECLARE_WAR = False
 
     # Types d'ennemis. zone : leur zone d'origine, dont le data.cnf liste les
     # ressources et dont le nom sert a trouver leurs textures. Arguments de
@@ -204,7 +214,11 @@ class SpawnMixin:
             "no_death_camera": True,
             "group": SPAWN_GROUP_REBEL,
             "own_route": True,
-            "distance": 2000.0,
+            # a cote de Snake : a 2000 unites, les ennemis la voyaient surgir
+            # et restaient a viser ce point (s01a57l, 2026-11-07)
+            "distance": 150.0,
+            # IA relancee apres le demarrage (sinon elle ne demarre pas seule)
+            "kick": True,
             "unit": bytes.fromhex(
                 "0679690709000000005873e5303b068bba375d0d62efca9e065e2cea09901e22"
                 "00597465f23b0904000000000000"),
@@ -317,12 +331,524 @@ class SpawnMixin:
         threading.Thread(target=self._spawn_run, args=(self.SPAWN_TYPES[kind],), daemon=True).start()
         return True
 
+    # Changer la route d'un allie : commande de script 0x48CC82 (C74720),
+    # comme s01a40l pour le Rat Patrol : 1er argument = nom de l'acteur
+    # (acteur+0x18), option 0x5962EC = (route, point). Ecrit la 1re fiche de
+    # route (+0x4640..+0x4650) par la recherche du jeu ; le jeu y ramene le
+    # suivi de route de l'acteur a chaque image.
+    ALLY_ROUTE_ARGS = "0682cc480d{name}5a72ec62590d{route}{point:02x}00"  # option de 10 octets
+    ALLY_ROUTE_POSITIONAL = 9  # 06 id (4) + 0d nom (5)
+
+    # Mode compagnon (« Meryl me suit », voir ally_follow_tick). Routes chargees : table
+    # ALLY_ROUTE_TABLE_RVA (nombre, puis entrees de 0x10 : nom, ?, nombre de
+    # points, decalage depuis SPAWN_OFFSET_BASE_RVA ; points de 0x30 octets,
+    # position en +0). Seules les routes d'un groupe de la famille 0xEA2C5E
+    # (liste ALLY_ROUTE_GROUPS_RVA : +8 tete, +0x10 suivant, +0x18 famille,
+    # +0x20 nombre, +0x28 groupes ; groupe : +0xF04 nombre, +0xF28 routes
+    # de 0x10, nom en +8) sont resolues par la commande.
+    ALLY_ROUTE_GROUPS_RVA = 0x23F0B5C0
+    ALLY_ROUTE_TABLE_RVA = 0x234F488
+    ALLY_ROUTE_KIND = 0xEA2C5E
+    ALLY_FOLLOW_PERIOD = 0.5
+    ALLY_FOLLOW_RESEND = 3.0
+    # Position d'un acteur : objet du corps (vtable+0x130 = acteur+0x2C0),
+    # X/Y/Z en +0x10 -> acteur+0x2D0 (2026-11-07, s04a10l).
+    ALLY_POSITION = 0x2D0
+    # Route empruntee : une route de la zone qu'aucun soldat ne suit ; ses
+    # points deviennent la trace de Snake (voir ALLY_TRAIL_STEP) et sont
+    # remis a l'origine quand le mode est coupe (ally_follow_release).
+    # Trace de Snake (2026-11-07) : l'IA rejoint un point de route en ligne
+    # droite, sans chercher de chemin (Meryl coincee contre un mur a 90 m en
+    # s01a57l). Les points de la route empruntee deviennent les derniers pas
+    # de Snake (un tous les ALLY_TRAIL_STEP), du plus ancien a Snake : chaque
+    # etape a ete parcourue, donc degagee. Elle est envoyee au pas le plus
+    # proche d'elle et remonte la trace jusqu'a lui.
+    ALLY_TRAIL_STEP = 200.0
+    ALLY_TRAIL_KEEP = 256  # pas gardes (trace + distance d'arret)
+    ALLY_STOP_BEHIND = 1000.0  # arret a cette distance derriere Snake, le long de sa trace
+    ALLY_STOP_FLAGS = 0x2  # +0xC des postes de garde du jeu (octets 02 00 00 00)
+    ALLY_STOP_ACTION = 3  # action des postes de garde (attente sur place, debout)
+    ALLY_STOP_ACTION_CROUCH = 4  # meme poste, accroupie (releve en jeu le 2026-11-07)
+    # pres du point d'arret (rayon d'arrivee ~500) : poste ; au-dela elle repart
+    # (1500 la faisait attendre que Snake ait deja bien avance, 2026-11-07)
+    ALLY_STOP_NEAR = 700.0
+    # Allure d'un point (+0x1E), releve en jeu le 2026-11-07 : 0 marche lente,
+    # 1 course, 2 marche/course, 3 marche, 4 course, 5 accroupi, 6 marche en
+    # visant ; 12 (points de l'acte 1) marche. -1 = automatique : accroupie si
+    # Snake l'est, course s'il court ou si elle est loin, marche sinon ; une
+    # autre valeur est imposee (reglage de mise au point, pas d'interface).
+    ally_point_move = -1
+    # 1 ne va qu'a ~1600 unites/s (marche de Snake) ; 5 (accroupie) ~3000
+    # (releve 2026-11-07) ; 4 « court » d'apres l'utilisateur
+    ALLY_MOVE_RUN, ALLY_MOVE_WALK, ALLY_MOVE_CROUCH = 4, 3, 5
+    # Etats de la machine principale de Snake (+0x60) accroupi : immobile
+    # 9DF1E0, en mouvement 9DDF60 (1.4.2 : 6FE0F0, 6FCE70 ; releves en jeu
+    # le 2026-11-07). Vitesse de Snake : marche 600-1900, course 3200-3700
+    # unites/s.
+    SNAKE_CROUCH_STATES = (0x9DF1E0, 0x9DDF60)
+    ALLY_RUN_SPEED = 2400.0
+    ALLY_RUN_LAG = 4000.0  # plus loin de Snake : elle court pour le rattraper
+    # Suivi de route de l'acteur (objet pointe par acteur+0x42D8, celui de
+    # 860590) : +0x30 point vise (copie du point par 75E80), +0x58 action,
+    # +0x5A allure, +0x5C attente, +0x5E orientation, +0x60 point en cours,
+    # +0x80 entree de la route suivie. L'allure n'y est recopiee qu'a
+    # l'arrivee a un point : ecrite ici en direct (2026-11-07).
+    ALLY_FOLLOWER = 0x42D8
+    ALLY_FOLLOWER_ENTRY = 0x80
+    ALLY_FOLLOWER_ACTION = 0x58
+    ALLY_FOLLOWER_MOVE = 0x5A
+    ALLY_FOLLOWER_WAIT = 0x5C
+    ALLY_FOLLOWER_TARGET = 0x30  # position visee (copie du point)
+    ALLY_FOLLOWER_INDEX = 0x60  # point en cours (mot)
+    # Action du poste (+0x1C) imposee si >= 0 (mise au point) ; -1 =
+    # automatique (3 debout, 4 accroupie).
+    ally_point_action = -1
+    ALLY_POINT_PLAIN = 1  # action d'un point de passage simple (+0x1C)
+    ALLY_ROUTE_POINT = 0x4650  # point en cours de la 1re fiche de route (avance avec elle)
+    ALLY_STOP_WAIT = 0xFFFF  # attente infinie (postes de garde du jeu)
+
+    def _ally_command_page(self) -> int:
+        """Une page par processus pour les commandes repetees (la commande ne
+        garde rien de ses arguments apres l'appel)."""
+        if getattr(self, "_ally_page_pid", None) != self.pid:
+            self._ally_page = self._spawn_alloc(0x1000, PAGE_EXECUTE_READWRITE)
+            self._ally_page_pid = self.pid
+        return self._ally_page
+
+    def _ally_alive(self) -> list[int]:
+        out = []
+        for ally in self._spawn_tasks(self.SPAWN_TYPES["meryl"]["vtable"]):
+            life_object = self._spawn_q(ally + 0x42B0)
+            if life_object and struct.unpack("<i", self.proc.read_bytes(life_object + 0x314, 4))[0] > 0:
+                out.append(ally)
+        return out
+
+    def _ally_send(self, orders: list[tuple[int, int, int]]) -> bool:
+        """(allie, route, point) : commande 0x48CC82 pour chacun, dans un
+        fil separe comme les apparitions."""
+        if self._ally_busy_now() or not orders:
+            return False
+        if not (self.connected and self.sane and self.pid and self.speed.ensure_injected(self.pid)):
+            return False
+        if not self.speed.main_loop_hook_installed():
+            return False
+        self._ally_busy = True
+
+        def run():
+            self._game_lock().acquire()
+            try:
+                funcs = self._live_funcs(self.SPAWN_FUNCS)
+                if funcs is None:
+                    return
+                for ally, route, point in orders:
+                    args = bytes.fromhex(self.ALLY_ROUTE_ARGS.format(
+                        name=self.proc.read_bytes(ally + 0x18, 4).hex(),
+                        route=struct.pack("<I", route).hex(), point=0xC1 + point))
+                    self._spawn_command(args, funcs["chara"], positional=self.ALLY_ROUTE_POSITIONAL,
+                                        memory=self._ally_command_page())
+            except (OSError, struct.error, ValueError, KeyError):
+                pass
+            finally:
+                self._ally_busy = False
+                self._game_lock().release()
+
+        threading.Thread(target=run, daemon=True).start()
+        return True
+
+    def _ally_is_spawned(self, ally: int) -> bool:
+        return struct.unpack("<I", self.proc.read_bytes(ally + 0x18, 4))[0] >> 16 == self.SPAWN_FIRST_NAME >> 16
+
+    def ally_kick(self, allies: list[int], route: int) -> bool:
+        """Replace chaque allie a sa propre position (fonction de placement :
+        elle relance aussi son etat) puis l'envoie sur `route`. L'IA d'une
+        Meryl ajoutee ne demarre pas seule ; la placer la debloque (s04a10l,
+        2026-11-07), sans la deplacer ici."""
+        if self._ally_busy_now() or not allies:
+            return False
+        if not (self.connected and self.sane and self.pid and self.speed.ensure_injected(self.pid)):
+            return False
+        if not self.speed.main_loop_hook_installed():
+            return False
+        self._ally_busy = True
+
+        def run():
+            self._game_lock().acquire()
+            try:
+                funcs = self._live_funcs(self.SPAWN_FUNCS)
+                if funcs is None:
+                    return
+                page = self._ally_command_page()
+                for ally in allies:
+                    x, y, z = struct.unpack("<3f", self.proc.read_bytes(ally + self.ALLY_POSITION, 12))
+                    self.proc.write_bytes(page + 0xF00, struct.pack("<4f", x, y, z, 1.0))
+                    self.speed.game_call(funcs["warp"], ally, page + 0xF00, 0, timeout=10.0)
+                    if route:
+                        args = bytes.fromhex(self.ALLY_ROUTE_ARGS.format(
+                            name=self.proc.read_bytes(ally + 0x18, 4).hex(),
+                            route=struct.pack("<I", route).hex(), point=0xC1))
+                        self._spawn_command(args, funcs["chara"], positional=self.ALLY_ROUTE_POSITIONAL, memory=page)
+                    self._ally_kicked.add(ally)
+            except (OSError, struct.error, ValueError, KeyError):
+                pass
+            finally:
+                self._ally_busy = False
+                self._game_lock().release()
+
+        threading.Thread(target=run, daemon=True).start()
+        return True
+
+    def _ally_route_entry(self, name: int) -> int:
+        """Adresse de l'entree de table de la route (nom +0, nombre +8)."""
+        b, q = self.base, self._spawn_q
+        count = struct.unpack("<i", self.proc.read_bytes(b + self.ALLY_ROUTE_TABLE_RVA, 4))[0]
+        table = q(b + self.ALLY_ROUTE_TABLE_RVA + 8)
+        entries = self.proc.read_bytes(table, 0x10 * min(max(count, 0), 0x2000)) if table else b""
+        for index in range(len(entries) // 0x10):
+            if struct.unpack_from("<I", entries, 0x10 * index)[0] == name:
+                return table + 0x10 * index
+        return 0
+
+    def _ally_route_entries(self) -> dict[int, tuple[int, int]]:
+        """Nom de route -> (adresse des points, nombre) des routes chargees."""
+        b, q = self.base, self._spawn_q
+        count = struct.unpack("<i", self.proc.read_bytes(b + self.ALLY_ROUTE_TABLE_RVA, 4))[0]
+        table = q(b + self.ALLY_ROUTE_TABLE_RVA + 8)
+        offset_base = q(b + self.SPAWN_OFFSET_BASE_RVA)
+        entries = self.proc.read_bytes(table, 0x10 * min(max(count, 0), 0x2000)) if table else b""
+        out = {}
+        for index in range(len(entries) // 0x10):
+            name, _unused, total, offset = struct.unpack_from("<IIII", entries, 0x10 * index)
+            if offset and 0 < total < 0x3F:
+                out[name] = (offset_base + offset, total)
+        return out
+
+    def _ally_pick_route(self, exclude=()) -> dict | None:
+        """Route resolvable par la commande et suivie par aucun soldat de la
+        zone (1re fiche : groupe +0x4648, index +0x464C) : ses points seront
+        deplaces pres de Snake. None s'il n'y en a pas."""
+        q = self._spawn_q
+        grouped = {}
+        node = q(q(self.base + self.ALLY_ROUTE_GROUPS_RVA) + 8)
+        seen = set()
+        while node and node not in seen and len(seen) < 64:
+            seen.add(node)
+            kind, _unused, groups = struct.unpack("<iii", self.proc.read_bytes(node + 0x18, 12))
+            if kind == self.ALLY_ROUTE_KIND:
+                group_table = q(node + 0x28)
+                for index in range(min(max(groups, 0), 64)):
+                    group = q(group_table + 8 * index)
+                    gid, routes = struct.unpack("<i", self.proc.read_bytes(group + 8, 4))[0], \
+                        struct.unpack("<i", self.proc.read_bytes(group + 0xF04, 4))[0]
+                    entries = self.proc.read_bytes(q(group + 0xF28), 0x10 * min(max(routes, 0), 0x400))
+                    for r in range(len(entries) // 0x10):
+                        grouped[struct.unpack_from("<I", entries, 0x10 * r + 8)[0]] = (gid, r)
+            node = q(node + 0x10)
+        used = set()
+        manager = self._alert_manager()
+        allies = set(self._ally_alive())
+        followed = set()  # routes suivies en ce moment (suivi de route), meme hors fiche
+        for soldier in self._alert_soldiers(manager) if manager else []:
+            if soldier not in allies:
+                used.add(struct.unpack("<ii", self.proc.read_bytes(soldier + 0x4648, 8)))
+                follower = self._spawn_q(soldier + self.ALLY_FOLLOWER)
+                if follower:
+                    followed.add(self._spawn_q(follower + self.ALLY_FOLLOWER_ENTRY))
+        loaded = self._ally_route_entries()
+        # au moins 2 points : une route d'un seul point (sortie des renforts ?) ne
+        # fait pas bouger l'allie (s01a57l, 2026-11-07)
+        free = [(loaded[name][1], name) for name, pair in grouped.items()
+                if pair not in used and name in loaded and name not in (exclude if isinstance(exclude, (set, tuple, list)) else {exclude})
+                and self._ally_route_entry(name) not in followed
+                and loaded[name][1] >= 2]
+        if not free:
+            return None
+        total, name = max(free)  # la plus longue : trace de Snake plus longue
+        address = loaded[name][0]
+        original = self.proc.read_bytes(address, 0x30 * total)
+        # Champs apres la position (+0xC..+0x30) d'un point de passage simple,
+        # construits (drapeau 0, regard, action 1, allure 1, attente 0, reste a
+        # 0 comme dans les routes du jeu) : en recopier un d'origine echouait
+        # quand la route choisie n'en avait pas (2026-11-07). Le dernier point
+        # d'origine (action 0x19) renvoie l'acteur en reserve.
+        plain = struct.pack("<I3fHHHH", 0, 0.0, 0.0, 0.0, self.ALLY_POINT_PLAIN, 1, 0, 0) + bytes(12)
+        return {"name": name, "address": address, "count": total, "original": original,
+                "plain": plain, "pid": self.pid, "entry": self._ally_route_entry(name)}
+
+    # Une route a nous (entree et points hors des groupes) ne tient pas : le
+    # jeu ramene le suivi de route a celle de la fiche de l'acteur en moins de
+    # 20 ms (2026-11-07). D'ou l'emprunt, avec rendu en cas de conflit.
+
+    def _ally_route_taken(self, route: dict, allies: list[int]) -> bool:
+        """Un soldat autre que les allies suit-il la route empruntee ?"""
+        manager = self._alert_manager()
+        others = [s for s in (self._alert_soldiers(manager) if manager else []) if s not in allies]
+        for soldier in others:
+            follower = self._spawn_q(soldier + self.ALLY_FOLLOWER)
+            if follower and self._spawn_q(follower + self.ALLY_FOLLOWER_ENTRY) == route["entry"]:
+                return True
+        return False
+
+    def ally_follow_release(self) -> None:
+        """Remet les points d'origine des routes empruntees."""
+        for attribute in ("_ally_follow_route",):
+            route = getattr(self, attribute, None)
+            setattr(self, attribute, None)
+            if route and route["pid"] == self.pid and route.get("original"):
+                try:
+                    if self._ally_route_entries().get(route["name"], (None,))[0] == route["address"]:
+                        self.proc.write_bytes(route["address"], route["original"])
+                        if route.get("entry"):
+                            self.proc.write_bytes(route["entry"] + 8, struct.pack("<H", route["count"]))
+                except OSError:
+                    pass
+
+    def _ally_live_style(self, allies: list[int], route: dict, style: tuple[int, int]) -> None:
+        """Allure (et action d'essai au poste) ecrites dans le suivi de route
+        de chaque allie qui suit la route empruntee : effet immediat."""
+        posted = (getattr(self, "_ally_layout", None) or ("",))[0] == "post"
+        for ally in allies:
+            follower = self._spawn_q(ally + self.ALLY_FOLLOWER)
+            if not follower or self._spawn_q(follower + self.ALLY_FOLLOWER_ENTRY) != route["entry"]:
+                continue
+            action, move = struct.unpack("<HH", self.proc.read_bytes(follower + self.ALLY_FOLLOWER_ACTION, 4))
+            wanted_action = style[1] if posted else action
+            if (action, move) != (wanted_action, style[0]):
+                self.proc.write_bytes(follower + self.ALLY_FOLLOWER_ACTION, struct.pack("<HH", wanted_action, style[0]))
+
+    def _ally_auto_move(self, position, allies: list[int], now: float) -> int:
+        """Allure des pas (+0x1E) : imposee si ally_point_move >= 0, sinon
+        d'apres Snake (accroupi -> accroupie ; course ou retard -> course)."""
+        last = getattr(self, "_ally_speed_sample", None)
+        speed = getattr(self, "_ally_snake_speed", 0.0)
+        if last and now > last[1]:
+            sample = math.dist((position[0], position[2]), (last[0][0], last[0][2])) / (now - last[1])
+            speed = 0.5 * speed + 0.5 * sample
+        self._ally_speed_sample, self._ally_snake_speed = (position, now), speed
+        machines = self._snake_machines()
+        state = self._spawn_q(machines[0] + 0x60) - self.base if machines else 0
+        self._ally_snake_crouched = state in self.SNAKE_CROUCH_STATES
+        if self.ally_point_move >= 0:
+            return self.ally_point_move
+        if self._ally_snake_crouched:
+            return self.ALLY_MOVE_CROUCH
+        lag = max((math.dist(struct.unpack("<3f", self.proc.read_bytes(a + self.ALLY_POSITION, 12)), position)
+                   for a in allies), default=0.0)
+        # hysteresis : garde la course tant que Snake n'est pas nettement revenu a la marche
+        running = getattr(self, "_ally_running", False)
+        running = speed > (self.ALLY_RUN_SPEED * (0.75 if running else 1.0)) or lag > self.ALLY_RUN_LAG
+        self._ally_running = running
+        return self.ALLY_MOVE_RUN if running else self.ALLY_MOVE_WALK
+
+    def _ally_point(self, position, look, action: int, move: int, wait: int = 0, angle: int = 0,
+                    flags: int = 0) -> bytes:
+        """Point de route de 0x30 octets (voir _ally_pick_route)."""
+        return struct.pack("<3fI3fHHHH", *position, flags, *look, action, move, wait, angle) + bytes(12)
+
+    def _ally_steer(self, ally: int, route: dict, index: int, target) -> None:
+        """Ecrit dans le suivi de route de l'allie le point en cours et la
+        position visee : effet immediat, sans ordre de route."""
+        follower = self._spawn_q(ally + self.ALLY_FOLLOWER)
+        if follower and self._spawn_q(follower + self.ALLY_FOLLOWER_ENTRY) == route["entry"]:
+            self.proc.write_bytes(follower + self.ALLY_FOLLOWER_TARGET, struct.pack("<3f", *target))
+            self.proc.write_bytes(follower + self.ALLY_FOLLOWER_INDEX, struct.pack("<h", index))
+
+    # Hostilite entre groupes (2026-11-07) : table du gestionnaire des
+    # soldats (ENE_MANAGER), jusqu'a 4 groupes de 8 octets a +0x15C : nom,
+    # puis masque de ses groupes ennemis (+0x160, bit = rang du groupe). La
+    # commande 0x664E35 (C78340 -> B5FA40) ne fait qu'y ajouter un bit dans
+    # chaque sens. Mode compagnon : PMC et rebelles ennemis pendant une alerte
+    # (Meryl, du groupe rebelle, combat alors), et seulement les bits ajoutes
+    # par le trainer retires au retour au calme.
+    ALLY_GROUP_TABLE = 0x15C
+    ALLY_GROUP_SLOTS = 4
+
+    def _ally_group_slots(self) -> dict[int, int]:
+        manager = self._spawn_q(self.base + self.SPAWN_MANAGER_RVA)
+        if not manager:
+            return {}
+        data = self.proc.read_bytes(manager + self.ALLY_GROUP_TABLE, 8 * self.ALLY_GROUP_SLOTS)
+        return {struct.unpack_from("<I", data, 8 * i)[0]: i for i in range(self.ALLY_GROUP_SLOTS)
+                if struct.unpack_from("<I", data, 8 * i)[0]}
+
+    def _ally_war(self, wanted: bool) -> None:
+        """Ajoute (wanted) ou retire les bits d'hostilite PMC / rebelles que
+        le trainer a lui-meme poses."""
+        manager = self._spawn_q(self.base + self.SPAWN_MANAGER_RVA)
+        slots = self._ally_group_slots()
+        pmc, rebel = slots.get(self.SPAWN_GROUP_PMC), slots.get(self.SPAWN_GROUP_REBEL)
+        if not manager or pmc is None or rebel is None:
+            return
+        added = getattr(self, "_ally_war_added", {})
+        if getattr(self, "_ally_war_pid", None) != self.pid:
+            added, self._ally_war_pid = {}, self.pid
+        for slot, enemy in ((pmc, rebel), (rebel, pmc)):
+            address = manager + self.ALLY_GROUP_TABLE + 8 * slot + 4
+            mask = struct.unpack("<I", self.proc.read_bytes(address, 4))[0]
+            bit = 1 << enemy
+            if wanted and not mask & bit:
+                self.proc.write_bytes(address, struct.pack("<I", mask | bit))
+                added[address] = bit
+            elif not wanted and address in added and mask & added[address]:
+                self.proc.write_bytes(address, struct.pack("<I", mask & ~added.pop(address)))
+        self._ally_war_added = added
+
+    def ally_follow_tick(self, enabled: bool) -> None:
+        """Mode compagnon (2026-11-07). Une route de la zone que personne ne
+        suit est empruntee et attachee une fois a l'allie (commande 0x48CC82) ;
+        ensuite tout passe par ses donnees et par le suivi de route de l'allie
+        (acteur+0x42D8) :
+          - en marche : la route ne garde que les pas de Snake devant elle,
+            du plus proche d'elle jusqu'au dernier, ALLY_STOP_BEHIND derriere
+            lui (nombre de points reduit d'autant, dans la table du jeu) ; pas
+            de point derriere elle ou retourner ;
+          - a l'arrivee : route d'un point, poste de garde (attente infinie,
+            action 3 debout / 4 accroupie), elle ne bouge plus ;
+          - allure et action ecrites en direct dans son suivi.
+        Un point atteint passe au suivant dans la meme image : jamais une
+        route dont tous les points sont identiques sans attente (gel)."""
+        now = time.monotonic()
+        if not enabled:
+            if getattr(self, "_ally_follow_route", None):
+                self.ally_follow_release()
+            if getattr(self, "_ally_war_added", None):
+                self._ally_war(False)
+            return
+        if now - getattr(self, "_ally_follow_last", 0.0) < self.ALLY_FOLLOW_PERIOD:
+            return
+        self._ally_follow_last = now
+        position = self.player_position()
+        allies = self._ally_alive()
+        alert = self.read_alert_state() != 0
+        self._ally_war(bool(allies) and alert)
+        if position is None or not allies:
+            return
+        if alert:
+            # en alerte, son IA de combat agit seule : piloter son suivi de
+            # route la ramenait sans cesse a la trace, elle ne ripostait pas
+            # et courait contre un mur (2026-11-07)
+            self._ally_layout = None  # trace et poste reecrits au retour au calme
+            return
+        route = getattr(self, "_ally_follow_route", None)
+        if route and (route["pid"] != self.pid or not route.get("entry")
+                      or self._ally_route_entry(route["name"]) != route["entry"]):
+            self._ally_follow_route = route = None  # zone rechargee : la route d'origine est revenue
+        if route and self._ally_route_taken(route, allies):
+            # un soldat a recu la route empruntee (un PMC suivait Snake comme
+            # Meryl, 2026-11-07) : rendue telle quelle, une autre est empruntee
+            self.ally_follow_release()
+            self._ally_banned = getattr(self, "_ally_banned", set()) | {route["name"]}
+            route = None
+        if route is None:
+            route = self._ally_pick_route(exclude=getattr(self, "_ally_banned", set()))
+            self._ally_follow_route, self._ally_layout = route, None
+            if route is None:
+                return
+        move = self._ally_auto_move(position, allies, now)
+        post_action = self.ally_point_action if self.ally_point_action >= 0 else (
+            self.ALLY_STOP_ACTION_CROUCH if getattr(self, "_ally_snake_crouched", False) else self.ALLY_STOP_ACTION)
+        style = (move, post_action)
+        self._ally_live_style(allies, route, style)
+
+        # trace de Snake ; arret ALLY_STOP_BEHIND derriere lui le long de la trace
+        trail = getattr(self, "_ally_trail", [])
+        if not trail or math.dist(trail[-1], position) >= self.ALLY_TRAIL_STEP:
+            trail = (trail + [tuple(position)])[-self.ALLY_TRAIL_KEEP:]
+            self._ally_trail = trail
+        behind, cut = 0.0, len(trail) - 1
+        while cut > 0 and behind < self.ALLY_STOP_BEHIND:
+            behind += math.dist(trail[cut], trail[cut - 1])
+            cut -= 1
+        if behind < self.ALLY_STOP_BEHIND or cut < 1:
+            return  # trace trop courte
+        path = trail[:cut + 1]
+        stop = path[-1]
+        heres = {ally: struct.unpack("<3f", self.proc.read_bytes(ally + self.ALLY_POSITION, 12)) for ally in allies}
+
+        # attache : une fois par allie (et apres relance de son IA)
+        if getattr(self, "_ally_kicked_pid", None) != self.pid:
+            self._ally_kicked, self._ally_kicked_pid = set(), self.pid
+        new = [a for a in allies if a not in self._ally_kicked and self._ally_is_spawned(a)]
+        if new:
+            self.ally_kick(new, 0)  # relance de son IA, sans ordre de route
+            return
+        # attache par la commande de route : le jeu ramene le suivi a la route
+        # de la fiche de l'acteur a chaque image (une route a nous, hors des
+        # groupes, etait quittee en moins de 20 ms, 2026-11-07)
+        unbound = [a for a in allies if self._spawn_q(self._spawn_q(a + self.ALLY_FOLLOWER) + self.ALLY_FOLLOWER_ENTRY)
+                   != route["entry"]]
+        if unbound:
+            self._ally_layout = None
+            self._ally_send([(a, route["name"], 0) for a in unbound])
+            return
+
+        layout = getattr(self, "_ally_layout", None)
+        facing = int(math.atan2(position[0] - stop[0], position[2] - stop[2]) / (2 * math.pi) * 0x10000) & 0xFFFF
+        if all(math.dist(heres[a], stop) < self.ALLY_STOP_NEAR for a in allies):
+            # poste : 1 point (attente infinie), elle ne bouge plus
+            wanted = ("post", stop, style)
+            if layout != wanted:
+                self.proc.write_bytes(route["address"], self._ally_point(
+                    stop, stop, post_action, move, self.ALLY_STOP_WAIT, facing, self.ALLY_STOP_FLAGS))
+                self.proc.write_bytes(route["entry"] + 8, struct.pack("<H", 1))
+                for ally in allies:
+                    self._ally_steer(ally, route, 0, stop)
+                self._ally_layout = wanted
+            return
+
+        # en marche : les pas devant le plus en retard des allies
+        nearest = {a: min(range(len(path)), key=lambda i: (math.dist(path[i], heres[a]), -i)) for a in allies}
+        first = min(nearest.values())
+        ahead = path[first:]
+        if len(ahead) < 2:
+            ahead = path[-2:]
+            first = len(path) - 2
+        if len(ahead) > route["count"]:
+            # plus de pas que la route n'en contient : un sur k, du plus proche
+            # d'elle jusqu'au dernier (sinon elle restait derriere le debut de
+            # la trace sur un long trajet, 2026-11-07)
+            span = len(ahead) - 1
+            picks = sorted({round(i * span / (route["count"] - 1)) for i in range(route["count"])})
+            ahead = [ahead[i] for i in picks]
+        wanted = ("trail", tuple(ahead), style)
+        if layout != wanted:
+            data = b"".join(self._ally_point(point, ahead[min(i + 1, len(ahead) - 1)], self.ALLY_POINT_PLAIN, move)
+                            for i, point in enumerate(ahead[:-1]))
+            # dernier pas : poste de garde (attente infinie) ; jamais atteint
+            # sans passer au poste ci-dessus
+            data += self._ally_point(ahead[-1], ahead[-1], post_action, move, self.ALLY_STOP_WAIT, facing,
+                                     self.ALLY_STOP_FLAGS)
+            self.proc.write_bytes(route["address"], data)
+            self.proc.write_bytes(route["entry"] + 8, struct.pack("<H", len(ahead)))
+            for ally in allies:
+                # le pas de la route juste apres le plus proche d'elle
+                here_index = min(range(len(ahead)), key=lambda i: (math.dist(ahead[i], heres[ally]), -i))
+                index = min(here_index + 1, len(ahead) - 1)
+                self._ally_steer(ally, route, index, ahead[index])
+            self._ally_layout = wanted
+
+    def _game_lock(self) -> threading.Lock:
+        """Une commande de jeu a la fois (apparition, ordres aux allies)."""
+        if not hasattr(self, "_game_lock_obj"):
+            self._game_lock_obj = threading.Lock()
+        return self._game_lock_obj
+
+    def _ally_busy_now(self) -> bool:
+        """Les ordres aux allies s'effacent devant une apparition en attente
+        ou un ordre deja en cours (ils reviennent toutes les 2 s)."""
+        return getattr(self, "_spawn_busy", False) or getattr(self, "_ally_busy", False)
+
     def _spawn_run(self, kind: dict) -> None:
+        # attend la fin d'un ordre en cours (mode compagnon) au lieu d'etre
+        # refusee : apparitions qui echouaient au hasard (2026-11-07)
+        locked = self._game_lock().acquire(timeout=15.0)
         try:
-            self._spawn_enemy(kind)
+            if locked:
+                self._spawn_enemy(kind)
         except (OSError, struct.error, ValueError, KeyError, StopIteration):
             pass
         finally:
+            if locked:
+                self._game_lock().release()
             self._spawn_busy = False
 
     def _spawn_q(self, address: int) -> int:
@@ -343,9 +869,12 @@ class SpawnMixin:
             return False
         if not self._spawn_register(funcs, kind["zone"]):
             return False
+        unit_template = self._spawn_unit_for_zone(kind["unit"])
+        if unit_template is None:
+            return False
         self._spawn_names = getattr(self, "_spawn_names", self.SPAWN_FIRST_NAME) + 2
         units = self._spawn_tasks(self.SPAWN_UNIT_VTABLE_RVA)
-        unit_args = self._spawn_named(kind["unit"], self._spawn_names)
+        unit_args = self._spawn_named(unit_template, self._spawn_names)
         if self._spawn_command(unit_args, funcs["chara_named"]) is None:
             return False
         created = self._spawn_tasks(self.SPAWN_UNIT_VTABLE_RVA) - units
@@ -378,7 +907,12 @@ class SpawnMixin:
         self._spawn_copy_route(soldier, kind)
         flags = struct.unpack("<I", self.proc.read_bytes(soldier + self.SPAWN_START_FLAGS, 4))[0]
         self.proc.write_bytes(soldier + self.SPAWN_START_FLAGS, struct.pack("<I", flags | self.SPAWN_START_BIT))
-        return self.speed.game_call(funcs["start"], soldier, timeout=10.0) is not None
+        if self.speed.game_call(funcs["start"], soldier, timeout=10.0) is None:
+            return False
+        if kind.get("kick"):
+            # la placer de nouveau relance son etat : son IA demarre (voir ally_kick)
+            self.speed.game_call(funcs["warp"], soldier, target, 0, timeout=10.0)
+        return True
 
     def _spawn_managers(self, funcs: dict[str, int]) -> bool:
         """Cree les gestionnaires s'il n'y en a pas. Sans groupe, l'inscription
@@ -431,7 +965,7 @@ class SpawnMixin:
         present = self._spawn_groups_present()
         if group not in present:
             return False
-        if set(self.SPAWN_GROUP_SIDES) <= present:
+        if self.SPAWN_DECLARE_WAR and set(self.SPAWN_GROUP_SIDES) <= present:
             args = bytes.fromhex(self.SPAWN_GROUP_RELATION_ARGS)
             return self._spawn_command(args, funcs["chara"], positional=self.SPAWN_GROUP_RELATION_POSITIONAL) is not None
         return True
@@ -551,6 +1085,38 @@ class SpawnMixin:
                 self.proc.write_bytes(soldier + self.SPAWN_ROUTE_RECORD, record)
                 self.proc.write_bytes(soldier + self.SPAWN_ROUTE_GROUPS, groups)
                 return
+
+    # Groupe de routes de l'unite (option 0x9ECAEF62 = famille 0xEA2C5E,
+    # groupe) : les recettes portent 0x221E90 (s01a57l). Dans une zone sans
+    # ce groupe, le jeu le cherche sans tester l'echec (A29510, depuis le
+    # code des formations 847E8A) et plante : en s01a40l, 2026-11-07. On le
+    # remplace par un groupe de la zone ; le Gekko (route de ce groupe dans
+    # sa recette) n'apparait que si le groupe existe.
+    SPAWN_UNIT_GROUP = 0x221E90
+
+    def _spawn_zone_groups(self) -> list[int]:
+        """Groupes de routes (famille ALLY_ROUTE_KIND) de la zone."""
+        q = self._spawn_q
+        node = q(q(self.base + self.ALLY_ROUTE_GROUPS_RVA) + 8)
+        out, seen = [], set()
+        while node and node not in seen and len(seen) < 64:
+            seen.add(node)
+            kind, _unused, groups = struct.unpack("<iii", self.proc.read_bytes(node + 0x18, 12))
+            if kind == self.ALLY_ROUTE_KIND:
+                table = q(node + 0x28)
+                out += [struct.unpack("<i", self.proc.read_bytes(q(table + 8 * i) + 8, 4))[0]
+                        for i in range(min(max(groups, 0), 64))]
+            node = q(node + 0x10)
+        return out
+
+    def _spawn_unit_for_zone(self, unit: bytes) -> bytes | None:
+        groups = self._spawn_zone_groups()
+        if self.SPAWN_UNIT_GROUP in groups:
+            return unit
+        long_form = b"\x09" + struct.pack("<I", self.SPAWN_UNIT_GROUP)
+        if long_form not in unit or not groups:
+            return None
+        return unit.replace(long_form, b"\x09" + struct.pack("<I", groups[0] & 0xFFFFFFFF))
 
     def _spawn_named(self, args: bytes, name: int) -> bytes:
         end = self.SPAWN_NAME_OFFSET + 4
@@ -674,13 +1240,15 @@ class SpawnMixin:
         )
         return head + loop + tail
 
-    def _spawn_command(self, args: bytes, command: int, unit: int = 0, positional: int = 0) -> int | None:
+    def _spawn_command(self, args: bytes, command: int, unit: int = 0, positional: int = 0,
+                       memory: int = 0) -> int | None:
         """Execute une commande de creation comme l'interpreteur de script :
-        fin des arguments empilee, pointeur d'arguments, appel, depilage."""
+        fin des arguments empilee, pointeur d'arguments, appel, depilage.
+        memory : page reutilisee (commandes repetees), sinon une neuve."""
         funcs = self._live_funcs(self.SPAWN_FUNCS)
         if funcs is None:
             return None
-        memory = self._spawn_alloc(0x1000, PAGE_EXECUTE_READWRITE)
+        memory = memory or self._spawn_alloc(0x1000, PAGE_EXECUTE_READWRITE)
         buffer, code = memory + 0x100, memory + 0x600
         self.proc.write_bytes(buffer, args)
         stub = self._spawn_command_stub(buffer, command, unit, funcs, positional or self.SPAWN_POSITIONAL_SIZE)

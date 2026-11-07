@@ -132,10 +132,14 @@ L'onglet des réglages en direct, en plusieurs groupes :
     choisi dans la liste à côté de Snake, même dans une zone sans soldats
     (soldat PMC des trois régions, rebelle du Moyen-Orient ou d'Amérique
     du Sud, Gekko, Meryl ; les personnages grisés ne sont pas encore
-    disponibles). Patrouille pas toujours suivie, rebelle qui ne combat
-    pas les PMC, Gekko qui traverse le sol de la salle blanche des
-    Beauty, Meryl qui reste en garde sur place (ne lui tire pas dessus,
-    plantage constaté) : sauvegarde avant d'essayer.
+    disponibles). L'apparition ne met plus les ennemis en alerte.
+    Patrouille pas toujours suivie, Gekko qui traverse le sol de la salle
+    blanche des Beauty : sauvegarde avant d'essayer.
+  - **Meryl me suit (expérimental)** : une Meryl ajoutée suit Snake. Elle
+    passe là où il est passé, marche, court ou s'accroupit comme lui, et
+    s'arrête à une dizaine de mètres derrière lui, debout ou accroupie.
+    Hors alerte, les ennemis l'ignorent ; pendant une alerte, les rebelles
+    ajoutés combattent les PMC. Limite : Meryl ne se défend pas encore.
 
 ### Jauges
 

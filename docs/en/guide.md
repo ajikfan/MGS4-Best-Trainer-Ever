@@ -127,11 +127,15 @@ The live settings tab, in several groups:
   - **Spawn (experimental)**: makes the character picked in the list
     appear next to Snake, even in an area with no soldiers (PMC soldier
     from the three regions, Middle East or South American rebel, Gekko,
-    Meryl; greyed-out characters are not available yet). Patrol not
-    always followed, a rebel that does not fight the PMCs, a Gekko that
-    falls through the floor of the Beauties' white room, Meryl staying on
-    guard where she is (do not shoot her, a crash was seen): save before
+    Meryl; greyed-out characters are not available yet). Spawning no
+    longer alerts the enemies. Patrol not always followed, a Gekko that
+    falls through the floor of the Beauties' white room: save before
     trying.
+  - **Meryl follows me (experimental)**: an added Meryl follows Snake. She
+    goes where he went, walks, runs or crouches like him, and stops about
+    ten meters behind him, standing or crouched. Outside alerts, enemies
+    ignore her; during an alert, added rebels fight the PMCs. Limit:
+    Meryl does not defend herself yet.
 
 ### Gauges
 

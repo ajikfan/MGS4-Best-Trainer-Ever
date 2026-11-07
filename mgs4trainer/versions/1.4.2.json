@@ -394,6 +394,12 @@
    "0x18e65c8": "0x130d4b8",
    "0xeb13f0": "0xac52f0"
   },
+  "ALLY_ROUTE_GROUPS_RVA": {
+   "0x23f0b5c0": "0x23857640"
+  },
+  "ALLY_ROUTE_TABLE_RVA": {
+   "0x234f488": "0x1c9db88"
+  },
   "ALLY_WRITE_SITES": {
    "0x14b0160": "0xf52880",
    "0x14b038d": "0xf52aad",
@@ -1067,6 +1073,10 @@
    "0x9dd440": "0x6fc350"
   },
   "SNAKE_CROUCH_STATE": {
+   "0x9df1e0": "0x6fe0f0"
+  },
+  "SNAKE_CROUCH_STATES": {
+   "0x9ddf60": "0x6fce70",
    "0x9df1e0": "0x6fe0f0"
   },
   "SNAKE_MACHINE_VTABLE_RVA": {

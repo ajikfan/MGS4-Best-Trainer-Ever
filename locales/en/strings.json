@@ -150,6 +150,8 @@
   "vitals.no_alerts": "No Alerts",
   "vitals.no_alerts_tooltip": "Code patch: the game no longer computes the global alert from the soldier units, so it stays on Normal whatever the cause. Enemies still react locally to you (\"!\", they come to check, they may shoot if they see you) but never trigger an alert, reinforcements or alert music. Takes priority over the forced alert.",
   "vitals.spawn_soldier": "Spawn (experimental)",
+  "vitals.ally_follow": "Meryl follows me (experimental)",
+  "vitals.ally_follow_tooltip": "A Meryl added with \"Spawn\" follows Snake: she goes where he went, walks, runs or crouches like him, and stops about ten meters behind him, standing or crouched. During an alert, the trainer lets her act and makes added rebels enemies of the PMCs (they fight); outside alerts, enemies ignore her. Limit: she does not defend herself yet. The trainer borrows a route of the area that nobody follows for her and gives it back unchanged afterwards.",
   "vitals.spawn_type_pmc": "PMC soldier (Middle East)",
   "vitals.spawn_type_pmc_sa": "PMC soldier (South America)",
   "vitals.spawn_type_pmc_ee": "PMC soldier (Eastern Europe)",

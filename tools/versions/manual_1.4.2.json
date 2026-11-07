@@ -162,5 +162,17 @@
  "0x18ca7f8": [
   19903608,
   "manuel : vtable ENEMY_SOUTHAMERICA_MIL (RTTI 1.4.2 ; 1.4.1 par le constructeur C5F100, lea C5F230)"
+ ],
+ "0x23f0b5c0": [
+  595949120,
+  "manuel : liste des groupes de routes (rbp de C74720 / 90EBB0)"
+ ],
+ "0x234f488": [
+  30006152,
+  "manuel : routes chargees, lues par 40D420 (2F51B0 en 1.4.2)"
+ ],
+ "0x9ddf60": [
+  7327344,
+  "manuel : etat de Snake accroupi en mouvement (octets identiques verifies)"
  ]
 }

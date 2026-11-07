@@ -576,6 +576,10 @@ class TrainerWindow(QMainWindow):
         except OSError:
             pass
         try:
+            live.ally_follow_tick(self.vitals_tab.ally_follow_check.isChecked())
+        except (OSError, ValueError):
+            pass
+        try:
             if not live.cutscene_quit_install():
                 self.cutscene_overlay.hide()
                 return
@@ -743,6 +747,7 @@ class TrainerWindow(QMainWindow):
             user32.UnregisterHotKey(wintypes.HWND(int(self.winId())), hotkey_id)
         self._hotkeys = []
         self._cutscene_timer.stop()
+        self.live.ally_follow_release()  # points de la route empruntee remis
         self.live.cutscene_quit_remove()
         self.live.load_menu_remove()
         self.cutscene_overlay.close()

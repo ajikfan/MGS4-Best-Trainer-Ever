@@ -12,7 +12,7 @@ ROOT = r"D:\Documents\GitHub\MGS4-Trainer\mgs4trainer"
 OLD = open(os.path.join(os.path.dirname(__file__), "old", "image_rva1000.bin"), "rb").read()
 BASE = 0x1000
 CODE_END = 0x165F000
-NOT_ADDRESSES = {"SNAKE_MOTIONS", "ALERT_SECOND_TIMER", "OCTOPUS_PHASE_FLAGS", "CSM_HIGHLIGHTS"}
+NOT_ADDRESSES = {"SPAWN_UNIT_GROUP", "SNAKE_MOTIONS", "ALERT_SECOND_TIMER", "OCTOPUS_PHASE_FLAGS", "CSM_HIGHLIGHTS"}
 # identifiants de personnage (+0xC08) ranges a cote des classes
 NOT_ADDRESS_VALUES = {("ALLIES", 0x86A795), ("ALLIES", 0xC13869), ("ALLIES", 0xF1379E), ("ALLIES", 0xF13930), ("ALLIES", 0x213715)}
 # adresses que les indices ne reconnaissent pas

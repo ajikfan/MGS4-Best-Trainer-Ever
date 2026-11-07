@@ -224,9 +224,13 @@ class VitalsTab(QWidget):
                 self.spawn_type_combo.model().item(self.spawn_type_combo.count() - 1).setEnabled(False)
         spawn_row.addWidget(self.spawn_type_combo)
         spawn_row.addWidget(self.spawn_btn)
+        # Mode compagnon : voir MGS4Live.ally_follow_tick (appele par la fenetre).
+        self.ally_follow_check = QCheckBox(tr("vitals.ally_follow"))
+        self.ally_follow_check.setToolTip(tr("vitals.ally_follow_tooltip"))
+        spawn_row.addWidget(self.ally_follow_check)
         spawn_row.addStretch(1)
         zone_layout.addLayout(spawn_row)
-        self.zone_buttons += [self.spawn_type_combo, self.spawn_btn]
+        self.zone_buttons += [self.spawn_type_combo, self.spawn_btn, self.ally_follow_check]
         layout.addWidget(zone_group)
 
         weapons_group = QGroupBox(tr("vitals.weapons_group"))
