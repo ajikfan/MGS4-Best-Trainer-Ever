@@ -244,6 +244,27 @@ class SpawnMixin:
             # 06 id 0x1C0B11, puis option 0x389205 = nom de l'acteur
             "setup": (bytes.fromhex("06110b1c596e0592380d2abcb501556103d61ac10000"), 4, 10),
         },
+        # Laughing Octopus, forme bete (ESSAI 2026-11-07) : commande de
+        # creation relevee a l'entree du combat (s02a50l, chara nomme 4EC50
+        # en 1.4.2), sans parametre de procedure ; nom d'origine 06 04A663
+        # remplace par 09 + nom. Pas d'escouade ni de demarrage de soldat
+        # (vtable+0x1C8 nulle) : boss cree seul, a la position de l'option
+        # 0x70FA4ECF (09 X, 01 Y, 09 Z, entiers), reecrite pres de Snake.
+        # vtable OCTOPUS en 1.4.2 (pas d'image 1.4.1 de cette zone : sur une
+        # autre version, l'acteur cree n'est pas retrouve et rien ne suit).
+        "laughing": {
+            "zone": "s02a50l",
+            "vtable": 0x1331950,
+            "boss": True,
+            "position_option": bytes.fromhex("70fa4ecf"),
+            "distance": 4000.0,
+            "actor": bytes.fromhex(
+                "06e922250900000000557794113d915c73006072190018bc190018c05d1270fa"
+                "4ecf0957c0fdff01182e09c7cff8ffc15d0d6585a30101e02e01002001002057"
+                "6592a00101102758692bb201191001405864131248191001445a727511ce0800"
+                "020801025a674d7f940802020803025a63f1ef2908040208050257737199a008"
+                "0602596e696a4e08070202645a64511791080902080a0200"),
+        },
     }
     # Gestionnaires absents de certaines zones (salle blanche des Beauty), dans
     # l'ordre des scripts de zone. Sans RAGDOLL_MNG : deja la, et un doublon
@@ -280,7 +301,12 @@ class SpawnMixin:
     # Liste affichee, dans l'ordre. Sans entree dans SPAWN_TYPES : grise (pas de recette).
     # SPAWN_BROKEN : recette connue mais plantage constate (rebelle d'Europe
     # de l'Est : a sa creation), grise aussi.
-    SPAWN_BROKEN = frozenset({"rebel_ee"})
+    # Laughing Octopus (2026-11-07) : creee, mais son effet visuel attend des
+    # ressources graphiques non injectees (pointeur actif nul, plantage A3B40 ;
+    # parade : vider le lien +8 de sa structure -> objet par defaut 0x33A2B8),
+    # puis son IA cherche la zone d'arene de sa cible (F0C6C0, table vide hors
+    # de s02a50l) et plante en F0A727. Mise en pause.
+    SPAWN_BROKEN = frozenset({"rebel_ee", "laughing"})
     SPAWN_ROSTER = (
         "pmc", "pmc_sa", "pmc_ee", "rebel", "rebel_sa", "rebel_ee",
         "gekko", "gekko_dwarf", "frog", "zombie", "laughing", "raging",
@@ -692,6 +718,62 @@ class SpawnMixin:
                 self.proc.write_bytes(address, struct.pack("<I", mask & ~added.pop(address)))
         self._ally_war_added = added
 
+    # Meryl dans le camp de Snake (2026-11-07) : l'hostilite reste posee tant
+    # qu'un soldat vivant la vise, meme alerte retombee (Snake invisible), puis
+    # ALLY_WAR_HOLD s encore. Cible d'un soldat : module de terrain
+    # (ENE_PLG_FIELD, acteur+0x42B8), pointeur +0x4E930 vers une entree de sa
+    # table dont +0x60 est l'acteur vise. Sans hostilite, les PMC sont au
+    # statut 1 (connus) dans la table de Meryl et elle ne tire pas ; avec,
+    # statut 3 (ennemis).
+    ALLY_FIELD = 0x42B8
+    ALLY_FIELD_TARGET = 0x4E930
+    ALLY_FIELD_ENTRY_ACTOR = 0x60
+    ALLY_LIFE_OBJECT, ALLY_LIFE = 0x42B0, 0x314
+    ALLY_WAR_HOLD = 5.0
+
+    def _ally_engaged(self, allies: list[int]) -> bool:
+        """Un soldat vivant de la zone vise-t-il un allie ?"""
+        manager = self._alert_manager()
+        for soldier in self._alert_soldiers(manager) if manager else []:
+            if soldier in allies:
+                continue
+            try:
+                life_object = self._spawn_q(soldier + self.ALLY_LIFE_OBJECT)
+                field = self._spawn_q(soldier + self.ALLY_FIELD)
+                if not life_object or not field:
+                    continue
+                if struct.unpack("<i", self.proc.read_bytes(life_object + self.ALLY_LIFE, 4))[0] <= 0:
+                    continue
+                entry = self._spawn_q(field + self.ALLY_FIELD_TARGET)
+                if entry and self._spawn_q(entry + self.ALLY_FIELD_ENTRY_ACTOR) in allies:
+                    return True
+            except OSError:
+                continue
+        return False
+
+    def _ally_hold(self, allies: list[int]) -> None:
+        """Combat : poste de garde d'un point a la position du premier allie
+        qui suit la route empruntee, ecrit une fois par combat."""
+        route = getattr(self, "_ally_follow_route", None)
+        if not route or route["pid"] != self.pid or not route.get("entry"):
+            return
+        bound = [a for a in allies
+                 if self._spawn_q(self._spawn_q(a + self.ALLY_FOLLOWER) + self.ALLY_FOLLOWER_ENTRY) == route["entry"]]
+        if not bound:
+            return
+        here = struct.unpack("<3f", self.proc.read_bytes(bound[0] + self.ALLY_POSITION, 12))
+        layout = getattr(self, "_ally_layout", None) or ("",)
+        if layout[0] == "hold" and math.dist(layout[1], here) < self.ALLY_STOP_NEAR:
+            return
+        # poste absent ou laisse loin derriere (un poste d'un combat
+        # precedent la faisait courir vers lui a travers un mur, 2026-11-07)
+        self.proc.write_bytes(route["address"], self._ally_point(
+            here, here, self.ALLY_STOP_ACTION, self.ALLY_MOVE_RUN, self.ALLY_STOP_WAIT, 0, self.ALLY_STOP_FLAGS))
+        self.proc.write_bytes(route["entry"] + 8, struct.pack("<H", 1))
+        for ally in bound:
+            self._ally_steer(ally, route, 0, struct.unpack("<3f", self.proc.read_bytes(ally + self.ALLY_POSITION, 12)))
+        self._ally_layout = ("hold", here)
+
     def ally_follow_tick(self, enabled: bool) -> None:
         """Mode compagnon (2026-11-07). Une route de la zone que personne ne
         suit est empruntee et attachee une fois a l'allie (commande 0x48CC82) ;
@@ -719,14 +801,11 @@ class SpawnMixin:
         position = self.player_position()
         allies = self._ally_alive()
         alert = self.read_alert_state() != 0
-        self._ally_war(bool(allies) and alert)
+        if allies and (alert or self._ally_engaged(allies)):
+            self._ally_war_until = now + self.ALLY_WAR_HOLD
+        fighting = bool(allies) and now < getattr(self, "_ally_war_until", 0.0)
+        self._ally_war(fighting)
         if position is None or not allies:
-            return
-        if alert:
-            # en alerte, son IA de combat agit seule : piloter son suivi de
-            # route la ramenait sans cesse a la trace, elle ne ripostait pas
-            # et courait contre un mur (2026-11-07)
-            self._ally_layout = None  # trace et poste reecrits au retour au calme
             return
         route = getattr(self, "_ally_follow_route", None)
         if route and (route["pid"] != self.pid or not route.get("entry")
@@ -743,6 +822,46 @@ class SpawnMixin:
             self._ally_follow_route, self._ally_layout = route, None
             if route is None:
                 return
+
+        # attache : une fois par allie (et apres relance de son IA), avant
+        # tout le reste, combat compris : une Meryl apparue pendant une
+        # alerte suivait sinon la route de sa recette (patrouille de la zone,
+        # 19 points) en ligne droite, a travers un mur (2026-11-07)
+        if getattr(self, "_ally_kicked_pid", None) != self.pid:
+            self._ally_kicked, self._ally_kicked_pid = set(), self.pid
+        new = [a for a in allies if a not in self._ally_kicked and self._ally_is_spawned(a)]
+        if new:
+            self.ally_kick(new, 0)  # relance de son IA, sans ordre de route
+            return
+        # attache par la commande de route : le jeu ramene le suivi a la route
+        # de la fiche de l'acteur a chaque image (une route a nous, hors des
+        # groupes, etait quittee en moins de 20 ms, 2026-11-07)
+        unbound = [a for a in allies if self._spawn_q(self._spawn_q(a + self.ALLY_FOLLOWER) + self.ALLY_FOLLOWER_ENTRY)
+                   != route["entry"]]
+        if unbound:
+            # la route empruntee ramenee d'abord a sa position (poste d'un
+            # point) : elle ne part ni vers le debut d'origine de la route ni
+            # vers un ancien pas de la trace
+            here = struct.unpack("<3f", self.proc.read_bytes(unbound[0] + self.ALLY_POSITION, 12))
+            self.proc.write_bytes(route["address"], self._ally_point(
+                here, here, self.ALLY_STOP_ACTION, self.ALLY_MOVE_RUN, self.ALLY_STOP_WAIT, 0,
+                self.ALLY_STOP_FLAGS))
+            self.proc.write_bytes(route["entry"] + 8, struct.pack("<H", 1))
+            self._ally_layout = ("hold", here)
+            self._ally_send([(a, route["name"], 0) for a in unbound])
+            return
+
+        if fighting:
+            # en alerte, son IA de combat agit seule : piloter son suivi de
+            # route la ramenait sans cesse a la trace, elle ne ripostait pas
+            # et courait contre un mur (2026-11-07). Le poste est ramene une
+            # fois a sa position : laisse tel quel, elle repartait en ligne
+            # droite vers l'ancien poste, a travers un mur. En deplacement
+            # (acteur+0x45E0 bit 0x800), son module de cible ne vise que sa
+            # destination et elle ne tire pas.
+            self._ally_hold(allies)
+            return
+
         move = self._ally_auto_move(position, allies, now)
         post_action = self.ally_point_action if self.ally_point_action >= 0 else (
             self.ALLY_STOP_ACTION_CROUCH if getattr(self, "_ally_snake_crouched", False) else self.ALLY_STOP_ACTION)
@@ -759,27 +878,13 @@ class SpawnMixin:
             behind += math.dist(trail[cut], trail[cut - 1])
             cut -= 1
         if behind < self.ALLY_STOP_BEHIND or cut < 1:
-            return  # trace trop courte
+            # trace trop courte : poste sur place (ramene a elle si elle s'en
+            # est eloignee)
+            self._ally_hold(allies)
+            return
         path = trail[:cut + 1]
         stop = path[-1]
         heres = {ally: struct.unpack("<3f", self.proc.read_bytes(ally + self.ALLY_POSITION, 12)) for ally in allies}
-
-        # attache : une fois par allie (et apres relance de son IA)
-        if getattr(self, "_ally_kicked_pid", None) != self.pid:
-            self._ally_kicked, self._ally_kicked_pid = set(), self.pid
-        new = [a for a in allies if a not in self._ally_kicked and self._ally_is_spawned(a)]
-        if new:
-            self.ally_kick(new, 0)  # relance de son IA, sans ordre de route
-            return
-        # attache par la commande de route : le jeu ramene le suivi a la route
-        # de la fiche de l'acteur a chaque image (une route a nous, hors des
-        # groupes, etait quittee en moins de 20 ms, 2026-11-07)
-        unbound = [a for a in allies if self._spawn_q(self._spawn_q(a + self.ALLY_FOLLOWER) + self.ALLY_FOLLOWER_ENTRY)
-                   != route["entry"]]
-        if unbound:
-            self._ally_layout = None
-            self._ally_send([(a, route["name"], 0) for a in unbound])
-            return
 
         layout = getattr(self, "_ally_layout", None)
         facing = int(math.atan2(position[0] - stop[0], position[2] - stop[2]) / (2 * math.pi) * 0x10000) & 0xFFFF
@@ -861,6 +966,8 @@ class SpawnMixin:
             return False
         if self._spawn_q(self.base + self.SPAWN_CURRENT_UNIT_RVA):
             return False  # un script de creation est en cours
+        if kind.get("boss"):
+            return self._spawn_boss(kind, funcs, position)
         if not self._spawn_patch_route() or not self._spawn_managers(funcs):
             return False
         if not self._spawn_group(funcs, kind["group"]):
@@ -913,6 +1020,27 @@ class SpawnMixin:
             # la placer de nouveau relance son etat : son IA demarre (voir ally_kick)
             self.speed.game_call(funcs["warp"], soldier, target, 0, timeout=10.0)
         return True
+
+    def _spawn_boss(self, kind: dict, funcs: dict[str, int], position) -> bool:
+        """Boss cree seul (ESSAI) : ressources de sa zone, puis sa commande de
+        creation (chara nomme), position de depart ecrite dans l'option
+        position_option : 09 X (int32), 01 Y (int16), 09 Z (int32)."""
+        if not self._spawn_register(funcs, kind["zone"]):
+            return False
+        self._spawn_names = getattr(self, "_spawn_names", self.SPAWN_FIRST_NAME) + 2
+        args = self._spawn_named(kind["actor"], self._spawn_names + 1)
+        at = args.index(kind["position_option"]) + len(kind["position_option"])
+        x, y, z = position
+        y = max(-0x8000, min(0x7FFF, int(y)))
+        place = (b"\x09" + struct.pack("<i", int(x + kind["distance"])) + b"\x01" + struct.pack("<h", y)
+                 + b"\x09" + struct.pack("<i", int(z)))
+        if args[at] != 0x09 or args[at + 5] != 0x01 or args[at + 8] != 0x09:
+            return False  # option de position inattendue
+        args = args[:at] + place + args[at + len(place):]
+        before = self._spawn_tasks(kind["vtable"])
+        if self._spawn_command(args, funcs["chara_named"], positional=self.SPAWN_POSITIONAL_SIZE) is None:
+            return False
+        return len(self._spawn_tasks(kind["vtable"]) - before) == 1
 
     def _spawn_managers(self, funcs: dict[str, int]) -> bool:
         """Cree les gestionnaires s'il n'y en a pas. Sans groupe, l'inscription
