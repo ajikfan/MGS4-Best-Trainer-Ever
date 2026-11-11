@@ -4,6 +4,40 @@
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
+## Nouveautés de la V2.9.0
+
+### Nouvel onglet Événements
+
+**Toute la zone**, **Apparition de PNJ** et **Déclencheurs** (l'action
+jouée par Snake) quittent l'onglet État de jeu pour un onglet à eux. Le
+bouton **Salle blanche** n'est plus que dans l'onglet Boss. Les **Points
+Drebin** passent en haut de l'onglet Stats, et le statut affiche la
+version du jeu détectée (1.4.1 ou 1.4.2).
+
+### Metal Gear Mk. II
+
+- **Invisible** : les soldats ne voient plus le Mk. II non plus.
+- **Intouchable** : le Mk. II ne prend plus aucun coup.
+- **Batterie verrouillée** (Jauges, batterie du Solid Eye, partagée avec
+  le Mk. II) : elle ne se vide plus quand il roule ; avant, le trainer la
+  remontait sans empêcher la baisse.
+
+### Faire apparaître (expérimental)
+
+- **Laughing Octopus** (forme Bête, 1.4.2 seulement) : elle apparaît hors
+  de son arène, tire sur Snake en boucle et disparaît une fois vaincue.
+  Ces réglages touchent aussi son vrai combat jusqu'à la fermeture du
+  jeu.
+- **Meryl me suit** : une Meryl ajoutée suit Snake. Elle passe là où il
+  est passé, marche, court ou s'accroupit comme lui, et s'arrête une
+  dizaine de mètres derrière lui. Hors alerte, les ennemis l'ignorent ;
+  pendant une alerte, les rebelles ajoutés combattent les PMC. Limites :
+  elle ne se défend pas encore et peut parfois courir contre un mur.
+- Plus d'alerte au moment de l'apparition, plus de plantage de groupe
+  dans certaines zones.
+- Les personnages non disponibles pour la version du jeu détectée sont
+  grisés.
+
 ## Nouveautés de la V2.8.1
 
 ### Crying Wolf

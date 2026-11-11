@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.8.1
+# MGS4 Trainer — V2.9.0
 
 *[Version française](README.md)*
 
@@ -49,18 +49,18 @@ up the compatible version, the warnings and the version history.
 - [How it works](docs/en/how-it-works.md)
 - [Maintenance](docs/en/maintenance.md) (compatibility, build, code layout)
 
-## Latest version: V2.8.1
+## Latest version: V2.9.0
 
-- **Crying Wolf**: One Shot, One Kill also works when shooting her armor
-  (Beast form).
-- **Cutscene pause menu**: confirmation in every cutscene (Act 4
-  included), return to the title without a crash.
-- **Spawn**: no more crash on reload, new South American rebel, Meryl
-  and the rebels no longer run into a wall.
+- **New Events tab**: Whole area, NPC spawning and triggers; Drebin
+  Points in the Stats tab; game version shown in the status.
+- **Metal Gear Mk. II**: invisible to soldiers, untouchable, and its
+  locked battery no longer drains.
+- **Spawn** (experimental): Laughing Octopus outside her arena (1.4.2),
+  "Meryl follows me", no more alert when spawning.
 - Delivered by the **built-in update**; DLL unchanged.
 
-With **V2.8.0**: **MGS4 1.4.2** support, new **Spawn** (experimental),
-shortcuts only taken while the game is in front.
+With **V2.8.1**: Crying Wolf (armor) with One Shot, One Kill, reliable
+cutscene pause menu, no more crash on reload after a spawn.
 
 Details in [What's new in each version](docs/en/whats-new.md).
 

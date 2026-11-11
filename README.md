@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.8.1
+# MGS4 Trainer — V2.9.0
 
 *[English version](README.en.md)*
 
@@ -51,20 +51,20 @@ des versions.
 - [Comment ça marche](docs/fonctionnement.md)
 - [Maintenance](docs/maintenance.md) (compatibilité, build, organisation du code)
 
-## Dernière version : V2.8.1
+## Dernière version : V2.9.0
 
-- **Crying Wolf** : Un coup, un mort fonctionne aussi en tirant sur son
-  armure (forme Bête).
-- **Menu pause des cinématiques** : confirmation dans toutes les
-  cinématiques (acte 4 compris), retour au titre sans plantage.
-- **Faire apparaître** : plus de plantage au rechargement, nouveau
-  rebelle d'Amérique du Sud, Meryl et les rebelles ne courent plus contre
-  un mur.
+- **Nouvel onglet Événements** : Toute la zone, apparition de PNJ et
+  déclencheurs ; Points Drebin dans l'onglet Stats ; version du jeu
+  affichée dans le statut.
+- **Metal Gear Mk. II** : invisible pour les soldats, intouchable, et sa
+  batterie verrouillée ne se vide plus.
+- **Faire apparaître** (expérimental) : Laughing Octopus hors de son
+  arène (1.4.2), « Meryl me suit », plus d'alerte à l'apparition.
 - Livrée par la **mise à jour intégrée** ; DLL inchangée.
 
-Avec la **V2.8.0** : compatibilité avec **MGS4 1.4.2**, nouveau **Faire
-apparaître** (expérimental), raccourcis pris seulement quand le jeu est
-au premier plan.
+Avec la **V2.8.1** : Crying Wolf (armure) avec Un coup, un mort, menu
+pause des cinématiques fiable, plus de plantage au rechargement après
+une apparition.
 
 Détail dans [Nouveautés par version](docs/nouveautes.md).
 

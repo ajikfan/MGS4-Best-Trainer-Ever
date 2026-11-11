@@ -4,6 +4,39 @@
 
 Details of the latest versions. The full history is also in the trainer's **Help** button and on the [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases) page.
 
+## What's new in V2.9.0
+
+### New Events tab
+
+**Whole area**, **NPC spawning** and **Triggers** (the action Snake
+plays) leave the Game state tab for a tab of their own. The **White
+room** button now only lives in the Bosses tab. The **Drebin Points**
+move to the top of the Stats tab, and the status shows the detected game
+version (1.4.1 or 1.4.2).
+
+### Metal Gear Mk. II
+
+- **Invisible**: soldiers no longer see the Mk. II either.
+- **Untouchable**: the Mk. II takes no hits at all.
+- **Locked battery** (Gauges, Solid Eye battery, shared with the Mk. II):
+  it no longer drains while the Mk. II moves; before, the trainer topped
+  it up without stopping the drain.
+
+### Spawn (experimental)
+
+- **Laughing Octopus** (Beast form, 1.4.2 only): she appears outside her
+  arena, shoots at Snake in a loop and vanishes once defeated. These
+  changes also affect her real fight until the game is closed.
+- **Meryl follows me**: an added Meryl follows Snake. She goes where he
+  went, walks, runs or crouches like him, and stops about ten meters
+  behind him. Outside alerts, enemies ignore her; during an alert, added
+  rebels fight the PMCs. Limits: she does not defend herself yet and may
+  sometimes run into a wall.
+- No more alert when a character appears, no more group crash in some
+  areas.
+- Characters not available for the detected game version are greyed
+  out.
+
 ## What's new in V2.8.1
 
 ### Crying Wolf
