@@ -7,7 +7,8 @@ Ce que fait chaque onglet et chaque réglage, et comment utiliser les profils F1
 ### Barre du haut (toujours visible)
 
 - **Statut** : connecté au jeu ou non (le trainer s'accroche tout seul
-  à `mgs4.exe` dès qu'une partie est chargée).
+  à `mgs4.exe` dès qu'une partie est chargée), avec la version du jeu
+  détectée (1.4.1 ou 1.4.2).
 - **Mode avancé (valeurs brutes)** : affiche les colonnes "Valeur brute"
   et "Définir (brut)" dans les tableaux, et les objets internes masqués
   par défaut (certains font planter le jeu : à n'utiliser qu'en
@@ -24,8 +25,6 @@ Ce que fait chaque onglet et chaque réglage, et comment utiliser les profils F1
   pour ranger la configuration actuelle sous une touche (voir "Profils
   F1 à F11" plus bas).
 - **Langue** : français ou anglais (le trainer redémarre).
-- **Points Drebin** : solde actuel et total des ventes, avec un champ
-  et un bouton OK pour chacun.
 
 ### Stats
 
@@ -34,6 +33,9 @@ sauvegarde, rangées par thème : **Combat** (ennemis tués, tirs dans la
 tête...), **Infiltration** (alertes, ennemis endormis...),
 **Mouvement**, **Objets**, **Flashbacks**, **Temps** (en heures,
 minutes, secondes). Chaque valeur se modifie directement.
+
+En haut de l'onglet, les **Points Drebin** : solde actuel et total des
+ventes, avec un champ et un bouton OK pour chacun.
 
 ### État de jeu
 
@@ -51,8 +53,7 @@ L'onglet des réglages en direct, en plusieurs groupes :
   (bandeau "Vitesse : x %" par-dessus le jeu).
 - **Outils de partie** : case **Mode photo** (ou * du pavé numérique :
   caméra libre, voir le bouton **Commandes du mode photo…** et les
-  nouveautés des V2.6.0 et V2.7.0), bouton **Salle blanche** (contre une Beauty,
-  après la forme Bête : passage immédiat dans la salle blanche), bouton
+  nouveautés des V2.6.0 et V2.7.0), bouton
   **Menu principal** (retour au menu principal à tout moment de la
   partie, après confirmation : la progression non sauvegardée est
   perdue). Tant que le trainer est ouvert, le menu pause des
@@ -92,54 +93,16 @@ L'onglet des réglages en direct, en plusieurs groupes :
 - **Snake** :
   - **Intouchable** : aucun impact n'a d'effet sur Snake (ni dégâts, ni
     projection, ni assommage) ; aux commandes de Metal Gear REX, REX
-    ignore aussi les coups (ni dégâts, ni réaction) ;
+    ignore aussi les coups (ni dégâts, ni réaction), et le Metal Gear
+    Mk. II ne prend plus aucun coup ;
   - **Invisible** : les soldats, les Gekko et les Gekko nains ne le voient
     plus, même debout devant eux, et un tir sans silencieux ne les fait
-    plus passer en alerte (le hold-up reste possible). À combiner avec
+    plus passer en alerte (le hold-up reste possible). Le Metal Gear
+    Mk. II n'est plus vu non plus. À combiner avec
     "Pas d'alerte" pour que rien ne déclenche l'alerte générale ;
   - **Pas de mal de dos** : Snake ne se tient plus le dos, ni après une
     chute de haut (réception normale, les dégâts de la chute restent), ni
-    après être resté longtemps accroupi ;
-  - **Déclencher** : choisis une action dans la liste et clique sur
-    **Déclencher** pour que Snake la joue. En tête : **Tomber de haut**,
-    **Mal de dos accroupi** (seulement accroupi et immobile) et **Vomir**
-    (version debout ou accroupie selon la posture), puis 214 animations
-    du jeu (coups, CQC, chutes, réveils, échelles, suspendu, électrocuté,
-    « ça sent mauvais »…), chacune avec son numéro. Les actions partent
-    dans n'importe quelle posture, sans dégâts ni son ; Snake reprend
-    ensuite sa posture (accroupi, allongé, face contre le sol, sur le
-    dos). Les animations prévues pour une autre posture (échelle,
-    suspendu…) peuvent donner un résultat étrange.
-- **Toute la zone** : agit d'un clic sur toute la zone, par les fonctions
-  du jeu lui-même, quel que soit l'état en cours (un ennemi endormi peut
-  être tué).
-  - **Cible** : **Ennemis**, **Rebelles**, **Tous les PNJ** (les civils,
-    les boss et le Rat Patrol ne sont jamais visés) ou **Rat Patrol**
-    (Tuer, Assommer et Endormir seulement) ;
-  - **Tuer** : soldats, Gekko, Gekko nains, véhicules, tanks,
-    hélicoptères et Sliders (les machines comptent comme ennemis, les
-    véhicules selon leur camp) ;
-  - **Assommer** : les soldats tombent K.O., les Gekko tombent au sol,
-    les Gekko nains sont paralysés quelques secondes, les Gekko de la
-    fuite de Metal Gear REX (acte 4) s'accroupissent quelques secondes ;
-  - **Endormir** : soldats et Gekko (ni les Gekko nains ni les Gekko de
-    la fuite de REX ne dorment) ;
-  - **Rire**, **Pleurer**, **Enrager**, **Crier** : les émotions des
-    Beauty, sur les soldats éveillés, pendant une trentaine de secondes ;
-  - **Rebelles : Neutres / Hostiles** : cochée, impose l'attitude des
-    rebelles envers Snake (une alerte déjà en cours suit son cours) ;
-  - **Faire apparaître (expérimental)** : fait apparaître le personnage
-    choisi dans la liste à côté de Snake, même dans une zone sans soldats
-    (soldat PMC des trois régions, rebelle du Moyen-Orient ou d'Amérique
-    du Sud, Gekko, Meryl ; les personnages grisés ne sont pas encore
-    disponibles). L'apparition ne met plus les ennemis en alerte.
-    Patrouille pas toujours suivie, Gekko qui traverse le sol de la salle
-    blanche des Beauty : sauvegarde avant d'essayer.
-  - **Meryl me suit (expérimental)** : une Meryl ajoutée suit Snake. Elle
-    passe là où il est passé, marche, court ou s'accroupit comme lui, et
-    s'arrête à une dizaine de mètres derrière lui, debout ou accroupie.
-    Hors alerte, les ennemis l'ignorent ; pendant une alerte, les rebelles
-    ajoutés combattent les PMC. Limite : Meryl ne se défend pas encore.
+    après être resté longtemps accroupi.
 
 ### Jauges
 
@@ -147,7 +110,8 @@ Toutes les jauges, toujours visibles, rangées par groupe (la page défile
 si la fenêtre est petite) :
 
 - **Snake** : Santé, Stamina, **Grip** (suspendu à un rebord),
-  **Oxygène** (sous l'eau), Stress, batterie du Solid Eye ;
+  **Oxygène** (sous l'eau), Stress, batterie du Solid Eye (partagée avec
+  le Metal Gear Mk. II : verrouillée, le Mk. II ne la vide plus non plus) ;
 - **Véhicules** : **Drebin 893** (le véhicule de l'acte 2), **Van**
   (celui à protéger à l'acte 3), Santé de Metal Gear REX ;
 - **Rat Patrol Team 01** : un encadré par membre (**Meryl**, **Johnny**,
@@ -193,6 +157,55 @@ endurance ne descendent pas sous 1 (leurs phases et leurs scripts
 dépendent de la vie). Une vie verrouillée empêche les changements de phase
 liés à la vie. Confirmé sur Raging Raven et Laughing Octopus ; les autres
 boss sont reconnus par le nom de leur classe dans le jeu.
+
+### Événements
+
+Ce qui agit sur la zone et le scénario :
+
+- **Toute la zone** : agit d'un clic sur toute la zone, par les fonctions
+  du jeu lui-même, quel que soit l'état en cours (un ennemi endormi peut
+  être tué).
+  - **Cible** : **Ennemis**, **Rebelles**, **Tous les PNJ** (les civils,
+    les boss et le Rat Patrol ne sont jamais visés) ou **Rat Patrol**
+    (Tuer, Assommer et Endormir seulement) ;
+  - **Tuer** : soldats, Gekko, Gekko nains, véhicules, tanks,
+    hélicoptères et Sliders (les machines comptent comme ennemis, les
+    véhicules selon leur camp) ;
+  - **Assommer** : les soldats tombent K.O., les Gekko tombent au sol,
+    les Gekko nains sont paralysés quelques secondes, les Gekko de la
+    fuite de Metal Gear REX (acte 4) s'accroupissent quelques secondes ;
+  - **Endormir** : soldats et Gekko (ni les Gekko nains ni les Gekko de
+    la fuite de REX ne dorment) ;
+  - **Rire**, **Pleurer**, **Enrager**, **Crier** : les émotions des
+    Beauty, sur les soldats éveillés, pendant une trentaine de secondes ;
+  - **Rebelles : Neutres / Hostiles** : cochée, impose l'attitude des
+    rebelles envers Snake (une alerte déjà en cours suit son cours).
+- **Apparition de PNJ** :
+  - **Faire apparaître (expérimental)** : fait apparaître le personnage
+    choisi dans la liste à côté de Snake, même dans une zone sans soldats
+    (soldat PMC des trois régions, rebelle du Moyen-Orient ou d'Amérique
+    du Sud, Gekko, Meryl, et Laughing Octopus en 1.4.2 seulement ; les
+    personnages grisés ne sont pas encore disponibles ou pas pour la
+    version du jeu détectée). L'apparition ne met plus les ennemis en
+    alerte. Patrouille pas toujours suivie, Gekko qui traverse le sol de
+    la salle blanche des Beauty : sauvegarde avant d'essayer.
+  - **Laughing Octopus** (forme Bête) apparaît hors de son arène : elle
+    tire sur Snake en boucle et disparaît une fois vaincue.
+  - **Meryl me suit (expérimental)** : une Meryl ajoutée suit Snake. Elle
+    passe là où il est passé, marche, court ou s'accroupit comme lui, et
+    s'arrête à une dizaine de mètres derrière lui, debout ou accroupie.
+    Hors alerte, les ennemis l'ignorent ; pendant une alerte, les rebelles
+    ajoutés combattent les PMC. Limite : Meryl ne se défend pas encore.
+- **Déclencheurs** : choisis une action dans la liste et clique sur
+  **Déclencher** pour que Snake la joue. En tête : **Tomber de haut**,
+  **Mal de dos accroupi** (seulement accroupi et immobile) et **Vomir**
+  (version debout ou accroupie selon la posture), puis 214 animations
+  du jeu (coups, CQC, chutes, réveils, échelles, suspendu, électrocuté,
+  « ça sent mauvais »…), chacune avec son numéro. Les actions partent
+  dans n'importe quelle posture, sans dégâts ni son ; Snake reprend
+  ensuite sa posture (accroupi, allongé, face contre le sol, sur le
+  dos). Les animations prévues pour une autre posture (échelle,
+  suspendu…) peuvent donner un résultat étrange.
 
 ### Armes
 

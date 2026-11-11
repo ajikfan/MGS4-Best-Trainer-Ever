@@ -64,7 +64,9 @@ class LiveBase:
             self.status = tr("status.check_error", error=e)
             return False
         self.sane = True
-        self.status = tr("status.connected", varbuf=f"{self.varbuf:#x}")
+        game = versions.name()
+        self.status = tr("status.connected", varbuf=f"{self.varbuf:#x}",
+                         game=tr("status.game_reference") if game == versions.REFERENCE else game)
         return True
 
     def detach(self):

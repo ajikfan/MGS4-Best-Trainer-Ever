@@ -255,6 +255,7 @@ class SpawnMixin:
         "laughing": {
             "zone": "s02a50l",
             "vtable": 0x1331950,
+            "game": "1.4.2",  # adresses de parade et vtable relevees en 1.4.2 seulement
             "boss": True,
             "effect_guard": True,  # effet visuel sans ressource
             "arena": True,  # zone d'arene geante avec un point
@@ -352,10 +353,19 @@ class SpawnMixin:
             self._spawn_resource_cache[zone] = [(key, files.read(path)) for key, path in files.zone_resources(zone)]
         return self._spawn_resource_cache[zone]
 
+    def spawn_available(self, kind: str) -> bool:
+        """Recette connue, sans plantage constate, et faite pour la version
+        du jeu detectee (cle "game" d'une recette propre a une version)."""
+        from mgs4trainer.core import versions
+        recipe = self.SPAWN_TYPES.get(kind)
+        if recipe is None or kind in self.SPAWN_BROKEN:
+            return False
+        return recipe.get("game") in (None, versions.name())
+
     def spawn_enemy(self, kind: str) -> bool:
         """Lance l'apparition dans un fil separe (les appels au jeu se font
         une image a la fois). Une seule a la fois."""
-        if getattr(self, "_spawn_busy", False) or kind in self.SPAWN_BROKEN:
+        if getattr(self, "_spawn_busy", False) or not self.spawn_available(kind):
             return False
         if not (self.connected and self.sane and self.pid and self.speed.ensure_injected(self.pid)):
             return False

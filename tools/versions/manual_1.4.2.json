@@ -174,5 +174,41 @@
  "0x9ddf60": [
   7327344,
   "manuel : etat de Snake accroupi en mouvement (octets identiques verifies)"
+ ],
+ "0x8d9e31": [
+  6364321,
+  "manuel : ecriture de 8D9DF0 (consommer la batterie, 611C60 en 1.4.2), meme code"
+ ],
+ "0xa5ef57": [
+  7801303,
+  "manuel : 1er appel D41AC0 (liste de coups) du Mk.II, A5EF57 -> 7709D7, contexte identique"
+ ],
+ "0xb46165": [
+  8569317,
+  "manuel : 1er test (8E1B10) de la vue du Mk.II, fonction de vue jumelle rsi, B46165 -> 82C1E5"
+ ],
+ "0xb46173": [
+  8569331,
+  "manuel : 2e test (8E1B40, 0x200) de la vue du Mk.II, fonction de vue jumelle rsi, B46173 -> 82C1F3"
+ ],
+ "0xb44f40": [
+  8564672,
+  "manuel : 1er test (8E1B10) de la vue du Mk.II, fonction de vue r14, B44F40 -> 82AFC0"
+ ],
+ "0xb44f4e": [
+  8564686,
+  "manuel : 2e test (8E1B40, 0x200) de la vue du Mk.II, fonction de vue r14, B44F4E -> 82AFCE"
+ ],
+ "0xb4ce92": [
+  8596610,
+  "manuel : 1er test (8E1B10) Mk.II, 3e fonction (+0x461c), B4CE92 -> 832C82"
+ ],
+ "0xb4cea0": [
+  8596624,
+  "manuel : 2e test (8E1B40, 0x200) Mk.II, 3e fonction, B4CEA0 -> 832C90"
+ ],
+ "0xb2c020": [
+  8474816,
+  "manuel : fonction Mk.II cache pour ce soldat, octets identiques, B2C020 -> 8150C0"
  ]
 }

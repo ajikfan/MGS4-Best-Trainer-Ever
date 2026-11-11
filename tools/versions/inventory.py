@@ -14,7 +14,9 @@ BASE = 0x1000
 CODE_END = 0x165F000
 NOT_ADDRESSES = {"SPAWN_UNIT_GROUP", "SNAKE_MOTIONS", "ALERT_SECOND_TIMER", "OCTOPUS_PHASE_FLAGS", "CSM_HIGHLIGHTS"}
 # identifiants de personnage (+0xC08) ranges a cote des classes
-NOT_ADDRESS_VALUES = {("ALLIES", 0x86A795), ("ALLIES", 0xC13869), ("ALLIES", 0xF1379E), ("ALLIES", 0xF13930), ("ALLIES", 0x213715)}
+# constantes de spawn.py deja en adresses 1.4.2 (boss hors arene, 2026-11-11) : pas a porter
+NOT_ADDRESS_PREFIXES = ("BOSS_", "(BOSS_")
+NOT_ADDRESS_VALUES = {("SPAWN_TYPES", 0x1331950), ("ALLIES", 0x86A795), ("ALLIES", 0xC13869), ("ALLIES", 0xF1379E), ("ALLIES", 0xF13930), ("ALLIES", 0x213715)}
 # adresses que les indices ne reconnaissent pas
 FORCE_ADDRESSES = {"ZONE_SLIDER_HOOK_RVA", "ZOOM_HOOK_RVA", "(CSM_CONTINUE, CSM_SKIP, CSM_NOOP)",
                    "(CSM_ENTRY, CSM_CONFIRM, CSM_COUNT, CSM_TABLE_LEA)",
@@ -99,7 +101,7 @@ def main():
                 if v in refs: why.append("ref")
                 if old and v < CODE_END and OLD[v - BASE - 1] in (0xCC, 0xC3) and old[0] != 0xCC: why.append("debut fn")
                 if NAME_HINT.search(name): why.append("nom")
-                if name in NOT_ADDRESSES or (name, v) in NOT_ADDRESS_VALUES:
+                if name in NOT_ADDRESSES or (name, v) in NOT_ADDRESS_VALUES or (name.startswith(NOT_ADDRESS_PREFIXES) and path.endswith("spawn.py")):
                     cls = "autre"
                 elif name in FORCE_ADDRESSES:
                     cls = "adresse"

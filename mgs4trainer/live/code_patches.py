@@ -336,6 +336,11 @@ class CodePatchesMixin:
         ],
         "battery_freeze": [
             (0xA46117, bytes.fromhex("66418988520b0000c3c200"), bytes.fromhex("9090909090909090")),
+            # 8D9DF0 (1.4.2 : 611C60) = consommer de la batterie (retire ecx,
+            # borne 0..max) : le Metal Gear Mk.II puise dans la meme batterie
+            # (linkvarbuf+0xB52) par cette fonction ; sans ce NOP, le verrou la
+            # reecrivait (2026-11-11). Recharge (8D9DA0) et ramassage libres.
+            (0x8D9E31, bytes.fromhex("66418989520b0000c3"), bytes.fromhex("9090909090909090")),
         ],
         "stress_freeze": [
             (0x971AC1, bytes.fromhex("66418981500b0000488b06"), bytes.fromhex("9090909090909090")),
@@ -517,6 +522,11 @@ class CodePatchesMixin:
         "untouchable": [
             (0x96C0B0, bytes.fromhex("488bc455535657488d68a1"), bytes.fromhex("c3")),
             (0x136F5B6, bytes.fromhex("e805259dff4c8bf04885"), bytes.fromhex("31c00f1f00")),
+            # Metal Gear Mk.II (2026-11-11) : ses coups recus sont lus par la
+            # meme liste (A5E????, 1.4.2 770930 : premier coup D41AC0 en
+            # A5EF57) ; un coup le bouscule et le sonne 150 images (vtable+0xE8,
+            # +0x614/+0x618). Meme parade : aucun coup lu.
+            (0xA5EF57, bytes.fromhex("e8642b2e004c8bf04885"), bytes.fromhex("31c00f1f00")),
             # Ficelles de Screaming Mantis : le message 0x440001 ne pose plus
             # le drapeau "attache" (voir BossGaugeMixin.mantis_strings_tick).
             (0x12B3AB6, bytes.fromhex("8349600133c0c3"), bytes.fromhex("90909090")),
@@ -549,6 +559,20 @@ class CodePatchesMixin:
             # coups contre un mur, pas, sons d'animation via D3DEB0) reste actif :
             # le couper bloquait aussi le hold-up (le « Freeze » de Snake).
             (0x87750, bytes.fromhex("48895c241048896c2418"), bytes.fromhex("c3")),
+            # Mk.II (2026-11-11) : les soldats traitent le Mk.II comme entite
+            # de type 3. Partout, "Mk.II actif" (8E1B10) ou drapeau 0x200
+            # (8E1B40) decident s'il peut etre vu ; ces tests renvoient 0.
+            # Deux fonctions de vue jumelles (apres le calcul B85200, resultat
+            # remis a 0) : B44F40/B44F4E (1.4.2 82AFC0/82AFCE) et B46165/B46173
+            # (82C1E5/82C1F3) ; 3e fonction B4CE92/B4CEA0 (832C82/832C90).
+            (0xB44F40, bytes.fromhex("e8cbcbd9ff84c0750e"), bytes.fromhex("31c00f1f00")),
+            (0xB44F4E, bytes.fromhex("e8edcbd9ff85c07422"), bytes.fromhex("31c00f1f00")),
+            (0xB46165, bytes.fromhex("e8a6b9d9ff84c0750e"), bytes.fromhex("31c00f1f00")),
+            (0xB46173, bytes.fromhex("e8c8b9d9ff85c07421"), bytes.fromhex("31c00f1f00")),
+            (0xB4CE92, bytes.fromhex("e8794cd9ff84c07512"), bytes.fromhex("31c00f1f00")),
+            (0xB4CEA0, bytes.fromhex("e89b4cd9ff85c00f84"), bytes.fromhex("31c00f1f00")),
+            # B2C020 (1.4.2 8150C0) : "Mk.II cache pour ce soldat ?" -> toujours oui.
+            (0xB2C020, bytes.fromhex("40534883ec20488bd9"), bytes.fromhex("b001c3")),
         ] + [(rva, bytes.fromhex(original), bytes.fromhex("b801000000"))
              for rva, original in _STEALTH_CHECK_CALLS.items()],
     }

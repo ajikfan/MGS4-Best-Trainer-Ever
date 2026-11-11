@@ -137,11 +137,8 @@ class VitalsTab(QWidget):
         tools_separator.setFrameShape(QFrame.VLine)
         tools_separator.setFrameShadow(QFrame.Sunken)
         tools_row.addWidget(tools_separator)
-        # Salle blanche (2026-10-23) : MGS4Live.beauty_to_white_room.
-        self.white_room_btn = QPushButton(tr("vitals.white_room"))
-        self.white_room_btn.setToolTip(tr("vitals.white_room_tooltip"))
-        self.white_room_btn.clicked.connect(self._on_white_room)
-        tools_row.addWidget(self.white_room_btn)
+        # Salle blanche (2026-10-23) : bouton sous chaque Beauty dans l'onglet
+        # Boss (_build_boss_page), MGS4Live.beauty_to_white_room.
         # Retour au menu principal (2026-10-23) : MGS4Live.return_to_title.
         self.title_btn = QPushButton(tr("vitals.return_to_title"))
         self.title_btn.setToolTip(tr("vitals.return_to_title_tooltip"))
@@ -212,26 +209,21 @@ class VitalsTab(QWidget):
         rebels_row.addStretch(1)
         zone_layout.addLayout(rebels_row)
         self.zone_buttons += [self.rebels_check, self.rebels_neutral_btn, self.rebels_hostile_btn]
-        # Apparition d'un soldat (prototype) : voir MGS4Live.spawn_enemy.
+        # Apparition d'un soldat : voir MGS4Live.spawn_enemy ; ligne placee
+        # dans l'onglet Evenements (_build_events_page).
         self.spawn_btn = QPushButton(tr("vitals.spawn_soldier"))
         self.spawn_btn.setToolTip(tr("vitals.spawn_soldier_tooltip"))
         self.spawn_btn.clicked.connect(self._on_spawn_soldier)
-        spawn_row = QHBoxLayout()
         self.spawn_type_combo = QComboBox()
         for kind in self.live.SPAWN_ROSTER:
             self.spawn_type_combo.addItem(tr(f"vitals.spawn_type_{kind}"), kind)
-            if kind not in self.live.SPAWN_TYPES or kind in self.live.SPAWN_BROKEN:
-                self.spawn_type_combo.model().item(self.spawn_type_combo.count() - 1).setEnabled(False)
-        spawn_row.addWidget(self.spawn_type_combo)
-        spawn_row.addWidget(self.spawn_btn)
+        self._update_spawn_items()
         # Mode compagnon : voir MGS4Live.ally_follow_tick (appele par la fenetre).
         self.ally_follow_check = QCheckBox(tr("vitals.ally_follow"))
         self.ally_follow_check.setToolTip(tr("vitals.ally_follow_tooltip"))
-        spawn_row.addWidget(self.ally_follow_check)
-        spawn_row.addStretch(1)
-        zone_layout.addLayout(spawn_row)
         self.zone_buttons += [self.spawn_type_combo, self.spawn_btn, self.ally_follow_check]
-        layout.addWidget(zone_group)
+        # groupe place dans l'onglet Evenements (_build_events_page)
+        self.zone_group = zone_group
 
         weapons_group = QGroupBox(tr("vitals.weapons_group"))
         weapons_layout = QVBoxLayout(weapons_group)
@@ -284,9 +276,8 @@ class VitalsTab(QWidget):
         self.no_back_pain_check.setToolTip(tr("vitals.no_back_pain_tooltip"))
         self.no_back_pain_check.toggled.connect(self._on_no_back_pain_toggled)
         snake_layout.addWidget(self.no_back_pain_check)
-        snake_layout.addSpacing(24)
-        # Evenements (2026-10-17) : MGS4Live.SNAKE_EVENTS, un choix par liste.
-        snake_layout.addWidget(QLabel(tr("vitals.snake_event")))
+        # Evenements (2026-10-17) : MGS4Live.SNAKE_EVENTS, un choix par liste ;
+        # places dans l'onglet Evenements (_build_events_page).
         self.snake_event_combo = QComboBox()
         for event in self.live.SNAKE_EVENTS:
             self.snake_event_combo.addItem(tr(f"vitals.snake_event_{event}"), event)
@@ -295,17 +286,16 @@ class VitalsTab(QWidget):
                                               motion=f"{motion:#X}".replace("0X", "0x")), motion)
         self.snake_event_combo.setMaxVisibleItems(20)
         self.snake_event_combo.setToolTip(tr("vitals.snake_event_tooltip"))
-        snake_layout.addWidget(self.snake_event_combo)
         self.snake_event_button = QPushButton(tr("vitals.snake_event_trigger"))
         self.snake_event_button.setToolTip(tr("vitals.snake_event_tooltip"))
         self.snake_event_button.clicked.connect(self._on_snake_event)
-        snake_layout.addWidget(self.snake_event_button)
 
         snake_layout.addStretch(1)
         layout.addWidget(snake_group)
 
         layout.addStretch(1)
         self._build_gauges_page()
+        self._build_events_page()
 
         # Minuteur dedie (AMMO_LOCK_REFRESH_MS, plus rapide que le cycle
         # general REFRESH_MS) pour "Munitions infinies"/"Pas de
@@ -313,6 +303,40 @@ class VitalsTab(QWidget):
         self.ammo_lock_timer = QTimer(self)
         self.ammo_lock_timer.timeout.connect(self._reassert_ammo_locks)
         self.ammo_lock_timer.start(AMMO_LOCK_REFRESH_MS)
+
+    def _build_events_page(self):
+        """Page de l'onglet "Evenements" (self.events_page, ajoutee par la
+        fenetre ; demande utilisateur 2026-11-11 : l'onglet Etat de jeu
+        devenait brouillon) : apparition de PNJ et declencheurs. Les widgets
+        sont crees dans __init__ (memes noms, memes connexions) ; la logique
+        reste dans cet onglet."""
+        content = QWidget()
+        page_layout = QVBoxLayout(content)
+        page_layout.addWidget(self.zone_group)
+
+        spawn_group = QGroupBox(tr("vitals.spawn_group"))
+        spawn_row = QHBoxLayout(spawn_group)
+        spawn_row.addWidget(self.spawn_type_combo)
+        spawn_row.addWidget(self.spawn_btn)
+        spawn_row.addWidget(self.ally_follow_check)
+        spawn_row.addStretch(1)
+        page_layout.addWidget(spawn_group)
+
+        triggers_group = QGroupBox(tr("vitals.triggers_group"))
+        triggers_layout = QVBoxLayout(triggers_group)
+        event_row = QHBoxLayout()
+        event_row.addWidget(QLabel(tr("vitals.snake_event")))
+        event_row.addWidget(self.snake_event_combo)
+        event_row.addWidget(self.snake_event_button)
+        event_row.addStretch(1)
+        triggers_layout.addLayout(event_row)
+        page_layout.addWidget(triggers_group)
+
+        page_layout.addStretch(1)
+        self.events_page = QScrollArea()
+        self.events_page.setWidgetResizable(True)
+        self.events_page.setFrameShape(QFrame.NoFrame)
+        self.events_page.setWidget(content)
 
     @staticmethod
     def _build_pill_toggle(left_text: str, right_text: str):
@@ -842,6 +866,16 @@ class VitalsTab(QWidget):
         if self.live.connected and self.live.sane:
             self.live.zone_action(action, self.zone_target_combo.currentData())
 
+    def _update_spawn_items(self):
+        """Grise les apparitions sans recette, plantees ou propres a une
+        autre version du jeu (la version n'est connue qu'apres connexion)."""
+        model = self.spawn_type_combo.model()
+        for row in range(self.spawn_type_combo.count()):
+            item = model.item(row)
+            enabled = self.live.spawn_available(self.spawn_type_combo.itemData(row))
+            if item.isEnabled() != enabled:
+                item.setEnabled(enabled)
+
     def _on_spawn_soldier(self):
         if self.live.connected and self.live.sane:
             self.live.spawn_enemy(self.spawn_type_combo.currentData())
@@ -1084,7 +1118,6 @@ class VitalsTab(QWidget):
             self.speed_slider.setEnabled(False)
             self.pause_check.setEnabled(False)
             self.timer_freeze_check.setEnabled(False)
-            self.white_room_btn.setEnabled(False)
             self.title_btn.setEnabled(False)
             self.photo_check.setEnabled(False)
             self.infinite_ammo_check.setEnabled(False)
@@ -1114,7 +1147,6 @@ class VitalsTab(QWidget):
         self.speed_slider.setEnabled(True)
         self.pause_check.setEnabled(True)
         self.timer_freeze_check.setEnabled(True)
-        self.white_room_btn.setEnabled(True)
         self.title_btn.setEnabled(True)
         self.photo_check.setEnabled(True)
         self.infinite_ammo_check.setEnabled(True)
@@ -1132,6 +1164,7 @@ class VitalsTab(QWidget):
         self.non_lethal_btn.setEnabled(True)
         for button in self.zone_buttons:
             button.setEnabled(True)
+        self._update_spawn_items()
         if self.rebels_check.isChecked():
             try:
                 self.live.maintain_rebel_attitude("hostile" if self.rebels_hostile_btn.isChecked() else "neutral")

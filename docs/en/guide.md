@@ -7,7 +7,8 @@ What each tab and each setting does, and how to use profiles F1 to F11.
 ### Top bar (always visible)
 
 - **Status**: connected to the game or not (the trainer attaches itself
-  to `mgs4.exe` as soon as a save is loaded).
+  to `mgs4.exe` as soon as a save is loaded), with the detected game
+  version (1.4.1 or 1.4.2).
 - **Advanced mode (raw values)**: shows the "Raw Value" and "Set (raw)"
   columns in the tables, and the internal items hidden by default (some
   crash the game: only use it if you know what you are doing).
@@ -21,8 +22,6 @@ What each tab and each setting does, and how to use profiles F1 to F11.
 - **Profile**: the last applied profile, and **Save as Fx** to store the
   current setup under a key (see "Profiles F1 to F11" below).
 - **Language**: French or English (the trainer restarts).
-- **Drebin Points**: current balance and total sales, each with a field
-  and an OK button.
 
 ### Stats
 
@@ -31,6 +30,9 @@ The game's statistics, as stored in the save, sorted by theme:
 enemies put to sleep...), **Movement**, **Items**, **Flashbacks**,
 **Time** (in hours, minutes, seconds). Each value can be edited
 directly.
+
+At the top of the tab, the **Drebin Points**: current balance and total
+sales, each with a field and an OK button.
 
 ### Game State
 
@@ -47,9 +49,8 @@ The live settings tab, in several groups:
   pause, numpad **+** / **−** for ±10 % and **0** to go back to 100 %
   (a "Speed: x %" banner over the game).
 - **Game Tools**: **Photo Mode** checkbox (or numpad *: free camera, see
-  the **Photo Mode Controls…** button and what's new in V2.6.0 and V2.7.0), **White
-  Room** button (against a Beauty, after the Beast form: the fight moves
-  to the white room right away), **Main Menu** button (back to the main
+  the **Photo Mode Controls…** button and what's new in V2.6.0 and V2.7.0),
+  **Main Menu** button (back to the main
   menu at any time during a game, after confirmation: unsaved progress is
   lost). While the trainer is open, the cutscene pause menu gets a
   **Return to the title screen** line and the pause menu a **Load**
@@ -89,53 +90,15 @@ The live settings tab, in several groups:
 - **Snake**:
   - **Untouchable**: no impact affects Snake (no damage, no knockback, no
     knockout); when piloting Metal Gear REX, REX ignores hits too (no
-    damage, no reaction);
+    damage, no reaction), and the Metal Gear Mk. II takes no hits at all;
   - **Invisible**: soldiers, Gekko and Dwarf Gekko no longer see him, even
     standing right in front of them, and an unsuppressed shot no longer
-    puts them on alert (hold-ups still work). Combine with "No Alerts" so
+    puts them on alert (hold-ups still work). The Metal Gear Mk. II is
+    no longer seen either. Combine with "No Alerts" so
     that nothing triggers the general alert;
   - **No Back Pain**: Snake no longer holds his back, neither after a high
     fall (normal landing, the fall damage remains) nor after crouching
-    for a long time;
-  - **Trigger**: pick an action in the list and click **Trigger** to make
-    Snake play it. At the top: **High fall**, **Crouching back pain**
-    (only crouching and still) and **Vomit** (standing or crouching
-    version depending on the posture), then 214 of the game's animations
-    (hits, CQC, falls, wake-ups, ladders, hanging, electrocuted,
-    "something stinks"...), each with its number. Actions start in any
-    posture, with no damage or sound; Snake then goes back to his posture
-    (crouching, prone, face down, on his back). Animations meant for
-    another posture (ladder, hanging...) can look strange.
-- **Whole area**: acts in one click on the whole area, through the game's
-  own functions, whatever the current state (a sleeping enemy can be
-  killed).
-  - **Target**: **Enemies**, **Rebels**, **All NPCs** (civilians, bosses
-    and the Rat Patrol are never targeted) or **Rat Patrol** (Kill, Knock
-    out and Sleep only);
-  - **Kill**: soldiers, Gekko, Dwarf Gekko, vehicles, tanks,
-    helicopters and Sliders (machines count as enemies, vehicles
-    according to their side);
-  - **Knock out**: soldiers fall unconscious, Gekko fall to the ground,
-    Dwarf Gekko are paralyzed for a few seconds, the Gekko of the Metal
-    Gear REX escape (act 4) crouch for a few seconds;
-  - **Sleep**: soldiers and Gekko (neither Dwarf Gekko nor the Gekko of
-    the REX escape sleep);
-  - **Laugh**, **Cry**, **Rage**, **Scream**: the Beauties' emotions, on
-    awake soldiers, for about thirty seconds;
-  - **Rebels: Neutral / Hostile**: when checked, imposes the rebels'
-    attitude towards Snake (an alert already under way runs its course);
-  - **Spawn (experimental)**: makes the character picked in the list
-    appear next to Snake, even in an area with no soldiers (PMC soldier
-    from the three regions, Middle East or South American rebel, Gekko,
-    Meryl; greyed-out characters are not available yet). Spawning no
-    longer alerts the enemies. Patrol not always followed, a Gekko that
-    falls through the floor of the Beauties' white room: save before
-    trying.
-  - **Meryl follows me (experimental)**: an added Meryl follows Snake. She
-    goes where he went, walks, runs or crouches like him, and stops about
-    ten meters behind him, standing or crouched. Outside alerts, enemies
-    ignore her; during an alert, added rebels fight the PMCs. Limit:
-    Meryl does not defend herself yet.
+    for a long time.
 
 ### Gauges
 
@@ -143,7 +106,8 @@ All the gauges, always visible, sorted by group (the page scrolls if the
 window is small):
 
 - **Snake**: Health, Stamina, **Grip** (hanging from a ledge), **Oxygen**
-  (underwater), Stress, Solid Eye battery;
+  (underwater), Stress, Solid Eye battery (shared with the Metal Gear
+  Mk. II: when locked, the Mk. II no longer drains it either);
 - **Vehicles**: **Drebin 893** (the act 2 vehicle), **Van** (the one to
   protect in act 3), Metal Gear REX health;
 - **Rat Patrol Team 01**: one box per member (**Meryl**, **Johnny**,
@@ -187,6 +151,54 @@ beast, Vamp and Liquid Ocelot, health and stamina never go below 1 (their
 phases and scripts depend on health). Locked health prevents the phase
 changes tied to health. Confirmed on Raging Raven and Laughing Octopus;
 the other bosses are recognized by their class name in the game.
+
+### Events
+
+What acts on the area and the story:
+
+- **Whole area**: acts in one click on the whole area, through the game's
+  own functions, whatever the current state (a sleeping enemy can be
+  killed).
+  - **Target**: **Enemies**, **Rebels**, **All NPCs** (civilians, bosses
+    and the Rat Patrol are never targeted) or **Rat Patrol** (Kill, Knock
+    out and Sleep only);
+  - **Kill**: soldiers, Gekko, Dwarf Gekko, vehicles, tanks,
+    helicopters and Sliders (machines count as enemies, vehicles
+    according to their side);
+  - **Knock out**: soldiers fall unconscious, Gekko fall to the ground,
+    Dwarf Gekko are paralyzed for a few seconds, the Gekko of the Metal
+    Gear REX escape (act 4) crouch for a few seconds;
+  - **Sleep**: soldiers and Gekko (neither Dwarf Gekko nor the Gekko of
+    the REX escape sleep);
+  - **Laugh**, **Cry**, **Rage**, **Scream**: the Beauties' emotions, on
+    awake soldiers, for about thirty seconds;
+  - **Rebels: Neutral / Hostile**: when checked, imposes the rebels'
+    attitude towards Snake (an alert already under way runs its course).
+- **NPC spawning**:
+  - **Spawn (experimental)**: makes the character picked in the list
+    appear next to Snake, even in an area with no soldiers (PMC soldier
+    from the three regions, Middle East or South American rebel, Gekko,
+    Meryl, and Laughing Octopus on 1.4.2 only; greyed-out characters are
+    not available yet, or not for the detected game version). Spawning
+    no longer alerts the enemies. Patrol not always followed, a Gekko
+    that falls through the floor of the Beauties' white room: save
+    before trying.
+  - **Laughing Octopus** (Beast form) appears outside her arena: she
+    shoots at Snake in a loop and vanishes once defeated.
+  - **Meryl follows me (experimental)**: an added Meryl follows Snake. She
+    goes where he went, walks, runs or crouches like him, and stops about
+    ten meters behind him, standing or crouched. Outside alerts, enemies
+    ignore her; during an alert, added rebels fight the PMCs. Limit:
+    Meryl does not defend herself yet.
+- **Triggers**: pick an action in the list and click **Trigger** to make
+  Snake play it. At the top: **High fall**, **Crouching back pain**
+  (only crouching and still) and **Vomit** (standing or crouching
+  version depending on the posture), then 214 of the game's animations
+  (hits, CQC, falls, wake-ups, ladders, hanging, electrocuted,
+  "something stinks"...), each with its number. Actions start in any
+  posture, with no damage or sound; Snake then goes back to his posture
+  (crouching, prone, face down, on his back). Animations meant for
+  another posture (ladder, hanging...) can look strange.
 
 ### Weapons
 

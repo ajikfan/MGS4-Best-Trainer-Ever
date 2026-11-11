@@ -120,7 +120,9 @@ class TrainerWindow(QMainWindow):
         layout.addLayout(top_row)
 
         # Conteneur dedie (pas juste un layout) pour pouvoir desactiver tout
-        # le bloc Drebin d'un coup si le jeu se ferme - voir refresh().
+        # le bloc Drebin d'un coup si le jeu se ferme - voir refresh(). Place
+        # en tete de l'onglet Stats (2026-11-11, demande utilisateur : plus
+        # au-dessus de tout) : ce sont des statistiques de la sauvegarde.
         self.drebin_container = QWidget()
         drebin_row = QHBoxLayout(self.drebin_container)
         drebin_row.setContentsMargins(0, 0, 0, 0)
@@ -149,7 +151,6 @@ class TrainerWindow(QMainWindow):
         drebin_ventes_ok.clicked.connect(self._write_drebin_ventes)
         drebin_row.addWidget(drebin_ventes_ok)
         drebin_row.addStretch(1)
-        layout.addWidget(self.drebin_container)
 
         self.tabs = QTabWidget()
         self.item_tabs: list[TableTab | StatsTab | GroupedWeaponsTab] = []
@@ -164,6 +165,7 @@ class TrainerWindow(QMainWindow):
         # garde-fous (deja source de confusion une fois, voir notes.md).
         stats_names = [n for n in mgs4save.STATS if n not in ("drebin_actuel", "drebin_total_ventes")]
         stats_tab = StatsTab(self.live, stats_names)
+        stats_tab.layout().insertWidget(0, self.drebin_container)
         self.tabs.addTab(stats_tab, tr("tab.stats_count", count=len(stats_names)))
         self.item_tabs.append(stats_tab)
 
@@ -183,6 +185,7 @@ class TrainerWindow(QMainWindow):
         self.tabs.addTab(vitals_tab, tr("tab.game_state"))
         self.tabs.addTab(vitals_tab.gauges_page, tr("tab.gauges"))
         self.tabs.addTab(vitals_tab.boss_page, tr("tab.boss"))
+        self.tabs.addTab(vitals_tab.events_page, tr("tab.events"))
         self.item_tabs.append(vitals_tab)
 
         # Un seul onglet "Armes", sections empilees par categorie (meme
