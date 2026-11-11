@@ -256,6 +256,10 @@ class SpawnMixin:
             "zone": "s02a50l",
             "vtable": 0x1331950,
             "boss": True,
+            "effect_guard": True,  # effet visuel sans ressource
+            "arena": True,  # zone d'arene geante avec un point
+            "no_relocate": True,  # ni cachette ni teleportation
+            "loop_action": 15,  # tir sur Snake, relance des qu'elle se fige
             "position_option": bytes.fromhex("70fa4ecf"),
             "distance": 4000.0,
             "actor": bytes.fromhex(
@@ -306,7 +310,11 @@ class SpawnMixin:
     # parade : vider le lien +8 de sa structure -> objet par defaut 0x33A2B8),
     # puis son IA cherche la zone d'arene de sa cible (F0C6C0, table vide hors
     # de s02a50l) et plante en F0A727. Mise en pause.
-    SPAWN_BROKEN = frozenset({"rebel_ee", "laughing"})
+    # Laughing Octopus validee en jeu le 2026-11-11 (experimental) : hors de
+    # son arene, elle tire sur Snake en boucle et s'evapore une fois vaincue
+    # (_spawn_boss : effet visuel, arene fabriquee, plus de teleportation ni
+    # de procedures de script, action 15 relancee, action 30 a la defaite).
+    SPAWN_BROKEN = frozenset({"rebel_ee"})
     SPAWN_ROSTER = (
         "pmc", "pmc_sa", "pmc_ee", "rebel", "rebel_sa", "rebel_ee",
         "gekko", "gekko_dwarf", "frog", "zombie", "laughing", "raging",
@@ -1037,10 +1045,233 @@ class SpawnMixin:
         if args[at] != 0x09 or args[at + 5] != 0x01 or args[at + 8] != 0x09:
             return False  # option de position inattendue
         args = args[:at] + place + args[at + len(place):]
+        if kind.get("effect_guard") and not self._spawn_boss_effect_guard():
+            return False
+        if kind.get("no_relocate") and not (self._spawn_boss_no_relocate() and self._spawn_boss_fallback()):
+            return False
         before = self._spawn_tasks(kind["vtable"])
         if self._spawn_command(args, funcs["chara_named"], positional=self.SPAWN_POSITIONAL_SIZE) is None:
             return False
-        return len(self._spawn_tasks(kind["vtable"]) - before) == 1
+        created = self._spawn_tasks(kind["vtable"]) - before
+        if len(created) != 1:
+            return False
+        boss = created.pop()
+        if kind.get("arena"):
+            self._spawn_boss_arena(boss, (x + kind["distance"], position[1], z))
+        if kind.get("loop_action"):
+            threading.Thread(target=self._spawn_boss_loop, args=(boss, kind["loop_action"]), daemon=True).start()
+        return True
+
+    # Relance d'action (ESSAI 2026-11-11) : sans arene, Octopus ne decide plus
+    # rien apres une action (la suite attend un point de l'arene) et reste
+    # figee. Machines d'etats de l'acteur : nombre +0x34, tableau [+0x38] de
+    # 0x130 (id +0x128, etat +0xA4) ; machine 1 = action, machine 2 = sous-
+    # etape. Action 15 (essai en jeu) : elle tire sur Snake (sous-etapes
+    # 0x59-0x5D, fin d'animation en 0x5C) puis s'arrete. Si la sous-etape ne
+    # change plus pendant BOSS_LOOP_IDLE s, l'action est relancee par F21E60
+    # (changement d'action du jeu), dans le fil du jeu.
+    BOSS_SET_ACTION = 0xF21E60
+    BOSS_LOOP_IDLE = 3.0
+    # Machine 0 : 2 = combat ; 6 = mise hors de combat (endurance 0, vu en
+    # jeu). Action 30 : fin de combat, elle tombe et s'evapore (essai en jeu).
+    BOSS_DOWN_MODE = 6
+    BOSS_DEFEAT_ACTION = 30
+
+    def _spawn_boss_machines(self, boss: int) -> dict[int, int]:
+        count = struct.unpack("<i", self.proc.read_bytes(boss + 0x34, 4))[0]
+        table = self._spawn_q(boss + 0x38)
+        out = {}
+        for k in range(min(max(count, 0), 8)):
+            machine, state = struct.unpack("<ii", self.proc.read_bytes(table + k * 0x130 + 0x128, 4)
+                                           + self.proc.read_bytes(table + k * 0x130 + 0xA4, 4))
+            out[machine] = state
+        return out
+
+    def _spawn_boss_loop(self, boss: int, action: int) -> None:
+        last, since = None, time.monotonic()
+        while True:
+            time.sleep(0.25)
+            try:
+                if boss not in self._spawn_tasks(self.SPAWN_TYPES["laughing"]["vtable"]):
+                    return
+                life_object = self._spawn_q(boss + 0x42B0)
+                life, _, stamina = struct.unpack("<iii", self.proc.read_bytes(life_object + 0x314, 12)) \
+                    if life_object else (1, 0, 1)
+                machines = self._spawn_boss_machines(boss)
+            except OSError:
+                return
+            if life <= 0 or stamina <= 0 or machines.get(0) == self.BOSS_DOWN_MODE:
+                # vaincue (vie ou endurance a 0 ; mode 6 vu en jeu) : action
+                # de fin de combat (elle tombe et s'evapore), plus de relance
+                with self._game_lock():
+                    self.speed.game_call(self.base + self.BOSS_SET_ACTION, boss, self.BOSS_DEFEAT_ACTION, timeout=5.0)
+                return
+            state = (machines.get(1), machines.get(2))
+            now = time.monotonic()
+            if state != last:
+                last, since = state, now
+                continue
+            if now - since < self.BOSS_LOOP_IDLE:
+                continue
+            with self._game_lock():
+                self.speed.game_call(self.base + self.BOSS_SET_ACTION, boss, action, timeout=5.0)
+            last, since = None, time.monotonic()
+
+    # Parades pour un boss hors de son arene (ESSAI 2026-11-11, adresses 1.4.2
+    # seulement, comme la recette de Laughing Octopus).
+    # Effet visuel : A2B50 (tache d'effet d'Octopus, F06380) recopie la
+    # ressource d'une structure (+0xD8 / +0xE8) dans le pointeur actif
+    # 0x17341D0 ; ressource absente hors de sa zone -> pointeur nul ->
+    # plantage A3B40 a l'image suivante. Detour de l'ecriture (A2C6F,
+    # « mov [rip+..], rax ») : nul -> objet par defaut du jeu (global 0x1734170,
+    # objet 0x33A2B8), le repli que le jeu prevoit lui-meme.
+    BOSS_EFFECT_SITE = 0xA2C6F
+    BOSS_EFFECT_ORIGINAL = bytes.fromhex("4889055a156901")
+    BOSS_EFFECT_RETURN = 0xA2C76
+    BOSS_EFFECT_ACTIVE = 0x17341D0
+    BOSS_EFFECT_DEFAULT = 0x1734170
+    # Arene : F0C6C0 cherche la zone d'arene contenant un point dans la table
+    # d'Octopus (entrees de 0xA50 a +0x5970, nombre +0x127B0 ; boite min
+    # +0x960 / max +0x970 ; points : nombre +0xA30, pointeurs +0x988,
+    # positions +0x9C0 de 0x20) ; table vide hors de s02a50l -> nul, que
+    # plusieurs appelants lisent sans test (plantage F0A727, et division par
+    # +0xA30). Une zone geante avec un point pres de Snake.
+    BOSS_ARENA_TABLE, BOSS_ARENA_COUNT, BOSS_ARENA_STRIDE = 0x5970, 0x127B0, 0xA50
+    BOSS_AREA_BOX_MIN, BOSS_AREA_BOX_MAX = 0x960, 0x970
+    BOSS_AREA_POINTS, BOSS_AREA_POINT_PTRS, BOSS_AREA_POINT_POS = 0xA30, 0x988, 0x9C0
+
+    def _spawn_boss_effect_guard(self) -> bool:
+        """Pose une fois par processus le detour de l'effet visuel."""
+        from mgs4trainer.core import versions
+        if versions.name() != "1.4.2":
+            return False
+        site = self.base + self.BOSS_EFFECT_SITE
+        current = self.proc.read_bytes(site, len(self.BOSS_EFFECT_ORIGINAL))
+        if current[0] == 0xE9:
+            return True  # deja pose
+        if current != self.BOSS_EFFECT_ORIGINAL:
+            return False
+        cave = self.proc.alloc_near(site, 0x1000)
+        if not cave:
+            return False
+        code = (
+            b"\x48\x85\xC0"                                                   # test rax, rax
+            + b"\x75\x0D"                                                     # jnz +13
+            + b"\x48\xB8" + struct.pack("<Q", self.base + self.BOSS_EFFECT_DEFAULT)  # mov rax, defaut
+            + b"\x48\x8B\x00"                                                 # mov rax, [rax]
+            + b"\x51"                                                         # push rcx
+            + b"\x48\xB9" + struct.pack("<Q", self.base + self.BOSS_EFFECT_ACTIVE)   # mov rcx, actif
+            + b"\x48\x89\x01"                                                 # mov [rcx], rax
+            + b"\x59"                                                         # pop rcx
+            + b"\xFF\x25\x00\x00\x00\x00" + struct.pack("<Q", self.base + self.BOSS_EFFECT_RETURN)
+        )
+        self.proc.write_bytes(cave, code)
+        self.proc.write_bytes(site, b"\xE9" + struct.pack("<i", cave - (site + 5)) + b"\x90\x90")
+        return True
+
+    # Deplacements d'Octopus : F0A6D0(boss, 0, type) choisit une destination
+    # dans une zone d'arene (types 1, 2, 8, 0x10, 0x20, 0x40, 0x80, 0x800) et
+    # renvoie > 0 si trouvee ; ses appelants (F1CD20, F1CE00, F1CE90, F1CF70,
+    # decision F3AD80) passent a autre chose sinon. Debut remplace par
+    # « xor eax,eax ; ret » : plus de cachette ni de teleportation, le reste
+    # du combat continue. Touche aussi son vrai combat : pose seulement a
+    # l'apparition hors arene, pour la session de jeu (ESSAI 2026-11-11).
+    # Procedures de script d'Octopus : ses reactions (contact avec Snake,
+    # phases, defaite...) lancent par 2DA1A0 des procedures dont les numeros
+    # viennent de sa recette (+0x4468, +0x4C74..+0x4C98) ; hors de s02a50l
+    # ils designent d'autres procedures (un contact a lance une liste de 355
+    # « slot_save » de s01a57l : pile debordee en 2DA9E5, 2026-11-11). Les
+    # 8 appels sont coupes (call -> « xor eax,eax », jmp -> « xor eax,eax ;
+    # ret ») ; meme reserve que ci-dessus (son vrai combat en est prive).
+    BOSS_PATCHES = (
+        (0xF0A6D0, "448944241848", "31c0c3"),       # destination d'arene : aucune
+        (0xF183B1, "e8ea1d3cff", "31c0909090"),
+        (0xF1C7F5, "e8a6d93bff", "31c0909090"),
+        (0xF1F75B, "e840aa3bff", "31c0909090"),
+        (0xF1FF1B, "e880a23bff", "31c0909090"),
+        (0xF3B643, "e858eb39ff", "31c0909090"),
+        (0xF3D709, "e892ca39ff", "31c0909090"),
+        (0xF3DA1C, "e97fc739ff", "31c0c39090"),
+        (0xF3DED2, "e9c9c239ff", "31c0c39090"),
+    )
+
+    def _spawn_boss_no_relocate(self) -> bool:
+        from mgs4trainer.core import versions
+        if versions.name() != "1.4.2":
+            return False
+        todo = []
+        for rva, original, patch in self.BOSS_PATCHES:
+            original, patch = bytes.fromhex(original), bytes.fromhex(patch)
+            current = self.proc.read_bytes(self.base + rva, len(original))
+            if current.startswith(patch):
+                continue
+            if current != original:
+                return False  # code inattendu : rien n'est pose
+            todo.append((self.base + rva, patch))
+        for site, patch in todo:
+            self.proc.write_bytes(site, patch)
+        return True
+
+    def _spawn_boss_arena(self, boss: int, point) -> None:
+        """Une zone d'arene geante (tout le monde dedans) avec un point."""
+        spot = self._spawn_alloc(0x1000, PAGE_READWRITE)
+        area = boss + self.BOSS_ARENA_TABLE
+        self.proc.write_bytes(area + self.BOSS_AREA_BOX_MIN, struct.pack("<4f", -1e9, -1e9, -1e9, 1.0))
+        self.proc.write_bytes(area + self.BOSS_AREA_BOX_MAX, struct.pack("<4f", 1e9, 1e9, 1e9, 1.0))
+        self.proc.write_bytes(area + self.BOSS_AREA_POINT_PTRS, struct.pack("<Q", spot))
+        self.proc.write_bytes(area + self.BOSS_AREA_POINT_POS, struct.pack("<4f", *point, 1.0))
+        self.proc.write_bytes(area + self.BOSS_AREA_POINTS, struct.pack("<i", 1))
+        self.proc.write_bytes(boss + self.BOSS_ARENA_COUNT, struct.pack("<i", 1))
+        # Seconde liste de points (F0C5F0, plus proche point libre -> +0x26628,
+        # lu sans test en F39A27) : entrees de 0x60 a +0x12FD0, nombre
+        # +0x13BD0, mot +0x8 = 0 (libre), position +0x10.
+        # Un point utilise est marque occupe (+0x8) : un seul ne suffit pas
+        # (plus de point libre apres la premiere teleportation, plantage
+        # F394C1). BOSS_POINT_RING points en cercle autour de l'apparition.
+        x, y, z = point
+        for k in range(self.BOSS_POINT_RING):
+            angle = 2 * math.pi * k / self.BOSS_POINT_RING
+            entry = boss + self.BOSS_POINT_LIST + k * self.BOSS_POINT_STRIDE
+            self.proc.write_bytes(entry + 0x8, struct.pack("<H", 0))
+            self.proc.write_bytes(entry + 0x10, struct.pack(
+                "<4f", x + self.BOSS_POINT_RADIUS * math.cos(angle), y,
+                z + self.BOSS_POINT_RADIUS * math.sin(angle), 1.0))
+        self.proc.write_bytes(boss + self.BOSS_POINT_COUNT, struct.pack("<i", self.BOSS_POINT_RING))
+
+    # Action de repli d'Octopus : sa decision (F3AD80, entree de l'etat 2 de
+    # sa machine 0) ne trouve plus rien sans arene et ne lance aucune action
+    # (elle reste en boule). Detour de F3AE1E (11 octets, dernier essai
+    # F0A6D0) : lance l'action BOSS_FALLBACK_ACTION (F21E60 via F3AE35).
+    # Action 12 (choisie par le jeu sans arene, sur un drapeau) : boule,
+    # chute au sol, se releve (vu en jeu le 2026-11-11).
+    BOSS_POINT_LIST, BOSS_POINT_COUNT, BOSS_POINT_STRIDE = 0x12FD0, 0x13BD0, 0x60  # 32 au plus
+    BOSS_POINT_RING, BOSS_POINT_RADIUS = 8, 2500.0
+    BOSS_FALLBACK_SITE = 0xF3AE1E
+    BOSS_FALLBACK_ORIGINAL = bytes.fromhex("33d2448d4201")  # puis call F0A6D0 (e8 + 4)
+    BOSS_FALLBACK_SET_ACTION, BOSS_FALLBACK_SKIP = 0xF3AE35, 0xF3AE3A
+    BOSS_FALLBACK_ACTION = 15  # tir sur Snake (essai en jeu : 12 = boule, chute, releve)
+
+    def _spawn_boss_fallback(self) -> bool:
+        from mgs4trainer.core import versions
+        if versions.name() != "1.4.2":
+            return False
+        site = self.base + self.BOSS_FALLBACK_SITE
+        current = self.proc.read_bytes(site, 11)
+        if current[0] == 0xE9:
+            return True  # deja pose
+        if current[:6] != self.BOSS_FALLBACK_ORIGINAL or current[6] != 0xE8:
+            return False
+        cave = self.proc.alloc_near(site, 0x1000)
+        if not cave:
+            return False
+        code = (
+            b"\xBA" + struct.pack("<I", self.BOSS_FALLBACK_ACTION)           # mov edx, action
+            + b"\x48\x8B\xCB"                                                 # mov rcx, rbx
+            + b"\xFF\x25\x00\x00\x00\x00" + struct.pack("<Q", self.base + self.BOSS_FALLBACK_SET_ACTION)
+        )
+        self.proc.write_bytes(cave, code)
+        self.proc.write_bytes(site, b"\xE9" + struct.pack("<i", cave - (site + 5)) + b"\x90" * 6)
+        return True
 
     def _spawn_managers(self, funcs: dict[str, int]) -> bool:
         """Cree les gestionnaires s'il n'y en a pas. Sans groupe, l'inscription
