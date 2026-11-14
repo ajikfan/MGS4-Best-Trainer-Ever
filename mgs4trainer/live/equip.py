@@ -342,7 +342,106 @@ class EquipMixin:
             return True
         finally:
             if pause:
-                call(funcs["pause_clear"], self.MODEL_PAUSE_FLAG)
+                self._model_pause_clear(funcs)
+
+    # Corps et visage de Snake (2026-11-14, valide en 1.4.2 : corps du
+    # deguisement de milicien sur la combinaison). Le gestionnaire de modele
+    # charge le corps et le visage dans deux slots (+0xB0/+0xB8) d'apres une
+    # variante : table +0x90 (nombre +0x98) pour le corps, +0xA0 (+0xA8)
+    # pour le visage, entrees de 12 octets (variante, paquet ww/stage/slot,
+    # pages). La variante voulue vient de la fonction pointee par +0xE0
+    # (corps) / +0xE8 (visage) (sinon 62E680 / 62E970 en 1.4.2, d'apres
+    # linkvarbuf+0xB26/B27) ; la tache de rechargement 62F730 ne charge que
+    # si elle differe de la variante chargee (+0xC4 / +0xC8), au bout du
+    # decompte +0x108. Variante imposee = petite fonction "mov eax, N ;
+    # ret" a la place du pointeur ; None = pointeur d'origine.
+    MODEL_VARIANT_TABLES = {"body": (0x90, 0x98, 0xE0), "face": (0xA0, 0xA8, 0xE8)}
+    MODEL_RELOAD_COUNTDOWN = 0x108
+    MODEL_RELOAD_LOADING = 0xC0
+
+    def model_variants(self, part: str) -> list[tuple[int, int]]:
+        """[(variante, paquet)] de la table du corps ou du visage."""
+        manager = struct.unpack("<Q", self.proc.read_bytes(self.base + self.MODEL_MANAGER_PTR_RVA, 8))[0]
+        if not manager:
+            return []
+        table_offset, count_offset, _pick = self.MODEL_VARIANT_TABLES[part]
+        count = struct.unpack("<i", self.proc.read_bytes(manager + count_offset, 4))[0]
+        table = struct.unpack("<Q", self.proc.read_bytes(manager + table_offset, 8))[0]
+        if not table or not 0 < count < 64:
+            return []
+        raw = self.proc.read_bytes(table, count * 12)
+        return [struct.unpack_from("<II", raw, i * 12) for i in range(count)]
+
+    def set_model_variants(self, body: int | None, face: int | None) -> bool:
+        """Impose (ou rend au jeu, None) la variante de corps et de visage."""
+        return self._start_equip(self._set_model_variants_live, body, face)
+
+    def _set_model_variants_live(self, body: int | None, face: int | None) -> bool:
+        funcs = self._live_funcs(self.MODEL_LIVE_FUNCS)
+        manager = struct.unpack("<Q", self.proc.read_bytes(self.base + self.MODEL_MANAGER_PTR_RVA, 8))[0]
+        if funcs is None or not manager or not self._octocamo_controller():
+            return False
+        for part, value in (("body", body), ("face", face)):
+            if value is not None and value not in {v for v, _ in self.model_variants(part)}:
+                return False
+        if getattr(self, "_model_pick_pid", None) != self.pid:
+            stubs = self.proc.alloc_near(self.base, 0x1000)
+            if not stubs:
+                return False
+            self._model_pick_pid, self._model_pick_originals, self._model_pick_stubs = self.pid, {}, stubs
+        # Pointeur du jeu releve tant qu'il n'est pas deja le notre (le jeu
+        # peut le changer selon la zone ou une cinematique).
+        for index, (part, (_t, _c, pick)) in enumerate(self.MODEL_VARIANT_TABLES.items()):
+            current = self.proc.read_bytes(manager + pick, 8)
+            if struct.unpack("<Q", current)[0] != self._model_pick_stubs + index * 0x10:
+                self._model_pick_originals[part] = current
+        call = self.speed.game_call
+        state = call(funcs["state"])
+        if state is None:
+            return False
+        pause = not (state & 6)
+        if pause:
+            call(funcs["pause_set"], self.MODEL_PAUSE_FLAG)
+        try:
+            for index, (part, value) in enumerate((("body", body), ("face", face))):
+                pick = self.MODEL_VARIANT_TABLES[part][2]
+                if value is None:
+                    pointer = self._model_pick_originals[part]
+                else:
+                    stub = self._model_pick_stubs + index * 0x10
+                    self.proc.write_bytes(stub, b"\xB8" + struct.pack("<I", value) + b"\xC3")
+                    pointer = struct.pack("<Q", stub)
+                self.proc.write_bytes(manager + pick, pointer)
+            # Rechargement par la fonction d'equipement du jeu, tenue et visage
+            # inchanges : elle calcule les variantes (donc les notres), pose le
+            # decompte ET previent Snake (message 0x1E0001) avant que le tampon
+            # soit ecrase ; decompte ecrit seul = rendu sur l'ancien modele,
+            # plantage en C5EB3 (2026-11-14).
+            outfit, face = self.proc.read_bytes(self.linkvarbuf + self.OUTFIT_EQUIP_OFFSET, 2)
+            if (call(funcs["equip"], outfit, face) or 0) & 0xFFFFFFFF != 0:
+                return False
+            deadline = time.monotonic() + 3.0
+            while time.monotonic() < deadline:
+                countdown = struct.unpack("<i", self.proc.read_bytes(manager + self.MODEL_RELOAD_COUNTDOWN, 4))[0]
+                loading = self.proc.read_bytes(manager + self.MODEL_RELOAD_LOADING, 1)[0] & 3
+                if countdown <= 0 and not loading:
+                    break
+                time.sleep(0.02)
+            time.sleep(0.1)
+            return True
+        finally:
+            if pause:
+                self._model_pause_clear(funcs)
+
+    def _model_pause_clear(self, funcs: dict[str, int]) -> None:
+        """Leve la pause du modele ; si l'appel echoue (delai), le drapeau
+        est retire directement (jeu reste fige sinon, 2026-11-14)."""
+        if self.speed.game_call(funcs["pause_clear"], self.MODEL_PAUSE_FLAG) is not None:
+            return
+        code = self.proc.read_bytes(funcs["state"], 6)  # mov eax, [rip + disp] ; ret
+        flags = funcs["state"] + 6 + struct.unpack_from("<i", code, 2)[0]
+        value = struct.unpack("<I", self.proc.read_bytes(flags, 4))[0]
+        self.proc.write_bytes(flags, struct.pack("<I", value & ~self.MODEL_PAUSE_FLAG))
 
     # Motif OctoCamo en direct, sans menu (2026-10-03) : on pilote le
     # controleur d'auto-camouflage du joueur (celui qui change la

@@ -224,6 +224,17 @@ class VitalsTab(QWidget):
         self.zone_buttons += [self.spawn_type_combo, self.spawn_btn, self.ally_follow_check]
         # groupe place dans l'onglet Evenements (_build_events_page)
         self.zone_group = zone_group
+        # Apparence de Snake (2026-11-14) : variantes de corps / visage
+        # imposees (MGS4Live.set_model_variants), listes lues dans le jeu.
+        self.model_body_combo = QComboBox()
+        self.model_face_combo = QComboBox()
+        for combo in (self.model_body_combo, self.model_face_combo):
+            combo.addItem(tr("vitals.model_auto"), None)
+            combo.setMaxVisibleItems(20)
+        self.model_apply_btn = QPushButton(tr("vitals.model_apply"))
+        self.model_apply_btn.setToolTip(tr("vitals.model_tooltip"))
+        self.model_apply_btn.clicked.connect(self._on_model_apply)
+        self.zone_buttons += [self.model_body_combo, self.model_face_combo, self.model_apply_btn]
 
         weapons_group = QGroupBox(tr("vitals.weapons_group"))
         weapons_layout = QVBoxLayout(weapons_group)
@@ -321,6 +332,16 @@ class VitalsTab(QWidget):
         spawn_row.addWidget(self.ally_follow_check)
         spawn_row.addStretch(1)
         page_layout.addWidget(spawn_group)
+
+        model_group = QGroupBox(tr("vitals.model_group"))
+        model_row = QHBoxLayout(model_group)
+        model_row.addWidget(QLabel(tr("vitals.model_body")))
+        model_row.addWidget(self.model_body_combo)
+        model_row.addWidget(QLabel(tr("vitals.model_face")))
+        model_row.addWidget(self.model_face_combo)
+        model_row.addWidget(self.model_apply_btn)
+        model_row.addStretch(1)
+        page_layout.addWidget(model_group)
 
         triggers_group = QGroupBox(tr("vitals.triggers_group"))
         triggers_layout = QVBoxLayout(triggers_group)
@@ -876,6 +897,28 @@ class VitalsTab(QWidget):
             if item.isEnabled() != enabled:
                 item.setEnabled(enabled)
 
+    # Variantes connues (paquet ww/stage/slot -> nom), relevees en jeu.
+    MODEL_BODY_NAMES = {0x1E38: "vitals.model_body_octocamo", 0x1863: "vitals.model_body_militia",
+                        0x235E: "vitals.model_body_rebel"}
+
+    def _update_model_variant_items(self):
+        """Remplit les listes de corps / visage une fois connecte."""
+        for part, combo in (("body", self.model_body_combo), ("face", self.model_face_combo)):
+            if combo.count() > 1:
+                continue
+            try:
+                variants = self.live.model_variants(part)
+            except OSError:
+                continue
+            for variant, pack in variants:
+                key = self.MODEL_BODY_NAMES.get(pack) if part == "body" else None
+                label = tr(key) if key else tr("vitals.model_variant", n=variant)
+                combo.addItem(f"{label} ({pack:#06x})", variant)
+
+    def _on_model_apply(self):
+        if self.live.connected and self.live.sane:
+            self.live.set_model_variants(self.model_body_combo.currentData(), self.model_face_combo.currentData())
+
     def _on_spawn_soldier(self):
         if self.live.connected and self.live.sane:
             self.live.spawn_enemy(self.spawn_type_combo.currentData())
@@ -1165,6 +1208,7 @@ class VitalsTab(QWidget):
         for button in self.zone_buttons:
             button.setEnabled(True)
         self._update_spawn_items()
+        self._update_model_variant_items()
         if self.rebels_check.isChecked():
             try:
                 self.live.maintain_rebel_attitude("hostile" if self.rebels_hostile_btn.isChecked() else "neutral")
