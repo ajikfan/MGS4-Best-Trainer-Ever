@@ -453,6 +453,129 @@ class EquipMixin:
             return False
         return points["face"][face] <= points["body"][body]
 
+    # Corps d'un autre personnage (ESSAI 2026-11-14) : geometrie d'un modele
+    # de la zone (ex. PMC 0x313917 en s01a57l) sur le squelette du corps de
+    # Snake (mgs4trainer.core.mdn.build_hybrid), convertie par le jeu sous une
+    # cle de rechange puis branchee dans le noeud du dictionnaire du mdn du
+    # corps (+0x14 taille, +0x20 donnees) ; Snake reconstruit son modele au
+    # message 0x1E0002 (envoye par la tache de rechargement 62F730 aux
+    # joueurs : table des joueurs, objet en +0, puis 4 objets a +0x110).
+    # Le cnp et le rdv de Snake restent (points d'attache).
+    MODEL_REBUILD_MESSAGE = 0x1E0002
+    MODEL_PLAYER_SLOTS = 0x18
+    MODEL_EXTRA_RECEIVERS = (0x110, 4)
+    MODEL_SWAP_XOR = 0xA5A5A5
+
+    def _model_body_skeleton(self) -> tuple[int, bytes] | None:
+        """(identifiant, fichier mdn) du corps charge, lu dans son paquet."""
+        loaded = self.model_loaded_variants()
+        if loaded is None:
+            return None
+        pack = dict(self.model_variants("body")).get(loaded[0])
+        if pack is None:
+            return None
+        files = self._model_files()
+        marker = f"/slot/{pack:08x}/cache/"
+        names = {p.rsplit("/", 1)[-1]: p for p in files.entries if marker in p}
+        for name, path in names.items():
+            if name.endswith(".mdn") and name[:8] + ".cnp" in names:
+                return int(name[:8], 16), files.read(path)
+        return None
+
+    def _model_files(self):
+        from mgs4trainer.core.vpak import StageFiles
+        if getattr(self, "_spawn_files", None) is None:
+            self._spawn_files = StageFiles(self._spawn_game_root())
+        return self._spawn_files
+
+    def model_swap_candidates(self) -> list[int]:
+        """Modeles de la zone dont le squelette est contenu dans celui du corps."""
+        from mgs4trainer.core import mdn
+        location = self.read_location()
+        skeleton = self._model_body_skeleton()
+        if location is None or skeleton is None:
+            return []
+        files = self._model_files()
+        out = []
+        for key, path in files.zone_resources(location[0]):
+            if key >> 24 != 0x0D or (key & 0xFFFFFF) == skeleton[0]:
+                continue
+            try:
+                data = files.read(path)
+                if mdn.MdnHeader(data).bone_count >= 20 and mdn.skeleton_compatible(data, skeleton[1]):
+                    out.append(key & 0xFFFFFF)
+            except (ValueError, struct.error, IndexError):
+                continue
+        return out
+
+    def set_body_model(self, source: int | None) -> bool:
+        """Corps de Snake = geometrie du modele source (None = son modele)."""
+        return self._start_equip(self._set_body_model_live, source)
+
+    def _set_body_model_live(self, source: int | None) -> bool:
+        from mgs4trainer.core import mdn
+        funcs = self._live_funcs(self.MODEL_LIVE_FUNCS)
+        spawn_funcs = self._live_funcs(self.SPAWN_FUNCS)
+        manager = struct.unpack("<Q", self.proc.read_bytes(self.base + self.MODEL_MANAGER_PTR_RVA, 8))[0]
+        location = self.read_location()
+        skeleton = self._model_body_skeleton()
+        if None in (funcs, spawn_funcs, location, skeleton) or not manager or not self._octocamo_controller():
+            return False
+        body_id, skeleton_data = skeleton
+        body_key = 0x0D000000 | body_id
+        nodes = self._spawn_resource_nodes()
+        if body_key not in nodes:
+            return False
+        target = nodes[body_key]
+        saved = getattr(self, "_model_swap_saved", None)
+        if saved is None or saved[:2] != (self.pid, target):
+            saved = (self.pid, target, self.proc.read_bytes(target + 0x14, 4), self.proc.read_bytes(target + 0x20, 8))
+            self._model_swap_saved = saved
+        if source is None:
+            size, data = saved[2], saved[3]
+        else:
+            files = self._model_files()
+            path = next((p for k, p in files.zone_resources(location[0]) if k == 0x0D000000 | source), None)
+            if path is None:
+                return False
+            try:
+                hybrid = mdn.build_hybrid(files.read(path), skeleton_data)
+            except (ValueError, struct.error, IndexError):
+                return False
+            alias = 0x0D000000 | ((source ^ body_id ^ self.MODEL_SWAP_XOR) & 0xFFFFFF)
+            if alias not in nodes and not self._spawn_register_entries(spawn_funcs, location[0], [(alias, hybrid)]):
+                return False
+            nodes = self._spawn_resource_nodes()
+            if alias not in nodes:
+                return False
+            size = self.proc.read_bytes(nodes[alias] + 0x14, 4)
+            data = self.proc.read_bytes(nodes[alias] + 0x20, 8)
+        call = self.speed.game_call
+        state = call(funcs["state"])
+        if state is None:
+            return False
+        pause = not (state & 6)
+        if pause:
+            call(funcs["pause_set"], self.MODEL_PAUSE_FLAG)
+        try:
+            self.proc.write_bytes(target + 0x20, data)
+            self.proc.write_bytes(target + 0x14, size)
+            receivers = []
+            for i in range(self.MODEL_PLAYER_SLOTS):
+                entry = self.base + self.PLAYER_TABLE_RVA + (i + 1) * self.PLAYER_ENTRY_SIZE
+                receivers.append(struct.unpack("<Q", self.proc.read_bytes(entry, 8))[0])
+            offset, count = self.MODEL_EXTRA_RECEIVERS
+            receivers += [struct.unpack("<Q", self.proc.read_bytes(manager + offset + 8 * i, 8))[0] for i in range(count)]
+            send = self.base + self.LIQUID_SEND_MESSAGE
+            for receiver in receivers:
+                if receiver:
+                    call(send, receiver, self.MODEL_REBUILD_MESSAGE, 0)
+            time.sleep(0.3)
+            return True
+        finally:
+            if pause:
+                self._model_pause_clear(funcs)
+
     def model_variants_release(self) -> None:
         """Fermeture du trainer : les fonctions du jeu reprennent le choix des
         variantes (le modele actuel reste jusqu'au prochain changement)."""

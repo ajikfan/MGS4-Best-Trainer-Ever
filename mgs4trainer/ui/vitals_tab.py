@@ -236,6 +236,15 @@ class VitalsTab(QWidget):
         self.model_apply_btn.setToolTip(tr("vitals.model_tooltip"))
         self.model_apply_btn.clicked.connect(self._on_model_apply)
         self.zone_buttons += [self.model_body_combo, self.model_face_combo, self.model_apply_btn]
+        self.model_swap_combo = QComboBox()
+        self.model_swap_combo.addItem(tr("vitals.model_swap_none"), None)
+        self.model_swap_find_btn = QPushButton(tr("vitals.model_swap_find"))
+        self.model_swap_find_btn.setToolTip(tr("vitals.model_swap_tooltip"))
+        self.model_swap_find_btn.clicked.connect(self._on_model_swap_find)
+        self.model_swap_apply_btn = QPushButton(tr("vitals.model_apply"))
+        self.model_swap_apply_btn.setToolTip(tr("vitals.model_swap_tooltip"))
+        self.model_swap_apply_btn.clicked.connect(self._on_model_swap_apply)
+        self.zone_buttons += [self.model_swap_combo, self.model_swap_find_btn, self.model_swap_apply_btn]
 
         weapons_group = QGroupBox(tr("vitals.weapons_group"))
         weapons_layout = QVBoxLayout(weapons_group)
@@ -335,13 +344,23 @@ class VitalsTab(QWidget):
         page_layout.addWidget(spawn_group)
 
         model_group = QGroupBox(tr("vitals.model_group"))
-        model_row = QHBoxLayout(model_group)
+        model_layout = QVBoxLayout(model_group)
+        model_row = QHBoxLayout()
         model_row.addWidget(QLabel(tr("vitals.model_body")))
         model_row.addWidget(self.model_body_combo)
         model_row.addWidget(QLabel(tr("vitals.model_face")))
         model_row.addWidget(self.model_face_combo)
         model_row.addWidget(self.model_apply_btn)
         model_row.addStretch(1)
+        model_layout.addLayout(model_row)
+        # Corps d'un autre personnage (MGS4Live.set_body_model, experimental)
+        swap_row = QHBoxLayout()
+        swap_row.addWidget(QLabel(tr("vitals.model_swap")))
+        swap_row.addWidget(self.model_swap_combo)
+        swap_row.addWidget(self.model_swap_find_btn)
+        swap_row.addWidget(self.model_swap_apply_btn)
+        swap_row.addStretch(1)
+        model_layout.addLayout(swap_row)
         page_layout.addWidget(model_group)
 
         triggers_group = QGroupBox(tr("vitals.triggers_group"))
@@ -972,6 +991,27 @@ class VitalsTab(QWidget):
                 self.model_face_combo.setCurrentIndex(0)
         except OSError:
             pass
+
+    # Modeles connus (identifiant -> nom), releves en jeu
+    MODEL_SWAP_NAMES = {0x313917: "vitals.model_swap_pmc_me"}
+
+    def _on_model_swap_find(self):
+        if not (self.live.connected and self.live.sane):
+            return
+        try:
+            candidates = self.live.model_swap_candidates()
+        except OSError:
+            return
+        self.model_swap_combo.clear()
+        self.model_swap_combo.addItem(tr("vitals.model_swap_none"), None)
+        for model in candidates:
+            key = self.MODEL_SWAP_NAMES.get(model)
+            label = tr(key) if key else tr("vitals.model_swap_model")
+            self.model_swap_combo.addItem(f"{label} ({model:#08x})", model)
+
+    def _on_model_swap_apply(self):
+        if self.live.connected and self.live.sane:
+            self.live.set_body_model(self.model_swap_combo.currentData())
 
     def _on_model_apply(self):
         if self.live.connected and self.live.sane:
