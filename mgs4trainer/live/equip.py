@@ -438,13 +438,15 @@ class EquipMixin:
     MODEL_FACECAMO_INDEX = {0x2: 1, 0x3: 2, 0xA: 4, 0xB: 5, 0xC: 6, 0xD: 7, 0x11: 8, 0x14: 9,
                             0x15: 10, 0x16: 11, 0x17: 12, 0x18: 13, 0x19: 14, 0x1C: 15}
 
-    def model_face_compatible(self, body: int, face: int) -> bool:
+    def model_face_compatible(self, body: int, face: int, natural: int | None = -1) -> bool:
+        """natural : visage naturel deja lu (-1 = le lire)."""
         points = self._model_attach_points()
         if not points or body not in points["body"] or face not in points["face"]:
             return False
         if face in self.MODEL_FACECAMO_INDEX:
             return points["face"][face] <= points["body"][body]
-        natural = self.model_natural_face()
+        if natural == -1:
+            natural = self.model_natural_face()
         # inconnu (trainer relance avec un visage impose) : visage de la combinaison
         required = points["face_eqpp"].get(0 if natural is None else natural, set())
         if not required <= points["face_eqpp"][face]:

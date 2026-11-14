@@ -211,6 +211,8 @@
   "vitals.model_face_young2": "Snake jeune, sans bandana (bis)",
   "vitals.model_face_young_bandana": "Snake jeune avec bandana",
   "vitals.model_face_bandana_eye2": "Old Snake, bandana et Solid Eye (bis)",
+  "vitals.model_face_altair_hood": "Capuche d'Altaïr",
+  "vitals.model_face_rebel": "Visage partiel (déguisement de rebelle, acte 2)",
   "vitals.model_tooltip": "Impose à Snake le corps et/ou le visage d'une variante de tenue (paquet du jeu entre parenthèses), quelle que soit la tenue portée. Automatique rend la main au jeu. Expérimental.",
   "vitals.triggers_group": "Déclencheurs",
   "vitals.rebels": "Rebelles :",

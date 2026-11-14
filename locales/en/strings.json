@@ -211,6 +211,8 @@
   "vitals.model_face_young2": "Young Snake, no bandana (alt)",
   "vitals.model_face_young_bandana": "Young Snake with bandana",
   "vitals.model_face_bandana_eye2": "Old Snake, bandana and Solid Eye (alt)",
+  "vitals.model_face_altair_hood": "Altaïr's hood",
+  "vitals.model_face_rebel": "Partial face (rebel disguise, Act 2)",
   "vitals.model_tooltip": "Forces Snake's body and/or face from an outfit variant (game pack in brackets), whatever outfit is worn. Automatic gives control back to the game. Experimental.",
   "vitals.triggers_group": "Triggers",
   "vitals.rebels": "Rebels:",

@@ -907,7 +907,8 @@ class VitalsTab(QWidget):
                         0x316F: "vitals.model_body_octocamo2", 0x5A25: "vitals.model_body_suit2",
                         0x53C8: "vitals.model_body_altair", 0x2974: "vitals.model_body_upper",
                         0x5E68: "vitals.model_body_upper", 0x6644: "vitals.model_body_upper"}
-    MODEL_FACE_NAMES = {0x6FB: "vitals.model_face_bandana_eye", 0x1CD2: "vitals.model_face_bandana",
+    MODEL_FACE_NAMES = {0x320F: "vitals.model_face_altair_hood", 0x1572: "vitals.model_face_rebel",
+                        0x6FB: "vitals.model_face_bandana_eye", 0x1CD2: "vitals.model_face_bandana",
                         0x39E7: "vitals.model_face_facecamo_eye", 0x3B7E: "vitals.model_face_young",
                         0x174A: "vitals.model_face_bare", 0x207: "vitals.model_face_burnt_eye",
                         0x48E7: "vitals.model_face_young2", 0x2BD9: "vitals.model_face_young_bandana",
@@ -948,12 +949,14 @@ class VitalsTab(QWidget):
         if not (self.live.connected and self.live.sane):
             return
         try:
+            natural = self.live.model_natural_face()  # lu une fois
             # corps sans aucun visage compatible avec la tenue portee : grises
             faces = [self.model_face_combo.itemData(row) for row in range(1, self.model_face_combo.count())]
             body_model = self.model_body_combo.model()
             for row in range(1, self.model_body_combo.count()):
                 candidate = self.model_body_combo.itemData(row)
-                body_model.item(row).setEnabled(any(self.live.model_face_compatible(candidate, f) for f in faces))
+                body_model.item(row).setEnabled(
+                    any(self.live.model_face_compatible(candidate, f, natural) for f in faces))
             body = self.model_body_combo.currentData()
             if body is None:
                 loaded = self.live.model_loaded_variants()
@@ -961,7 +964,7 @@ class VitalsTab(QWidget):
             model = self.model_face_combo.model()
             for row in range(1, self.model_face_combo.count()):
                 face = self.model_face_combo.itemData(row)
-                enabled = body is not None and self.live.model_face_compatible(body, face)
+                enabled = body is not None and self.live.model_face_compatible(body, face, natural)
                 model.item(row).setEnabled(enabled)
             current = self.model_face_combo.currentIndex()
             if current > 0 and not model.item(current).isEnabled():
@@ -1263,6 +1266,15 @@ class VitalsTab(QWidget):
             button.setEnabled(True)
         self._update_spawn_items()
         self._update_model_variant_items()
+        # tenue, FaceCamo ou variantes chargees changes : grises recalcules
+        try:
+            worn = (self.live.proc.read_bytes(self.live.linkvarbuf + self.live.OUTFIT_EQUIP_OFFSET, 2),
+                    self.live.model_loaded_variants())
+        except OSError:
+            worn = None
+        if worn != getattr(self, "_model_worn", None):
+            self._model_worn = worn
+            self._update_model_face_items()
         if self.rebels_check.isChecked():
             try:
                 self.live.maintain_rebel_attitude("hostile" if self.rebels_hostile_btn.isChecked() else "neutral")
