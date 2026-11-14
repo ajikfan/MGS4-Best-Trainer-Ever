@@ -372,6 +372,97 @@ class EquipMixin:
         raw = self.proc.read_bytes(table, count * 12)
         return [struct.unpack_from("<II", raw, i * 12) for i in range(count)]
 
+    # Compatibilite corps / visage (2026-11-14) : un visage accroche ses
+    # pieces a des points du corps (fichiers eqpp du paquet du visage ->
+    # identifiants du cnp du corps : nombre +8, entrees de 0x40 a +0x10,
+    # identifiant en +0, grand-boutiste). Point absent = 95F1F0 renvoie nul,
+    # plantage en 5D1B6F (corps 4 + visage de la combinaison). Visage
+    # associe par le jeu a chaque corps de tenue (62E970, sans FaceCamo).
+    MODEL_PAIRED_FACE = {1: 4, 2: 5, 3: 6, 4: 7, 5: 0x12, 0xB: 4}
+    # eqpp reclames au visage : l'equipement de la TENUE PORTEE (B26) cherche
+    # par 5CD3E0 les eqpp de son visage naturel (combinaison : visage 0,
+    # 0x8F595F et 0xBEB70) ; absent = nul, plantage en 47AE97 (2026-11-14 :
+    # visage 4 sans eqpp ; costume + visage 2, r14 = 0xBEB70). Le visage
+    # choisi doit donc fournir les eqpp du visage naturel (charge quand rien
+    # n'est impose, memorise par model_natural_face).
+
+    def _model_attach_points(self) -> dict | None:
+        """{"body": {variante: points}, "face": {variante: points demandes}}."""
+        cache = getattr(self, "_model_attach_cache", None)
+        if cache and cache[0] == self.pid:
+            return cache[1]
+        from mgs4trainer.core.vpak import StageFiles
+        root = self._spawn_game_root()
+        if not root:
+            return None
+        files = getattr(self, "_spawn_files", None) or StageFiles(root)
+        self._spawn_files = files
+
+        def pack_files(pack: int):
+            marker = f"/slot/{pack:08x}/"
+            return [(p.rsplit("/", 1)[-1], p) for p in files.entries if marker in p]
+
+        bodies, faces = self.model_variants("body"), self.model_variants("face")
+        body_points = {}
+        for variant, pack in bodies:
+            points = set()
+            for name, path in pack_files(pack):
+                if name.endswith(".cnp"):
+                    data = files.read(path)
+                    count = min(struct.unpack_from(">I", data, 8)[0], (len(data) - 0x10) // 0x40)
+                    points |= {struct.unpack_from(">I", data, 0x10 + 0x40 * i)[0] for i in range(count)}
+            body_points[variant] = points
+        known = set().union(*body_points.values()) if body_points else set()
+        face_needs, face_eqpp = {}, {}
+        for variant, pack in faces:
+            needs, eqpp = set(), set()
+            for name, path in pack_files(pack):
+                if name.endswith(".eqpp"):
+                    eqpp.add(int(name[:8], 16))
+                    data = files.read(path)
+                    needs |= {struct.unpack_from(">I", data, o)[0] for o in range(0, len(data) - 3, 4)} & known
+            face_needs[variant], face_eqpp[variant] = needs, eqpp
+        result = {"body": body_points, "face": face_needs, "face_eqpp": face_eqpp}
+        self._model_attach_cache = (self.pid, result)
+        return result
+
+    def model_face_compatible(self, body: int, face: int) -> bool:
+        points = self._model_attach_points()
+        if not points or body not in points["body"] or face not in points["face"]:
+            return False
+        natural = self.model_natural_face()
+        # inconnu (trainer relance avec un visage impose) : visage de la combinaison
+        required = points["face_eqpp"].get(0 if natural is None else natural, set())
+        if not required <= points["face_eqpp"][face]:
+            return False
+        return points["face"][face] <= points["body"][body]
+
+    def model_natural_face(self) -> int | None:
+        """Visage que le jeu choisit pour la tenue portee : le visage charge
+        tant que le pointeur +0xE8 est celui du jeu (memorise), sinon le
+        dernier releve (tenue changee depuis : inconnu, None)."""
+        manager = struct.unpack("<Q", self.proc.read_bytes(self.base + self.MODEL_MANAGER_PTR_RVA, 8))[0]
+        if not manager:
+            return None
+        pick = struct.unpack("<Q", self.proc.read_bytes(manager + self.MODEL_VARIANT_TABLES["face"][2], 8))[0]
+        outfit = self.proc.read_bytes(self.linkvarbuf + self.OUTFIT_EQUIP_OFFSET, 2)
+        # notre fonction "mov eax, N ; ret" (B8 xx xx xx xx C3)
+        code = self.proc.read_bytes(pick, 6) if pick else b""
+        forced = len(code) == 6 and code[0] == 0xB8 and code[5] == 0xC3
+        if not forced:
+            face = struct.unpack("<i", self.proc.read_bytes(manager + 0xC8, 4))[0]
+            self._model_natural = (self.pid, outfit, face)
+            return face
+        cached = getattr(self, "_model_natural", None)
+        return cached[2] if cached and cached[:2] == (self.pid, outfit) else None
+
+    def model_loaded_variants(self) -> tuple[int, int] | None:
+        """(corps, visage) charges."""
+        manager = struct.unpack("<Q", self.proc.read_bytes(self.base + self.MODEL_MANAGER_PTR_RVA, 8))[0]
+        if not manager:
+            return None
+        return struct.unpack("<ii", self.proc.read_bytes(manager + 0xC4, 8))
+
     def set_model_variants(self, body: int | None, face: int | None) -> bool:
         """Impose (ou rend au jeu, None) la variante de corps et de visage."""
         return self._start_equip(self._set_model_variants_live, body, face)
@@ -383,6 +474,20 @@ class EquipMixin:
             return False
         for part, value in (("body", body), ("face", face)):
             if value is not None and value not in {v for v, _ in self.model_variants(part)}:
+                return False
+        # Visage compatible avec le corps (voir MODEL_PAIRED_FACE) : visage
+        # automatique incompatible -> visage associe, sinon le premier qui va.
+        loaded = self.model_loaded_variants()
+        if loaded is None:
+            return False
+        body_target = body if body is not None else loaded[0]
+        face_target = face if face is not None else loaded[1]
+        if not self.model_face_compatible(body_target, face_target):
+            if face is not None:
+                return False
+            candidates = [self.MODEL_PAIRED_FACE.get(body_target)] + [v for v, _ in self.model_variants("face")]
+            face = next((v for v in candidates if v is not None and self.model_face_compatible(body_target, v)), None)
+            if face is None:
                 return False
         if getattr(self, "_model_pick_pid", None) != self.pid:
             stubs = self.proc.alloc_near(self.base, 0x1000)

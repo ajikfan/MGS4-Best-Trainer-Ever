@@ -231,6 +231,7 @@ class VitalsTab(QWidget):
         for combo in (self.model_body_combo, self.model_face_combo):
             combo.addItem(tr("vitals.model_auto"), None)
             combo.setMaxVisibleItems(20)
+        self.model_body_combo.currentIndexChanged.connect(lambda _index: self._update_model_face_items())
         self.model_apply_btn = QPushButton(tr("vitals.model_apply"))
         self.model_apply_btn.setToolTip(tr("vitals.model_tooltip"))
         self.model_apply_btn.clicked.connect(self._on_model_apply)
@@ -899,10 +900,17 @@ class VitalsTab(QWidget):
 
     # Variantes connues (paquet ww/stage/slot -> nom), relevees en jeu.
     MODEL_BODY_NAMES = {0x1E38: "vitals.model_body_octocamo", 0x1863: "vitals.model_body_militia",
-                        0x235E: "vitals.model_body_rebel"}
-
+                        0x235E: "vitals.model_body_rebel", 0x43CF: "vitals.model_body_suit",
+                        0x1: "vitals.model_body_civilian",
+                        0x3E71: "vitals.model_body_nomad", 0x4A0: "vitals.model_body_burnt",
+                        0xF35: "vitals.model_body_shirtless", 0x490E: "vitals.model_body_burnt_vest",
+                        0x316F: "vitals.model_body_octocamo2", 0x5A25: "vitals.model_body_suit2",
+                        0x53C8: "vitals.model_body_altair", 0x2974: "vitals.model_body_upper",
+                        0x5E68: "vitals.model_body_upper", 0x6644: "vitals.model_body_upper"}
+    MODEL_FACE_NAMES = {0x3B7E: "vitals.model_face_young"}
     def _update_model_variant_items(self):
         """Remplit les listes de corps / visage une fois connecte."""
+        filled = False
         for part, combo in (("body", self.model_body_combo), ("face", self.model_face_combo)):
             if combo.count() > 1:
                 continue
@@ -911,9 +919,39 @@ class VitalsTab(QWidget):
             except OSError:
                 continue
             for variant, pack in variants:
-                key = self.MODEL_BODY_NAMES.get(pack) if part == "body" else None
+                key = (self.MODEL_BODY_NAMES if part == "body" else self.MODEL_FACE_NAMES).get(pack)
                 label = tr(key) if key else tr("vitals.model_variant", n=variant)
                 combo.addItem(f"{label} ({pack:#06x})", variant)
+            filled = filled or bool(variants)
+        if filled:
+            self._update_model_face_items()
+
+    def _update_model_face_items(self):
+        """Grise les visages incompatibles avec le corps choisi (Automatique :
+        le corps charge) - voir MGS4Live.model_face_compatible."""
+        if not (self.live.connected and self.live.sane):
+            return
+        try:
+            # corps sans aucun visage compatible avec la tenue portee : grises
+            faces = [self.model_face_combo.itemData(row) for row in range(1, self.model_face_combo.count())]
+            body_model = self.model_body_combo.model()
+            for row in range(1, self.model_body_combo.count()):
+                candidate = self.model_body_combo.itemData(row)
+                body_model.item(row).setEnabled(any(self.live.model_face_compatible(candidate, f) for f in faces))
+            body = self.model_body_combo.currentData()
+            if body is None:
+                loaded = self.live.model_loaded_variants()
+                body = loaded[0] if loaded else None
+            model = self.model_face_combo.model()
+            for row in range(1, self.model_face_combo.count()):
+                face = self.model_face_combo.itemData(row)
+                enabled = body is not None and self.live.model_face_compatible(body, face)
+                model.item(row).setEnabled(enabled)
+            current = self.model_face_combo.currentIndex()
+            if current > 0 and not model.item(current).isEnabled():
+                self.model_face_combo.setCurrentIndex(0)
+        except OSError:
+            pass
 
     def _on_model_apply(self):
         if self.live.connected and self.live.sane:
