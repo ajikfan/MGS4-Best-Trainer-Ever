@@ -907,7 +907,8 @@ class VitalsTab(QWidget):
                         0x316F: "vitals.model_body_octocamo2", 0x5A25: "vitals.model_body_suit2",
                         0x53C8: "vitals.model_body_altair", 0x2974: "vitals.model_body_upper",
                         0x5E68: "vitals.model_body_upper", 0x6644: "vitals.model_body_upper"}
-    MODEL_FACE_NAMES = {0x320F: "vitals.model_face_altair_hood", 0x1572: "vitals.model_face_rebel",
+    MODEL_FACE_NAMES = {0x2f03: "vitals.model_face_bare_suit", 0x11f0: "vitals.model_face_burnt_bandana_eye", 0x1a4b: "vitals.model_face_burnt_hair", 0x26c6: "vitals.model_face_burnt_bandana", 0x402b: "vitals.model_face_bare_nomad", 0x432d: "vitals.model_face_burnt_nomad", 0xd15: "vitals.model_face_bare3", 0x4ef1: "vitals.model_face_burnt_bare2", 
+                        0x320F: "vitals.model_face_altair_hood", 0x1572: "vitals.model_face_rebel",
                         0x6FB: "vitals.model_face_bandana_eye", 0x1CD2: "vitals.model_face_bandana",
                         0x39E7: "vitals.model_face_facecamo_eye", 0x3B7E: "vitals.model_face_young",
                         0x174A: "vitals.model_face_bare", 0x207: "vitals.model_face_burnt_eye",
