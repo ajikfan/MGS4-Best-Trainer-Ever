@@ -958,6 +958,10 @@
   "MANTIS_STRINGS_VTABLE_RVA": {
    "0x1904da0": "0x13292a0"
   },
+  "MODEL_DEFAULT_PICKERS": {
+   "0x8f9940": "0x62e710",
+   "0x8f9c90": "0x62ea60"
+  },
   "MODEL_LIVE_FUNCS": {
    "0x73fdc0": "0x52b740",
    "0x73fdd0": "0x52b750",

@@ -222,5 +222,13 @@
  "0xc81a61": [
   9534401,
   "manuel : boucle de deplacement, debut de boucle"
+ ],
+ "0x8f9940": [
+  6481680,
+  "manuel : choix de la variante de corps par defaut (gestionnaire de modele +0xE0), 59/64 octets identiques"
+ ],
+ "0x8f9c90": [
+  6482528,
+  "manuel : choix de la variante de visage par defaut (+0xE8), 59/64 octets identiques"
  ]
 }

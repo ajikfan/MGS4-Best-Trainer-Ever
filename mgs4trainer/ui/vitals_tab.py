@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 import mgs4save
 
 from mgs4trainer.core.gamedata import ALERT_STATE_NAMES, VITALS
-from mgs4trainer.core.i18n import alert_state_name, tr, vital_display_name
+from mgs4trainer.core.i18n import alert_state_name, facecamo_name, tr, vital_display_name
 from mgs4trainer.live import MGS4Live
 from mgs4trainer.ui.common import AMMO_LOCK_REFRESH_MS, warn_dialog
 from mgs4trainer.ui.photo_help import PhotoControlsDialog
@@ -907,7 +907,17 @@ class VitalsTab(QWidget):
                         0x316F: "vitals.model_body_octocamo2", 0x5A25: "vitals.model_body_suit2",
                         0x53C8: "vitals.model_body_altair", 0x2974: "vitals.model_body_upper",
                         0x5E68: "vitals.model_body_upper", 0x6644: "vitals.model_body_upper"}
-    MODEL_FACE_NAMES = {0x3B7E: "vitals.model_face_young"}
+    MODEL_FACE_NAMES = {0x6FB: "vitals.model_face_bandana_eye", 0x1CD2: "vitals.model_face_bandana",
+                        0x39E7: "vitals.model_face_facecamo_eye", 0x3B7E: "vitals.model_face_young",
+                        0x174A: "vitals.model_face_bare", 0x207: "vitals.model_face_burnt_eye",
+                        0x48E7: "vitals.model_face_young2", 0x2BD9: "vitals.model_face_young_bandana",
+                        0x2341: "vitals.model_face_bandana_eye2", 0x51F2: "vitals.model_face_bandana_eye2"}
+    # Visage -> FaceCamo (ID d'objet) qui le donne : 62E970 (1.4.2), d'apres
+    # linkvarbuf+0xB27 (voir MGS4Live.FACECAMO_EQUIP_INDEX) ; 16 = Snake
+    # jeune avec la tenue civile.
+    MODEL_FACECAMO_FACES = {0xA: 0x22, 0xB: 0x23, 0xC: 0x24, 0xD: 0x21, 0x14: 0x28, 0x15: 0x27,
+                            0x16: 0x26, 0x17: 0x29, 0x18: 0x2A, 0x19: 0x2B, 0x1C: 0x2C}
+
     def _update_model_variant_items(self):
         """Remplit les listes de corps / visage une fois connecte."""
         filled = False
@@ -920,7 +930,13 @@ class VitalsTab(QWidget):
                 continue
             for variant, pack in variants:
                 key = (self.MODEL_BODY_NAMES if part == "body" else self.MODEL_FACE_NAMES).get(pack)
-                label = tr(key) if key else tr("vitals.model_variant", n=variant)
+                facecamo = self.MODEL_FACECAMO_FACES.get(variant) if part == "face" and not key else None
+                if key:
+                    label = tr(key)
+                elif facecamo is not None:
+                    label = facecamo_name(facecamo)
+                else:
+                    label = tr("vitals.model_variant", n=variant)
                 combo.addItem(f"{label} ({pack:#06x})", variant)
             filled = filled or bool(variants)
         if filled:

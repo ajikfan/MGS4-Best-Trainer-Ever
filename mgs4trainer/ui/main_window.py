@@ -753,6 +753,7 @@ class TrainerWindow(QMainWindow):
         self.live.ally_follow_release()  # points de la route empruntee remis
         self.live.cutscene_quit_remove()
         self.live.load_menu_remove()
+        self.live.model_variants_release()  # corps / visage : choix rendu au jeu
         self.cutscene_overlay.close()
         self.curtain.close()
         self.overlay.close()

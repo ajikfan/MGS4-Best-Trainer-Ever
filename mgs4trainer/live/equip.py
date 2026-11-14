@@ -356,6 +356,10 @@ class EquipMixin:
     # decompte +0x108. Variante imposee = petite fonction "mov eax, N ;
     # ret" a la place du pointeur ; None = pointeur d'origine.
     MODEL_VARIANT_TABLES = {"body": (0x90, 0x98, 0xE0), "face": (0xA0, 0xA8, 0xE8)}
+    # Fonctions du jeu pointees d'origine par +0xE0 / +0xE8 (1.4.2 62E710 /
+    # 62EA60) : remises si le pointeur est encore une de nos fonctions (trainer
+    # ferme sans "Automatique" : sinon on les prendrait pour celles du jeu).
+    MODEL_DEFAULT_PICKERS = {"body": 0x8F9940, "face": 0x8F9C90}
     MODEL_RELOAD_COUNTDOWN = 0x108
     MODEL_RELOAD_LOADING = 0xC0
 
@@ -412,7 +416,9 @@ class EquipMixin:
                     count = min(struct.unpack_from(">I", data, 8)[0], (len(data) - 0x10) // 0x40)
                     points |= {struct.unpack_from(">I", data, 0x10 + 0x40 * i)[0] for i in range(count)}
             body_points[variant] = points
-        known = set().union(*body_points.values()) if body_points else set()
+        # identifiants d'attache sur 24 bits ; le paquet commun 0x1 (corps 3)
+        # apporte des valeurs parasites (0x1000000 -> Otacon et Raiden grises)
+        known = {i for i in set().union(*body_points.values()) if 0 < i < 0x1000000} if body_points else set()
         face_needs, face_eqpp = {}, {}
         for variant, pack in faces:
             needs, eqpp = set(), set()
@@ -426,16 +432,50 @@ class EquipMixin:
         self._model_attach_cache = (self.pid, result)
         return result
 
+    # Visage -> FaceCamo porte (linkvarbuf+0xB27) qui le donne (62E970, 1.4.2).
+    # Ces visages passent par l'equipement normal du FaceCamo : les eqpp
+    # reclames suivent alors ce visage (OctoCamo + Big Boss, comme le menu).
+    MODEL_FACECAMO_INDEX = {0x2: 1, 0x3: 2, 0xA: 4, 0xB: 5, 0xC: 6, 0xD: 7, 0x11: 8, 0x14: 9,
+                            0x15: 10, 0x16: 11, 0x17: 12, 0x18: 13, 0x19: 14, 0x1C: 15}
+
     def model_face_compatible(self, body: int, face: int) -> bool:
         points = self._model_attach_points()
         if not points or body not in points["body"] or face not in points["face"]:
             return False
+        if face in self.MODEL_FACECAMO_INDEX:
+            return points["face"][face] <= points["body"][body]
         natural = self.model_natural_face()
         # inconnu (trainer relance avec un visage impose) : visage de la combinaison
         required = points["face_eqpp"].get(0 if natural is None else natural, set())
         if not required <= points["face_eqpp"][face]:
             return False
         return points["face"][face] <= points["body"][body]
+
+    def model_variants_release(self) -> None:
+        """Fermeture du trainer : les fonctions du jeu reprennent le choix des
+        variantes (le modele actuel reste jusqu'au prochain changement)."""
+        if not (self.connected and self.sane):
+            return
+        try:
+            manager = struct.unpack("<Q", self.proc.read_bytes(self.base + self.MODEL_MANAGER_PTR_RVA, 8))[0]
+            if not manager:
+                return
+            for part, (_t, _c, pick) in self.MODEL_VARIANT_TABLES.items():
+                current = struct.unpack("<Q", self.proc.read_bytes(manager + pick, 8))[0]
+                if self._model_pick_is_ours(current):
+                    original = getattr(self, "_model_pick_originals", {}).get(
+                        part, struct.pack("<Q", self.base + self.MODEL_DEFAULT_PICKERS[part]))
+                    self.proc.write_bytes(manager + pick, original)
+        except OSError:
+            pass
+
+    def _model_pick_is_ours(self, pointer: int) -> bool:
+        """Notre fonction "mov eax, N ; ret" (B8 xx xx xx xx C3) ?"""
+        try:
+            code = self.proc.read_bytes(pointer, 6) if pointer else b""
+        except OSError:
+            return False
+        return len(code) == 6 and code[0] == 0xB8 and code[5] == 0xC3
 
     def model_natural_face(self) -> int | None:
         """Visage que le jeu choisit pour la tenue portee : le visage charge
@@ -446,10 +486,7 @@ class EquipMixin:
             return None
         pick = struct.unpack("<Q", self.proc.read_bytes(manager + self.MODEL_VARIANT_TABLES["face"][2], 8))[0]
         outfit = self.proc.read_bytes(self.linkvarbuf + self.OUTFIT_EQUIP_OFFSET, 2)
-        # notre fonction "mov eax, N ; ret" (B8 xx xx xx xx C3)
-        code = self.proc.read_bytes(pick, 6) if pick else b""
-        forced = len(code) == 6 and code[0] == 0xB8 and code[5] == 0xC3
-        if not forced:
+        if not self._model_pick_is_ours(pick):
             face = struct.unpack("<i", self.proc.read_bytes(manager + 0xC8, 4))[0]
             self._model_natural = (self.pid, outfit, face)
             return face
@@ -494,11 +531,15 @@ class EquipMixin:
             if not stubs:
                 return False
             self._model_pick_pid, self._model_pick_originals, self._model_pick_stubs = self.pid, {}, stubs
-        # Pointeur du jeu releve tant qu'il n'est pas deja le notre (le jeu
-        # peut le changer selon la zone ou une cinematique).
-        for index, (part, (_t, _c, pick)) in enumerate(self.MODEL_VARIANT_TABLES.items()):
+        # Pointeur du jeu releve tant qu'il n'est pas une de nos fonctions
+        # (reconnues a leur contenu, meme laissees par un trainer precedent) ;
+        # sinon, fonction d'origine connue.
+        for part, (_t, _c, pick) in self.MODEL_VARIANT_TABLES.items():
             current = self.proc.read_bytes(manager + pick, 8)
-            if struct.unpack("<Q", current)[0] != self._model_pick_stubs + index * 0x10:
+            if self._model_pick_is_ours(struct.unpack("<Q", current)[0]):
+                self._model_pick_originals.setdefault(
+                    part, struct.pack("<Q", self.base + self.MODEL_DEFAULT_PICKERS[part]))
+            else:
                 self._model_pick_originals[part] = current
         call = self.speed.game_call
         state = call(funcs["state"])
@@ -508,6 +549,15 @@ class EquipMixin:
         if pause:
             call(funcs["pause_set"], self.MODEL_PAUSE_FLAG)
         try:
+            outfit, worn_face = self.proc.read_bytes(self.linkvarbuf + self.OUTFIT_EQUIP_OFFSET, 2)
+            facecamo = self.MODEL_FACECAMO_INDEX.get(face) if face is not None else None
+            if facecamo is not None:
+                # visage d'un FaceCamo : on porte ce FaceCamo (B27), pointeur du jeu
+                pattern = struct.unpack("<I", self.proc.read_bytes(
+                    self.linkvarbuf + mgs4save.OCTOCAMO_EQUIPPED_OFFSET, 4))[0]
+                if not (call(funcs["face_allowed"], pattern, outfit, facecamo) or 0) & 0xFFFFFFFF:
+                    return False
+                worn_face, face = facecamo, None
             for index, (part, value) in enumerate((("body", body), ("face", face))):
                 pick = self.MODEL_VARIANT_TABLES[part][2]
                 if value is None:
@@ -522,8 +572,7 @@ class EquipMixin:
             # decompte ET previent Snake (message 0x1E0001) avant que le tampon
             # soit ecrase ; decompte ecrit seul = rendu sur l'ancien modele,
             # plantage en C5EB3 (2026-11-14).
-            outfit, face = self.proc.read_bytes(self.linkvarbuf + self.OUTFIT_EQUIP_OFFSET, 2)
-            if (call(funcs["equip"], outfit, face) or 0) & 0xFFFFFFFF != 0:
+            if (call(funcs["equip"], outfit, worn_face) or 0) & 0xFFFFFFFF != 0:
                 return False
             deadline = time.monotonic() + 3.0
             while time.monotonic() < deadline:
