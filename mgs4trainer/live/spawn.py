@@ -243,6 +243,11 @@ class SpawnMixin:
                 "0003505c6c25b13719000354190003585b67aa12ac064578f80188130000"),
             # 06 id 0x1C0B11, puis option 0x389205 = nom de l'acteur
             "setup": (bytes.fromhex("06110b1c596e0592380d2abcb501556103d61ac10000"), 4, 10),
+            # Laser (2026-11-14) : en damier beige hors des zones a Gekko
+            # (s02a40l), jaune et net en zone a Gekko (s04a10l). Sans effet :
+            # types lt3/octt/vlm, ressources partagees de s04a10l, slots
+            # 000014d1/00001637/000019ee/00007f1d/00008d4d. Pas une question de
+            # fichiers : reglage de zone a trouver (voir memoire).
         },
         # Laughing Octopus, forme bete (ESSAI 2026-11-07) : commande de
         # creation relevee a l'entree du combat (s02a50l, chara nomme 4EC50
@@ -1482,10 +1487,19 @@ class SpawnMixin:
         groups = self._spawn_zone_groups()
         if self.SPAWN_UNIT_GROUP in groups:
             return unit
-        long_form = b"\x09" + struct.pack("<I", self.SPAWN_UNIT_GROUP)
-        if long_form not in unit or not groups:
+        if not groups:
             return None
-        return unit.replace(long_form, b"\x09" + struct.pack("<I", groups[0] & 0xFFFFFFFF))
+        group = groups[0] & 0xFFFFFFFF
+        long_form = b"\x09" + struct.pack("<I", self.SPAWN_UNIT_GROUP)
+        if long_form in unit:
+            return unit.replace(long_form, b"\x09" + struct.pack("<I", group))
+        # Forme courte (06 + 3 octets, recette du Gekko) : meme longueur si le
+        # groupe de la zone tient sur 3 octets (s02a40l, 2026-11-14 : sans
+        # cela, le Gekko n'apparaissait pas hors des zones ayant 0x221E90).
+        short_form = b"\x06" + self.SPAWN_UNIT_GROUP.to_bytes(3, "little")
+        if short_form in unit and group < 0x1000000:
+            return unit.replace(short_form, b"\x06" + group.to_bytes(3, "little"))
+        return None
 
     def _spawn_named(self, args: bytes, name: int) -> bytes:
         end = self.SPAWN_NAME_OFFSET + 4
