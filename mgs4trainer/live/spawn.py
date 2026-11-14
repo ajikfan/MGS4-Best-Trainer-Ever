@@ -236,13 +236,25 @@ class SpawnMixin:
             "unit": bytes.fromhex(
                 "067969070d0318dc015873e5303b065a1e975870b0ce01061963315c62efca9e"
                 "065e2cea06901e225972ec62590610d480c159636115280610d480c10000"),
+            # Commande 0x834D9E (actes 4-5, s05a10l : memes options que la
+            # recette de s02a90l) : BD02E0 en mode 3 (+0xE7D4), modele
+            # 0xB0FC5C (fichiers de s04a10l, ajoutes par extra_resources), IA
+            # de combat. 0x24C041 (s02a90l) = mode 1, comportement de scene :
+            # ignore Snake, prend les rebelles pour cible sans tirer (coups de
+            # pied au contact). 0x890B33 (s01a00l) = mode 0, modele 0x1F663C :
+            # plantage sans ses fichiers, texture blanche avec. (2026-11-14)
+            "extra_resources": (("s04a10l", 0xB0FC5C),),
             "actor": bytes.fromhex(
-                "0641c0240d2abcb501586585a3011900035c584cd8a548190003605855eaa648"
+                "069e4d830d2abcb501586585a3011900035c584cd8a548190003605855eaa648"
                 "19000364586580a72e19000368584c26acbc1900036c58554aaebc1900037058"
                 "6581a72e19000374584c27acbc1900037858554baebc1900037c586892a03519"
-                "0003505c6c25b13719000354190003585b67aa12ac064578f80188130000"),
-            # 06 id 0x1C0B11, puis option 0x389205 = nom de l'acteur
-            "setup": (bytes.fromhex("06110b1c596e0592380d2abcb501556103d61ac10000"), 4, 10),
+                "0003505c6c25b13719000354190003580000"),
+            # Retires (2026-11-14, valide en jeu) : l'option 0xAC12AA67 (06
+            # F87845, 01 5000 ; +0x4824 = 5000, bits 0x400 de +0x4594/+0x45C0,
+            # 0x80 de +0x45CC) et la commande de reglage 0x1C0B11 jouee apres
+            # (+0xE873 = 1), reprises de la scene de s02a90l : avec elles le
+            # Gekko ne tire jamais. Absentes chez ceux des actes 4-5.
+            "setup": None,
             # Laser (2026-11-14) : en damier beige hors des zones a Gekko
             # (s02a40l), jaune et net en zone a Gekko (s04a10l). Sans effet :
             # types lt3/octt/vlm, ressources partagees de s04a10l, slots
@@ -997,7 +1009,7 @@ class SpawnMixin:
             return False
         if kind.get("no_death_camera") and not self._spawn_patch_death_camera():
             return False
-        if not self._spawn_register(funcs, kind["zone"]):
+        if not self._spawn_register(funcs, kind["zone"], kind.get("extra_resources", ())):
             return False
         unit_template = self._spawn_unit_for_zone(kind["unit"])
         if unit_template is None:
@@ -1539,12 +1551,23 @@ class SpawnMixin:
                 stack += [self._spawn_q(node), self._spawn_q(node + 8)]
         return keys
 
-    def _spawn_register(self, funcs: dict[str, int], zone: str) -> bool:
+    def _spawn_register(self, funcs: dict[str, int], zone: str,
+                        extra: tuple[tuple[str, int], ...] = ()) -> bool:
         """Enregistre les ressources absentes. Le dictionnaire est vide a
         chaque changement de zone ; les tampons du trainer sont reutilises,
-        et recopies car le jeu peut les modifier."""
+        et recopies car le jeu peut les modifier. extra : (zone, id) de
+        fichiers pris dans une autre zone (tous les types de cet id),
+        enregistres sous le nom de leur zone : le jeu y cherche les pixels
+        des textures (sous un autre nom : Gekko tout noir, 2026-11-14)."""
+        for other, file_id in extra:
+            files = [r for r in self._spawn_resources(other) if r[0] & 0xFFFFFF == file_id]
+            if not self._spawn_register_list(funcs, other, files):
+                return False
+        return self._spawn_register_list(funcs, zone, self._spawn_resources(zone))
+
+    def _spawn_register_list(self, funcs: dict[str, int], zone: str, resources) -> bool:
         present = self._spawn_present_keys()
-        missing = [resource for resource in self._spawn_resources(zone) if resource[0] not in present]
+        missing = [resource for resource in resources if resource[0] not in present]
         if not missing:
             return True
         if getattr(self, "_spawn_blob_pid", None) != self.pid:
