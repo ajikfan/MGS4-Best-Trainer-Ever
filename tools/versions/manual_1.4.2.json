@@ -210,5 +210,17 @@
  "0xb2c020": [
   8474816,
   "manuel : fonction Mk.II cache pour ce soldat, octets identiques, B2C020 -> 8150C0"
+ ],
+ "0xc81ac8": [
+  9534504,
+  "manuel : boucle de deplacement C81A20 -> 917B80 (memes octets, appelants apparies), 1er site ucomiss/je"
+ ],
+ "0xc81bdb": [
+  9534779,
+  "manuel : boucle de deplacement, 2e site ucomiss/je"
+ ],
+ "0xc81a61": [
+  9534401,
+  "manuel : boucle de deplacement, debut de boucle"
  ]
 }

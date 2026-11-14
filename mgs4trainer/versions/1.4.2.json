@@ -968,6 +968,13 @@
   "MODEL_MANAGER_PTR_RVA": {
    "0x23eb5f58": "0x238020d8"
   },
+  "MOVE_LOOP_SITES": {
+   "0xc81ac8": "0x917c28",
+   "0xc81bdb": "0x917d3b"
+  },
+  "MOVE_LOOP_START": {
+   "0xc81a61": "0x917bc1"
+  },
   "OCTOCAMO_ACCOUNT_FLAG_RVAS": {
    "0x1d7ab30": "0x16ca330",
    "0x1d7ab31": "0x16ca331"

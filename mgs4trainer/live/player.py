@@ -801,6 +801,7 @@ class PlayerMixin:
         if life is None:
             return False
         if action == "wake":
+            self.move_loop_guard()  # Johnny dans l'arene de Mantis : jeu fige sans lui (SpawnMixin)
             for offset in (0x31C, 0x324):
                 self.proc.write_bytes(life + offset, self.proc.read_bytes(life + offset + 4, 4))
             return True

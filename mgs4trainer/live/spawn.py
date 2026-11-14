@@ -229,7 +229,10 @@ class SpawnMixin:
             "setup": None,
         },
         "gekko": {
-            "zone": "s02a90l",
+            # Ressources et nom de zone de s04a10l (Gekko mode 3 d'origine,
+            # modele 0xB0FC5C inclus, 11 Mo contre 30 pour s02a90l). Ne corrige
+            # pas le laser hors des zones a Gekko (2026-11-14).
+            "zone": "s04a10l",
             "vtable": 0x18EC5B8,
             "group": SPAWN_GROUP_PMC,
             "distance": 4000.0,
@@ -243,7 +246,6 @@ class SpawnMixin:
             # ignore Snake, prend les rebelles pour cible sans tirer (coups de
             # pied au contact). 0x890B33 (s01a00l) = mode 0, modele 0x1F663C :
             # plantage sans ses fichiers, texture blanche avec. (2026-11-14)
-            "extra_resources": (("s04a10l", 0xB0FC5C),),
             "actor": bytes.fromhex(
                 "069e4d830d2abcb501586585a3011900035c584cd8a548190003605855eaa648"
                 "19000364586580a72e19000368584c26acbc1900036c58554aaebc1900037058"
@@ -981,15 +983,34 @@ class SpawnMixin:
         # attend la fin d'un ordre en cours (mode compagnon) au lieu d'etre
         # refusee : apparitions qui echouaient au hasard (2026-11-07)
         locked = self._game_lock().acquire(timeout=15.0)
+        self._spawn_step = "verrou du jeu"
+        result, error = False, None
         try:
             if locked:
-                self._spawn_enemy(kind)
-        except (OSError, struct.error, ValueError, KeyError, StopIteration):
-            pass
+                result = self._spawn_enemy(kind)
+        except (OSError, struct.error, ValueError, KeyError, StopIteration) as exc:
+            error = exc
         finally:
             if locked:
                 self._game_lock().release()
             self._spawn_busy = False
+        if not result:
+            self._spawn_log(kind, error)
+
+    def _spawn_log(self, kind: dict, error) -> None:
+        """Echec d'une apparition : etape et zone dans %TEMP%/mgs4trainer_spawn.log."""
+        try:
+            location = self.read_location()
+        except OSError:
+            location = None
+        name = next((k for k, v in self.SPAWN_TYPES.items() if v is kind), "?")
+        line = (f"{time.strftime('%Y-%m-%d %H:%M:%S')} {name} zone={location[0] if location else '?'} "
+                f"echec a l'etape : {getattr(self, '_spawn_step', '?')}" + (f" ({error!r})" if error else "") + "\n")
+        try:
+            with open(os.path.join(os.environ.get("TEMP", "."), "mgs4trainer_spawn.log"), "a", encoding="utf-8") as log:
+                log.write(line)
+        except OSError:
+            pass
 
     def _spawn_q(self, address: int) -> int:
         return struct.unpack("<Q", self.proc.read_bytes(address, 8))[0]
@@ -997,26 +1018,52 @@ class SpawnMixin:
     def _spawn_enemy(self, kind: dict) -> bool:
         funcs = self._live_funcs(self.SPAWN_FUNCS)
         position = self.player_position()
+        self._spawn_step = "fonctions/position"
         if funcs is None or position is None:
             return False
         if self._spawn_q(self.base + self.SPAWN_CURRENT_UNIT_RVA):
             return False  # un script de creation est en cours
         if kind.get("boss"):
             return self._spawn_boss(kind, funcs, position)
+        self._spawn_step = "detours de route/gestionnaires"
         if not self._spawn_patch_route() or not self._spawn_managers(funcs):
             return False
+        self._spawn_step = "QG"
         if not self._spawn_group(funcs, kind["group"]):
             return False
         if kind.get("no_death_camera") and not self._spawn_patch_death_camera():
             return False
+        self._spawn_step = "ressources"
         if not self._spawn_register(funcs, kind["zone"], kind.get("extra_resources", ())):
             return False
+        self.move_loop_guard()
+        # Une fois les groupes crees par le trainer dans une zone, toutes les
+        # apparitions suivantes de cette zone recoivent des routes locales.
+        location = self.read_location()
+        zone_key = (self.pid, location[0] if location else None)
+        self._spawn_step = "groupes de routes"
+        route_fallback = not self._spawn_zone_groups()
+        if route_fallback:
+            if not self._spawn_route_groups_setup(funcs):
+                return False
+            self._spawn_route_fallback_zone = zone_key
+        elif getattr(self, "_spawn_route_fallback_zone", None) == zone_key:
+            route_fallback = True
+        self._spawn_step = "groupe de l'unite"
         unit_template = self._spawn_unit_for_zone(kind["unit"])
         if unit_template is None:
+            return False
+        actor_template = kind["actor"]
+        if route_fallback:
+            unit_template = self._spawn_local_routes(unit_template, position)
+            actor_template = self._spawn_local_routes(actor_template, position)
+        self._spawn_step = "place dans la liste des ennemis"
+        if not self._spawn_enemy_slot(funcs):
             return False
         self._spawn_names = getattr(self, "_spawn_names", self.SPAWN_FIRST_NAME) + 2
         units = self._spawn_tasks(self.SPAWN_UNIT_VTABLE_RVA)
         unit_args = self._spawn_named(unit_template, self._spawn_names)
+        self._spawn_step = "creation de l'unite"
         if self._spawn_command(unit_args, funcs["chara_named"]) is None:
             return False
         created = self._spawn_tasks(self.SPAWN_UNIT_VTABLE_RVA) - units
@@ -1025,12 +1072,14 @@ class SpawnMixin:
         unit = created.pop()
         actors = self._spawn_tasks(kind["vtable"])
         actor_name = self._spawn_names + 1
-        if self._spawn_command(self._spawn_named(kind["actor"], actor_name), funcs["chara"], unit) is None:
+        self._spawn_step = "creation de l'acteur"
+        if self._spawn_command(self._spawn_named(actor_template, actor_name), funcs["chara"], unit) is None:
             return False
         created = self._spawn_tasks(kind["vtable"]) - actors
         if len(created) != 1:
             return False
         soldier = created.pop()
+        self._spawn_step = "reglage"
         if kind["setup"]:
             args, positional, name_offset = kind["setup"]
             args = args[:name_offset] + struct.pack("<I", actor_name) + args[name_offset + 4:]
@@ -1041,6 +1090,7 @@ class SpawnMixin:
         x, y, z = position
         self.proc.write_bytes(target, struct.pack(
             "<4f", x + kind["distance"], y + self.SPAWN_GROUND_OFFSET, z, 1.0))
+        self._spawn_step = "placement"
         if self.speed.game_call(funcs["warp"], soldier, target, 0, timeout=10.0) is None:
             return False
         vtable = self._spawn_q(soldier)
@@ -1049,6 +1099,7 @@ class SpawnMixin:
         self._spawn_copy_route(soldier, kind)
         flags = struct.unpack("<I", self.proc.read_bytes(soldier + self.SPAWN_START_FLAGS, 4))[0]
         self.proc.write_bytes(soldier + self.SPAWN_START_FLAGS, struct.pack("<I", flags | self.SPAWN_START_BIT))
+        self._spawn_step = "demarrage"
         if self.speed.game_call(funcs["start"], soldier, timeout=10.0) is None:
             return False
         if kind.get("kick"):
@@ -1196,6 +1247,57 @@ class SpawnMixin:
         self.proc.write_bytes(site, b"\xE9" + struct.pack("<i", cave - (site + 5)) + b"\x90\x90")
         return True
 
+    # Boucle de deplacement sans fin (2026-11-14, arene de Mantis s05a20l) :
+    # C81A20 (1.4.2 917B80 ; composant ENE_PLG_ROUTE a acteur+0x42D8) fait
+    # avancer l'animation ([comp]->+0x98) et recommence tant que la position
+    # (+0x30) n'a pas bouge (ucomiss ; je debut de boucle C81A61, aux sites
+    # C81AC8 et C81BDB). Johnny reveille (par le trainer ou par un soldat
+    # ajoute) a une route qui ne le deplace jamais : jeu fige. Garde-fou : au
+    # bout de MOVE_LOOP_LIMIT tours sans deplacement, on sort par la suite
+    # normale (comme s'il avait bouge) ; un acteur qui bouge n'est pas touche.
+    # (site, octets d'origine) ; la suite est juste apres les octets d'origine
+    MOVE_LOOP_SITES = (
+        (0xC81AC8, bytes.fromhex("0f2ecf7494")),
+        (0xC81BDB, bytes.fromhex("0f2ecf0f847dfeffff")),
+    )
+    MOVE_LOOP_START = 0xC81A61
+    MOVE_LOOP_LIMIT = 2000
+
+    def move_loop_guard(self) -> bool:
+        """Pose une fois par processus le garde-fou de la boucle de deplacement."""
+        if not (self.connected and self.sane):
+            return False
+        sites = [(self.base + rva, original, self.base + rva + len(original)) for rva, original in self.MOVE_LOOP_SITES]
+        current = [self.proc.read_bytes(site, len(original)) for site, original, _ in sites]
+        if all(c[0] == 0xE9 for c in current):
+            return True  # deja pose
+        if any(c != original for c, (_, original, _) in zip(current, sites)):
+            return False
+        cave = self.proc.alloc_near(sites[0][0], 0x1000)
+        if not cave:
+            return False
+        counter = cave + 0x800
+        loop = self.base + self.MOVE_LOOP_START
+        for index, (site, original, resume) in enumerate(sites):
+            code_at = cave + index * 0x80
+            code = bytearray(b"\x0F\x2E\xCF")                                 # ucomiss xmm1, xmm7
+            jne_at = len(code); code += b"\x75\x00"                           # jne suite
+            code += b"\xFF\x05" + struct.pack("<i", counter - (code_at + len(code) + 6))         # inc [compteur]
+            code += b"\x81\x3D" + struct.pack("<i", counter - (code_at + len(code) + 10)) + struct.pack("<I", self.MOVE_LOOP_LIMIT)
+            jae_at = len(code); code += b"\x73\x00"                           # jae sortie
+            code += b"\xFF\x25\x00\x00\x00\x00" + struct.pack("<Q", loop)    # jmp debut de boucle
+            exit_at = len(code)                                                # compteur a 0, puis suite
+            code += b"\xC7\x05" + struct.pack("<i", counter - (code_at + len(code) + 10)) + struct.pack("<I", 0)
+            code += b"\xFF\x25\x00\x00\x00\x00" + struct.pack("<Q", resume)  # jmp suite
+            code[jne_at + 1] = exit_at - (jne_at + 2)                          # il a bouge
+            code[jae_at + 1] = exit_at - (jae_at + 2)                          # trop de tours
+            self.proc.write_bytes(code_at, bytes(code))
+        self.proc.write_bytes(counter, bytes(4))
+        for index, (site, original, _) in enumerate(sites):
+            jump = b"\xE9" + struct.pack("<i", cave + index * 0x80 - (site + 5))
+            self.proc.write_bytes(site, jump + b"\x90" * (len(original) - 5))
+        return True
+
     # Deplacements d'Octopus : F0A6D0(boss, 0, type) choisit une destination
     # dans une zone d'arene (types 1, 2, 8, 0x10, 0x20, 0x40, 0x80, 0x800) et
     # renvoie > 0 si trouvee ; ses appelants (F1CD20, F1CE00, F1CE90, F1CF70,
@@ -1318,6 +1420,40 @@ class SpawnMixin:
             struct.unpack("<I", self.proc.read_bytes(self._spawn_q(groups + i * 8) + 0x18, 4))[0]
             for i in range(count)
         }
+
+    # Liste des ennemis d'ENE_MANAGER (2026-11-14, arene de Mantis : 2 places,
+    # Johnny et un PMC ajoute) : +0x30 capacite, +0x34 nombre, +0x38 tableau
+    # de places de 0x10 (acteur en +8). 838370 (1.4.1 : voir table) y inscrit
+    # chaque nouvel ennemi et echoue sans place libre : l'initialisation du
+    # Gekko (BD1510) le detruit alors. On agrandit le tableau (alloue par le
+    # jeu, libere par lui en quittant la zone ; l'ancien reste perdu).
+    SPAWN_ENEMY_SLOTS = (0x30, 0x38, 0x10, 8)  # capacite, tableau, taille d'une place, acteur
+    SPAWN_ENEMY_GROW = 8
+    SPAWN_ENEMY_MAX = 64
+
+    def _spawn_enemy_slot(self, funcs: dict[str, int]) -> bool:
+        """Une place libre dans la liste des ennemis, en l'agrandissant au besoin."""
+        cap_offset, array_offset, size, actor_offset = self.SPAWN_ENEMY_SLOTS
+        manager = self._spawn_q(self.base + self.SPAWN_MANAGER_RVA)
+        if not manager:
+            return False
+        capacity = struct.unpack("<i", self.proc.read_bytes(manager + cap_offset, 4))[0]
+        array = self._spawn_q(manager + array_offset)
+        if capacity <= 0 or not array:
+            return True  # forme inattendue : on laisse le jeu decider
+        slots = self.proc.read_bytes(array, capacity * size)
+        if any(not struct.unpack_from("<Q", slots, i * size + actor_offset)[0] for i in range(capacity)):
+            return True
+        if capacity >= self.SPAWN_ENEMY_MAX:
+            return False
+        grown = capacity + self.SPAWN_ENEMY_GROW
+        new_array = self.speed.game_call(funcs["alloc"], grown * size, timeout=10.0)
+        if not new_array:
+            return False
+        self.proc.write_bytes(new_array, slots + bytes((grown - capacity) * size))
+        self.proc.write_bytes(manager + array_offset, struct.pack("<Q", new_array))
+        self.proc.write_bytes(manager + cap_offset, struct.pack("<i", grown))
+        return True
 
     def _spawn_grow_groups(self, funcs: dict[str, int], manager: int, limit: int) -> bool:
         """Agrandit le tableau des groupes (zones a un seul QG). Alloue par le
@@ -1495,6 +1631,87 @@ class SpawnMixin:
             node = q(node + 0x10)
         return out
 
+    # Groupes de routes absents (ESSAI 2026-11-14, arene de Mantis s05a20l :
+    # 520 routes chargees, aucun groupe de la famille 0xEA2C5E, la commande
+    # du script n'a pas encore tourne). Chaque zone a une commande 0x01DCFD
+    # (famille 0xEA2C5E, option 0x3ECA257A et deux valeurs, ex. s01a57l
+    # 0x2E4605 / 0xB925CC) qui construit ses groupes depuis ses routes : on
+    # rejoue celle du script de la zone en cours.
+    SPAWN_ROUTE_SETUP_PREFIX = bytes.fromhex("06fddc01065e2cea5c7a25ca3e")
+    SPAWN_ROUTE_SETUP_POSITIONAL = 8
+
+    # Routes des recettes absentes de la zone (arene de Mantis : le groupe
+    # cree par la commande ci-dessous reste vide, le code des formations
+    # 84895B cherche une route et lit un pointeur nul en F8BB0). Les routes
+    # de l'option 0x5962EC72 (valeurs 06 + 3 octets [+ C1] ou 09 + 4 octets)
+    # absentes de la table chargee sont remplacees par la route de la zone la
+    # plus proche de Snake (premier point : decalage depuis
+    # SPAWN_OFFSET_BASE_RVA, position en +0).
+    SPAWN_ROUTE_OPTIONS = (bytes.fromhex("72ec6259"), bytes.fromhex("63611528"))  # + 0x28156163 (Gekko)
+
+    def _spawn_loaded_routes(self) -> dict[int, tuple[float, float, float] | None]:
+        b, q = self.base, self._spawn_q
+        count = struct.unpack("<i", self.proc.read_bytes(b + self.ALLY_ROUTE_TABLE_RVA, 4))[0]
+        table = q(b + self.ALLY_ROUTE_TABLE_RVA + 8)
+        offsets = q(b + self.SPAWN_OFFSET_BASE_RVA)
+        raw = self.proc.read_bytes(table, max(count, 0) * 0x10) if count > 0 else b""
+        routes = {}
+        for i in range(len(raw) // 0x10):
+            name, _unused, points, offset = struct.unpack_from("<IIII", raw, i * 0x10)
+            routes[name] = struct.unpack("<fff", self.proc.read_bytes(offsets + offset, 12)) if points else None
+        return routes
+
+    def _spawn_local_routes(self, args: bytes, position) -> bytes:
+        routes = self._spawn_loaded_routes()
+        placed = [(name, pos) for name, pos in routes.items() if pos and name < 0x1000000]
+        if not placed:
+            return args
+        x, _y, z = position
+        nearest = min(placed, key=lambda r: (r[1][0] - x) ** 2 + (r[1][2] - z) ** 2)[0]
+        out = bytearray(args)
+        for option in self.SPAWN_ROUTE_OPTIONS:
+            at = out.find(option)
+            while at >= 0:
+                j = at + len(option)
+                while j < len(out) and out[j] in (0x06, 0x09):
+                    size = 3 if out[j] == 0x06 else 4
+                    value = int.from_bytes(out[j + 1:j + 1 + size], "little")
+                    if value and value not in routes:
+                        out[j + 1:j + 1 + size] = nearest.to_bytes(size, "little")
+                    j += 1 + size
+                    if j < len(out) and out[j] == 0xC1:
+                        j += 1
+                at = out.find(option, j)
+        return bytes(out)
+
+    def _spawn_route_setup_args(self) -> bytes | None:
+        location = self.read_location()
+        if location is None:
+            return None
+        self._spawn_resources(self.SPAWN_TYPES["pmc"]["zone"])  # charge self._spawn_files
+        files = self._spawn_files
+        path = next((p for p in files.entries if p.endswith(".gcx") and f"/{location[0]}/" in p), None)
+        if path is None:
+            return None
+        script = files.read(path)
+        start = script.find(self.SPAWN_ROUTE_SETUP_PREFIX)
+        if start < 0:
+            return None
+        end = start + len(self.SPAWN_ROUTE_SETUP_PREFIX)
+        while script[end] in (0x06, 0x09):
+            end += 4 if script[end] == 0x06 else 5
+        if script[end] != 0x00 or end == start + len(self.SPAWN_ROUTE_SETUP_PREFIX):
+            return None
+        return script[start:end + 1]
+
+    def _spawn_route_groups_setup(self, funcs: dict[str, int]) -> bool:
+        args = self._spawn_route_setup_args()
+        if args is None:
+            return False
+        if self._spawn_command(args, funcs["chara"], positional=self.SPAWN_ROUTE_SETUP_POSITIONAL) is None:
+            return False
+        return bool(self._spawn_zone_groups())
+
     def _spawn_unit_for_zone(self, unit: bytes) -> bytes | None:
         groups = self._spawn_zone_groups()
         if self.SPAWN_UNIT_GROUP in groups:
@@ -1565,11 +1782,56 @@ class SpawnMixin:
                 return False
         return self._spawn_register_list(funcs, zone, self._spawn_resources(zone))
 
+    # Archives d'animations reduites (ESSAI 2026-11-14, arene de Mantis
+    # s05a20l) : la zone charge la cle 0x08816825 depuis s05a10l, meme liste
+    # d'animations mais celles des soldats videes (2,4 Mo contre 4,0) ; un
+    # soldat ajoute y trouve des animations vides (corps tordu, acces nul en
+    # F8BB0). Noeud du dictionnaire : +0x10 cle, +0x14 taille, +0x20 donnees.
+    # Une archive (type 0x08) deja presente et plus petite (chaque zone a
+    # sa version : 2,4 Mo dans l'arene, 3,7 a 5,2 ailleurs) est
+    # enregistree par le jeu sous une cle de rechange, puis son noeud
+    # (taille, donnees) est recopie dans celui de la cle d'origine.
+    SPAWN_SWAP_TYPES = (0x08,)
+    SPAWN_SWAP_XOR = 0x5A5A5A
+    SPAWN_NODE_SIZE, SPAWN_NODE_DATA = 0x14, 0x20
+
+    def _spawn_resource_nodes(self) -> dict[int, int]:
+        nodes = {}
+        tree = self.base + self.SPAWN_RESOURCES_RVA
+        stack = [self._spawn_q(tree + i * 8) for i in range(16)]
+        while stack:
+            node = stack.pop()
+            if node and node not in nodes.values():
+                nodes[struct.unpack("<I", self.proc.read_bytes(node + 0x10, 4))[0]] = node
+                stack += [self._spawn_q(node), self._spawn_q(node + 8)]
+        return nodes
+
     def _spawn_register_list(self, funcs: dict[str, int], zone: str, resources) -> bool:
-        present = self._spawn_present_keys()
+        nodes = self._spawn_resource_nodes()
+        present = set(nodes)
         missing = [resource for resource in resources if resource[0] not in present]
+        swaps = []
+        for key, data in resources:
+            if key in present and key >> 24 in self.SPAWN_SWAP_TYPES:
+                size = struct.unpack("<I", self.proc.read_bytes(nodes[key] + self.SPAWN_NODE_SIZE, 4))[0]
+                alias = (key & 0xFF000000) | ((key ^ self.SPAWN_SWAP_XOR) & 0xFFFFFF)
+                if size < len(data) and alias not in present:
+                    swaps.append((key, alias))
+                    missing.append((alias, data))
         if not missing:
             return True
+        if not self._spawn_register_entries(funcs, zone, missing):
+            return False
+        if swaps:
+            nodes = self._spawn_resource_nodes()
+            for key, alias in swaps:
+                if key in nodes and alias in nodes:
+                    source, target = nodes[alias], nodes[key]
+                    self.proc.write_bytes(target + self.SPAWN_NODE_DATA, self.proc.read_bytes(source + self.SPAWN_NODE_DATA, 8))
+                    self.proc.write_bytes(target + self.SPAWN_NODE_SIZE, self.proc.read_bytes(source + self.SPAWN_NODE_SIZE, 4))
+        return True
+
+    def _spawn_register_entries(self, funcs: dict[str, int], zone: str, missing) -> bool:
         if getattr(self, "_spawn_blob_pid", None) != self.pid:
             self._spawn_blob_pid, self._spawn_blobs = self.pid, {}
             self._spawn_arena, self._spawn_arena_left = 0, 0
