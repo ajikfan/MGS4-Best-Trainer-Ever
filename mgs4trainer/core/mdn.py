@@ -98,3 +98,12 @@ def build_hybrid(source: bytes, skeleton: bytes) -> bytes:
     struct.pack_into(">I", out, 4 + 4 + 8 * 4, new_bone_offset)           # position des os
     struct.pack_into(">I", out, HEADER.size + 4, len(out))                # taille du fichier
     return bytes(out)
+
+
+def hidden(source: bytes) -> bytes:
+    """Copie invisible : tampon des faces mis a zero (tous les triangles
+    aplatis sur le sommet 0), structures intactes (points d'attache, os)."""
+    header = MdnHeader(source)
+    out = bytearray(source)
+    out[header.face_buffer_offset:header.face_buffer_offset + header.face_buffer_size] = bytes(header.face_buffer_size)
+    return bytes(out)

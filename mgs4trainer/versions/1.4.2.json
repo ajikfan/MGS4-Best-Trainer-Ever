@@ -972,6 +972,9 @@
   "MODEL_MANAGER_PTR_RVA": {
    "0x23eb5f58": "0x238020d8"
   },
+  "MODEL_TEXTURE_TABLE_RVA": {
+   "0x23be75f0": "0x235360d0"
+  },
   "MOVE_LOOP_SITES": {
    "0xc81ac8": "0x917c28",
    "0xc81bdb": "0x917d3b"

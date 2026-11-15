@@ -465,6 +465,39 @@ class EquipMixin:
     MODEL_PLAYER_SLOTS = 0x18
     MODEL_EXTRA_RECEIVERS = (0x110, 4)
     MODEL_SWAP_XOR = 0xA5A5A5
+    # Tete masquee (ESSAI 2026-11-15) : la plupart des modeles des PNJ ont
+    # leur tete (137 du catalogue sur 187 animent des os du visage), celle de
+    # Snake est a part (paquet du visage : 0x03A157, bandana, Solid Eye). Copie
+    # de chaque mdn du paquet aux triangles aplatis (core/mdn.hidden),
+    # branchee comme le corps hybride.
+    MODEL_HIDE_XOR = 0x3C3C3C
+    # Table de 0x1421 places de 0x70 (allocateur 677C80, 1.4.2 4D1060) :
+    # chaque texture enregistree en prend une ; table pleine = indice -1 et
+    # ecriture avant la table (plantage 4D1122 en s01a05l, 2026-11-15 : 0
+    # place libre dans cette zone avant tout ajout). Place libre : qword +8
+    # nul et mot +0x34 = 0xFFFF. Nombre de textures d'un txn : u32 BE en +8.
+    MODEL_TEXTURE_TABLE_RVA = 0x23BE75F0
+    MODEL_TEXTURE_SLOTS = 0x1421
+    MODEL_TEXTURE_ENTRY = 0x70
+
+    def model_swap_textures(self, source: int) -> tuple[int, int] | None:
+        """(textures a ajouter pour ce modele, places libres), None si inconnu."""
+        location = self.read_location()
+        found = self._model_swap_source(source, location[0]) if location else None
+        if found is None:
+            return None
+        present = {key & 0x7FFFFFFF for key in self._spawn_resource_nodes()}
+        files = self._model_files()
+        needed = sum(struct.unpack_from(">I", files.read(path), 8)[0]
+                     for key, path in found[2] if key not in present)
+        return needed, self._model_texture_free()
+
+    def _model_texture_free(self) -> int:
+        table = self.base + self.MODEL_TEXTURE_TABLE_RVA
+        data = self.proc.read_bytes(table, self.MODEL_TEXTURE_SLOTS * self.MODEL_TEXTURE_ENTRY)
+        return sum(1 for i in range(1, self.MODEL_TEXTURE_SLOTS)
+                   if not struct.unpack_from("<Q", data, i * self.MODEL_TEXTURE_ENTRY + 8)[0]
+                   and struct.unpack_from("<H", data, i * self.MODEL_TEXTURE_ENTRY + 0x34)[0] == 0xFFFF)
     MODEL_SWAP_SETTLE = 1.0  # s laissees a Snake pour se reconstruire (hors pause)
 
     def _model_body_skeleton(self) -> tuple[int, bytes] | None:
@@ -509,50 +542,93 @@ class EquipMixin:
                 continue
         return out
 
-    def set_body_model(self, source: int | None) -> bool:
-        """Corps de Snake = geometrie du modele source (None = son modele)."""
-        return self._start_equip(self._set_body_model_live, source)
+    # Modeles d'autres zones (ESSAI 2026-11-15) : catalogue genere par
+    # tools/build_model_catalog.py (zone d'origine, txn decrivant ses
+    # textures). Comme pour l'apparition d'ennemis, les txn et le modele sont
+    # enregistres sous le nom de leur zone : le jeu en deduit le dossier des
+    # textures HD (sous un autre nom : modele noir).
+    def model_swap_catalog(self) -> dict[int, tuple[str, int, tuple[int, ...]]]:
+        from mgs4trainer.core.model_catalog import MODELS
+        return MODELS
 
-    def _set_body_model_live(self, source: int | None) -> bool:
+    def _model_swap_source(self, source: int, zone: str):
+        """(zone d'enregistrement, chemin du mdn, [(cle, chemin) des txn
+        a enregistrer]) ; zone courante d'abord, sinon le catalogue."""
+        files = self._model_files()
+        resources = files.zone_resources(zone)
+        path = next((p for k, p in resources if k == 0x0D000000 | source), None)
+        if path is not None:
+            return zone, path, []
+        entry = self.model_swap_catalog().get(source)
+        if entry is None:
+            return None
+        other, _bones, txns = entry
+        resources = files.zone_resources(other)
+        paths = dict(resources)
+        path = paths.get(0x0D000000 | source)
+        if path is None or any(t not in paths for t in txns):
+            return None
+        return other, path, [(t, paths[t]) for t in txns]
+
+    def set_body_model(self, source: int | None, hide_head: bool = False) -> bool:
+        """Corps de Snake = geometrie du modele source (None = son modele) ;
+        hide_head : tete de Snake (paquet du visage) invisible, pour un
+        modele qui a la sienne."""
+        return self._start_equip(self._set_body_model_live, source, hide_head)
+
+    def _set_body_model_live(self, source: int | None, hide_head: bool = False) -> bool:
         from mgs4trainer.core import mdn
         funcs = self._live_funcs(self.MODEL_LIVE_FUNCS)
         spawn_funcs = self._live_funcs(self.SPAWN_FUNCS)
         manager = struct.unpack("<Q", self.proc.read_bytes(self.base + self.MODEL_MANAGER_PTR_RVA, 8))[0]
         location = self.read_location()
         skeleton = self._model_body_skeleton()
-        if None in (funcs, spawn_funcs, location, skeleton) or not manager or not self._octocamo_controller():
+        if None in (funcs, spawn_funcs, location, skeleton) or not manager:
             return False
         body_id, skeleton_data = skeleton
-        body_key = 0x0D000000 | body_id
         nodes = self._spawn_resource_nodes()
-        # La cle peut porter le bit 31 (s03a70l : 0x8D413AA8) ; la recherche
-        # du jeu (534210) l'ignore ("btr r8d,0x1f").
-        target = nodes.get(body_key) or nodes.get(body_key | 0x80000000)
+        target = self._model_node(nodes, body_id)
         if not target:
             return False
-        saved = getattr(self, "_model_swap_saved", None)
-        if saved is None or saved[:2] != (self.pid, target):
-            saved = (self.pid, target, self.proc.read_bytes(target + 0x14, 4), self.proc.read_bytes(target + 0x20, 8))
-            self._model_swap_saved = saved
-        if source is None:
-            size, data = saved[2], saved[3]
-        else:
-            files = self._model_files()
-            path = next((p for k, p in files.zone_resources(location[0]) if k == 0x0D000000 | source), None)
-            if path is None:
+        files = self._model_files()
+        present = {key & 0x7FFFFFFF for key in nodes}
+        redirects = []  # (noeud, cle de rechange, contenu, zone)
+        missing = {}    # zone -> [(cle, donnees)]
+        if source is not None:
+            found = self._model_swap_source(source, location[0])
+            if found is None:
                 return False
+            zone, path, txns = found
             try:
                 hybrid = mdn.build_hybrid(files.read(path), skeleton_data)
             except (ValueError, struct.error, IndexError):
                 return False
-            alias = 0x0D000000 | ((source ^ body_id ^ self.MODEL_SWAP_XOR) & 0xFFFFFF)
-            if alias not in nodes and not self._spawn_register_entries(spawn_funcs, location[0], [(alias, hybrid)]):
+            missing.setdefault(zone, []).extend((key, files.read(p)) for key, p in txns if key not in present)
+            redirects.append((target, 0x0D000000 | ((source ^ body_id ^ self.MODEL_SWAP_XOR) & 0xFFFFFF), hybrid, zone))
+        if hide_head:
+            for face_id, face_data in self._model_face_files():
+                node = self._model_node(nodes, face_id)
+                if node:
+                    redirects.append((node, 0x0D000000 | ((face_id ^ self.MODEL_HIDE_XOR) & 0xFFFFFF),
+                                      mdn.hidden(face_data), location[0]))
+        for _node, alias, data, zone in redirects:
+            if alias not in present:
+                missing.setdefault(zone, []).append((alias, data))
+        textures = sum(struct.unpack_from(">I", data, 8)[0]
+                       for entries in missing.values() for key, data in entries if key >> 24 == 0x03)
+        if textures and textures > self._model_texture_free():
+            return False
+        for zone, entries in missing.items():
+            if entries and not self._spawn_register_entries(spawn_funcs, zone, entries):
                 return False
+        if missing:
             nodes = self._spawn_resource_nodes()
-            if alias not in nodes:
-                return False
-            size = self.proc.read_bytes(nodes[alias] + 0x14, 4)
-            data = self.proc.read_bytes(nodes[alias] + 0x20, 8)
+        if any(alias not in nodes for _n, alias, _d, _z in redirects):
+            return False
+        # (noeud, taille et donnees d'origine, taille et donnees de rechange)
+        writes = [(node, self.proc.read_bytes(node + 0x14, 4), self.proc.read_bytes(node + 0x20, 8),
+                   self.proc.read_bytes(nodes[alias] + 0x14, 4), self.proc.read_bytes(nodes[alias] + 0x20, 8))
+                  for node, alias, _d, _z in redirects]
         call = self.speed.game_call
         state = call(funcs["state"])
         if state is None:
@@ -561,33 +637,59 @@ class EquipMixin:
         if pause:
             call(funcs["pause_set"], self.MODEL_PAUSE_FLAG)
         try:
-            self.proc.write_bytes(target + 0x20, data)
-            self.proc.write_bytes(target + 0x14, size)
-            receivers = []
-            for i in range(self.MODEL_PLAYER_SLOTS):
-                entry = self.base + self.PLAYER_TABLE_RVA + (i + 1) * self.PLAYER_ENTRY_SIZE
-                receivers.append(struct.unpack("<Q", self.proc.read_bytes(entry, 8))[0])
-            offset, count = self.MODEL_EXTRA_RECEIVERS
-            receivers += [struct.unpack("<Q", self.proc.read_bytes(manager + offset + 8 * i, 8))[0] for i in range(count)]
-            send = self.base + self.LIQUID_SEND_MESSAGE
-            for receiver in receivers:
-                if receiver:
-                    call(send, receiver, self.MODEL_REBUILD_MESSAGE, 0)
-            time.sleep(0.1)
+            try:
+                for node, _size, _data, size, data in writes:
+                    self.proc.write_bytes(node + 0x20, data)
+                    self.proc.write_bytes(node + 0x14, size)
+                receivers = []
+                for i in range(self.MODEL_PLAYER_SLOTS):
+                    entry = self.base + self.PLAYER_TABLE_RVA + (i + 1) * self.PLAYER_ENTRY_SIZE
+                    receivers.append(struct.unpack("<Q", self.proc.read_bytes(entry, 8))[0])
+                offset, count = self.MODEL_EXTRA_RECEIVERS
+                receivers += [struct.unpack("<Q", self.proc.read_bytes(manager + offset + 8 * i, 8))[0] for i in range(count)]
+                send = self.base + self.LIQUID_SEND_MESSAGE
+                for receiver in receivers:
+                    if receiver:
+                        call(send, receiver, self.MODEL_REBUILD_MESSAGE, 0)
+                time.sleep(0.1)
+            finally:
+                if pause:
+                    self._model_pause_clear(funcs)
+            # Noeuds rendus APRES la reconstruction (Snake traite le message a
+            # sa mise a jour, donc hors pause : rendus 0,3 s apres, en pause,
+            # Snake se reconstruisait avec son propre corps). Rendus ensuite
+            # parce que le modele de rechange a des structures dans la memoire
+            # de la zone, liberees au changement de zone, alors que le slot du
+            # corps survit (copie en 7B0F8A depuis un pointeur libere,
+            # 2026-11-14). Le Snake construit garde ce modele jusqu'a sa
+            # prochaine reconstruction.
+            time.sleep(self.MODEL_SWAP_SETTLE)
         finally:
-            if pause:
-                self._model_pause_clear(funcs)
-        # Noeud rendu APRES la reconstruction (Snake traite le message a sa
-        # mise a jour, donc hors pause : rendu 0,3 s apres, en pause, Snake se
-        # reconstruisait avec son propre corps). Rendu ensuite parce que le
-        # modele hybride a des structures dans la memoire de la zone, liberees
-        # au changement de zone, alors que le slot du corps survit (copie en
-        # 7B0F8A depuis un pointeur libere, 2026-11-14). Le Snake construit
-        # garde ce corps jusqu'a sa prochaine reconstruction.
-        time.sleep(self.MODEL_SWAP_SETTLE)
-        self.proc.write_bytes(target + 0x20, saved[3])
-        self.proc.write_bytes(target + 0x14, saved[2])
+            for node, size, data, _size, _data in writes:
+                self.proc.write_bytes(node + 0x20, data)
+                self.proc.write_bytes(node + 0x14, size)
         return True
+
+    @staticmethod
+    def _model_node(nodes: dict[int, int], model: int) -> int:
+        """Noeud du mdn ; la cle peut porter le bit 31 (s03a70l : 0x8D413AA8),
+        que la recherche du jeu (534210) ignore ("btr r8d,0x1f")."""
+        key = 0x0D000000 | model
+        return nodes.get(key) or nodes.get(key | 0x80000000) or 0
+
+    def _model_face_files(self) -> list[tuple[int, bytes]]:
+        """[(identifiant, fichier)] des mdn du paquet du visage charge (visage
+        0x03A157, bandana, Solid Eye...)."""
+        loaded = self.model_loaded_variants()
+        if loaded is None:
+            return []
+        pack = dict(self.model_variants("face")).get(loaded[1])
+        if pack is None:
+            return []
+        files = self._model_files()
+        marker = f"/slot/{pack:08x}/cache/"
+        return [(int(p.rsplit("/", 1)[1][:8], 16), files.read(p))
+                for p in files.entries if marker in p and p.endswith(".mdn")]
 
     def model_variants_release(self) -> None:
         """Fermeture du trainer : les fonctions du jeu reprennent le choix des

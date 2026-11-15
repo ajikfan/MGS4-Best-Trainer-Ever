@@ -244,7 +244,10 @@ class VitalsTab(QWidget):
         self.model_swap_apply_btn = QPushButton(tr("vitals.model_apply"))
         self.model_swap_apply_btn.setToolTip(tr("vitals.model_swap_tooltip"))
         self.model_swap_apply_btn.clicked.connect(self._on_model_swap_apply)
-        self.zone_buttons += [self.model_swap_combo, self.model_swap_find_btn, self.model_swap_apply_btn]
+        self.model_hide_head_cb = QCheckBox(tr("vitals.model_hide_head"))
+        self.model_hide_head_cb.setToolTip(tr("vitals.model_hide_head_tooltip"))
+        self.zone_buttons += [self.model_swap_combo, self.model_swap_find_btn, self.model_hide_head_cb,
+                              self.model_swap_apply_btn]
 
         weapons_group = QGroupBox(tr("vitals.weapons_group"))
         weapons_layout = QVBoxLayout(weapons_group)
@@ -358,6 +361,7 @@ class VitalsTab(QWidget):
         swap_row.addWidget(QLabel(tr("vitals.model_swap")))
         swap_row.addWidget(self.model_swap_combo)
         swap_row.addWidget(self.model_swap_find_btn)
+        swap_row.addWidget(self.model_hide_head_cb)
         swap_row.addWidget(self.model_swap_apply_btn)
         swap_row.addStretch(1)
         model_layout.addLayout(swap_row)
@@ -993,13 +997,14 @@ class VitalsTab(QWidget):
             pass
 
     # Modeles connus (identifiant -> nom), releves en jeu
-    MODEL_SWAP_NAMES = {0x313917: "vitals.model_swap_pmc_me"}
+    MODEL_SWAP_NAMES = {0x313917: "vitals.model_swap_pmc_me", 0xE28B85: "vitals.model_swap_naomi_lab"}
 
     def _on_model_swap_find(self):
         if not (self.live.connected and self.live.sane):
             return
         try:
             candidates = self.live.model_swap_candidates()
+            catalog = self.live.model_swap_catalog()
         except OSError:
             return
         self.model_swap_combo.clear()
@@ -1008,10 +1013,31 @@ class VitalsTab(QWidget):
             key = self.MODEL_SWAP_NAMES.get(model)
             label = tr(key) if key else tr("vitals.model_swap_model")
             self.model_swap_combo.addItem(f"{label} ({model:#08x})", model)
+        # Modeles des autres zones (catalogue), par zone d'origine
+        for model, (zone, _bones, _txns) in sorted(catalog.items(), key=lambda item: (item[1][0], item[0])):
+            if model in candidates:
+                continue
+            key = self.MODEL_SWAP_NAMES.get(model)
+            label = tr(key) if key else tr("vitals.model_swap_other")
+            self.model_swap_combo.addItem(f"{zone} : {label} ({model:#08x})", model)
+        # Liste deroulante a la largeur de son plus long nom (tronque sinon)
+        view = self.model_swap_combo.view()
+        view.setMinimumWidth(view.sizeHintForColumn(0) + 2 * view.frameWidth() + 24)
 
     def _on_model_swap_apply(self):
-        if self.live.connected and self.live.sane:
-            self.live.set_body_model(self.model_swap_combo.currentData())
+        if not (self.live.connected and self.live.sane):
+            return
+        source = self.model_swap_combo.currentData()
+        if source is not None:
+            try:
+                cost = self.live.model_swap_textures(source)
+            except OSError:
+                return
+            if cost is not None and cost[0] > cost[1]:
+                QMessageBox.warning(self, tr("vitals.model_swap"),
+                                    tr("vitals.model_swap_no_room").format(needed=cost[0], free=cost[1]))
+                return
+        self.live.set_body_model(source, self.model_hide_head_cb.isChecked())
 
     def _on_model_apply(self):
         if self.live.connected and self.live.sane:

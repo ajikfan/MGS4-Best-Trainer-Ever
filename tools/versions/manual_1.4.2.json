@@ -230,5 +230,9 @@
  "0x8f9c90": [
   6482528,
   "manuel : choix de la variante de visage par defaut (+0xE8), 59/64 octets identiques"
+ ],
+ "0x23be75f0": [
+  592666832,
+  "manuel : table de 0x1421 entrees de 0x70 de l'allocateur 677C80 (4D1060 en 1.4.2), lea rcx en +0x24"
  ]
 }
