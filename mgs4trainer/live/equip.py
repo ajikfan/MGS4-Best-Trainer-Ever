@@ -465,6 +465,7 @@ class EquipMixin:
     MODEL_PLAYER_SLOTS = 0x18
     MODEL_EXTRA_RECEIVERS = (0x110, 4)
     MODEL_SWAP_XOR = 0xA5A5A5
+    MODEL_SWAP_SETTLE = 1.0  # s laissees a Snake pour se reconstruire (hors pause)
 
     def _model_body_skeleton(self) -> tuple[int, bytes] | None:
         """(identifiant, fichier mdn) du corps charge, lu dans son paquet."""
@@ -524,9 +525,11 @@ class EquipMixin:
         body_id, skeleton_data = skeleton
         body_key = 0x0D000000 | body_id
         nodes = self._spawn_resource_nodes()
-        if body_key not in nodes:
+        # La cle peut porter le bit 31 (s03a70l : 0x8D413AA8) ; la recherche
+        # du jeu (534210) l'ignore ("btr r8d,0x1f").
+        target = nodes.get(body_key) or nodes.get(body_key | 0x80000000)
+        if not target:
             return False
-        target = nodes[body_key]
         saved = getattr(self, "_model_swap_saved", None)
         if saved is None or saved[:2] != (self.pid, target):
             saved = (self.pid, target, self.proc.read_bytes(target + 0x14, 4), self.proc.read_bytes(target + 0x20, 8))
@@ -570,11 +573,21 @@ class EquipMixin:
             for receiver in receivers:
                 if receiver:
                     call(send, receiver, self.MODEL_REBUILD_MESSAGE, 0)
-            time.sleep(0.3)
-            return True
+            time.sleep(0.1)
         finally:
             if pause:
                 self._model_pause_clear(funcs)
+        # Noeud rendu APRES la reconstruction (Snake traite le message a sa
+        # mise a jour, donc hors pause : rendu 0,3 s apres, en pause, Snake se
+        # reconstruisait avec son propre corps). Rendu ensuite parce que le
+        # modele hybride a des structures dans la memoire de la zone, liberees
+        # au changement de zone, alors que le slot du corps survit (copie en
+        # 7B0F8A depuis un pointeur libere, 2026-11-14). Le Snake construit
+        # garde ce corps jusqu'a sa prochaine reconstruction.
+        time.sleep(self.MODEL_SWAP_SETTLE)
+        self.proc.write_bytes(target + 0x20, saved[3])
+        self.proc.write_bytes(target + 0x14, saved[2])
+        return True
 
     def model_variants_release(self) -> None:
         """Fermeture du trainer : les fonctions du jeu reprennent le choix des

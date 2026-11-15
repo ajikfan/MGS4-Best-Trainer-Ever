@@ -47,30 +47,40 @@ def bone_ids(data: bytes) -> list[tuple[int, int]]:
             for i in range(header.bone_count)]
 
 
-def skeleton_compatible(source: bytes, skeleton: bytes) -> bool:
-    """Tous les os de source existent dans skeleton, avec le meme parent."""
+MIN_SHARED = 0.5  # part des os de source presents tels quels dans skeleton
+
+
+def skeleton_mapping(source: bytes, skeleton: bytes) -> dict[int, int] | None:
+    """Numero d'os de source -> numero dans skeleton, par identifiant ; un
+    os absent suit son ancetre le plus proche present (doigts, visage,
+    accessoires d'un autre personnage : s03a70l, 120 os dont 110 communs).
+    None si la racine n'est pas commune ou trop peu d'os en commun."""
     target = {bone: index for index, (bone, _parent) in enumerate(bone_ids(skeleton))}
-    target_bones = bone_ids(skeleton)
     source_bones = bone_ids(source)
-    for bone, parent in source_bones:
-        if bone not in target:
-            return False
-        target_parent = target_bones[target[bone]][1]
-        if (parent < 0) != (target_parent < 0):
-            return False
-        if parent >= 0 and source_bones[parent][0] != target_bones[target_parent][0]:
-            return False
-    return True
+    if not source_bones or sum(bone in target for bone, _p in source_bones) < MIN_SHARED * len(source_bones):
+        return None
+    mapping = {}
+    for index in range(len(source_bones)):
+        current, steps = index, 0
+        while current >= 0 and source_bones[current][0] not in target and steps < len(source_bones):
+            current, steps = source_bones[current][1], steps + 1
+        if current < 0 or steps >= len(source_bones):
+            return None
+        mapping[index] = target[source_bones[current][0]]
+    return mapping
+
+
+def skeleton_compatible(source: bytes, skeleton: bytes) -> bool:
+    return skeleton_mapping(source, skeleton) is not None
 
 
 def build_hybrid(source: bytes, skeleton: bytes) -> bytes:
     """Geometrie de source sur la table d'os de skeleton (palettes renumerotees)."""
-    if not skeleton_compatible(source, skeleton):
+    remap = skeleton_mapping(source, skeleton)
+    if remap is None:
         raise ValueError("squelettes incompatibles")
     src = MdnHeader(source)
     skel = MdnHeader(skeleton)
-    remap = {index: {bone: i for i, (bone, _p) in enumerate(bone_ids(skeleton))}[bone]
-             for index, (bone, _p) in enumerate(bone_ids(source))}
     if max(remap.values()) > 0xFF:
         raise ValueError("palette sur un octet : trop d'os")
     out = bytearray(source)
