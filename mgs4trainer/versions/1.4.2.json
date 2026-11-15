@@ -962,6 +962,12 @@
    "0x8f9940": "0x62e710",
    "0x8f9c90": "0x62ea60"
   },
+  "MODEL_INSTANCE_FUNCS": {
+   "0xc37e0": "0xa9080"
+  },
+  "MODEL_INSTANCE_LIST_RVA": {
+   "0x1f83410": "0x18d2c10"
+  },
   "MODEL_LIVE_FUNCS": {
    "0x73fdc0": "0x52b740",
    "0x73fdd0": "0x52b750",

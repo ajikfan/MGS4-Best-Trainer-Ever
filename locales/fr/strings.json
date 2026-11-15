@@ -229,6 +229,7 @@
   "vitals.model_swap_no_room": "Pas assez de place pour les textures de ce modèle dans cette zone ({needed} à ajouter, {free} places libres). Essayez-le dans une zone plus légère.",
   "vitals.model_swap_pmc_me": "Soldat PMC (Moyen-Orient)",
   "vitals.model_swap_naomi_lab": "Naomi (blouse blanche)",
+  "vitals.model_swap_meiling_navy": "Mei Ling (tenue militaire)",
   "vitals.model_swap_tooltip": "Chercher : liste les modèles de la zone puis ceux des autres zones (chargés à la demande avec leurs textures) dont le squelette est compatible avec celui de Snake. Appliquer : Snake prend la géométrie de ce modèle (sa propre tête reste). Le prochain changement de tenue remet son corps. Expérimental : sauvegardez avant.",
   "vitals.model_hide_head": "Masquer sa tête",
   "vitals.model_hide_head_tooltip": "Rend invisible la tête de Snake (visage, bandana, Solid Eye) à l'application, pour laisser voir celle du modèle choisi. Fonctionne aussi avec le corps de Snake. Expérimental.",

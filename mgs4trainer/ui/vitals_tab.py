@@ -997,7 +997,8 @@ class VitalsTab(QWidget):
             pass
 
     # Modeles connus (identifiant -> nom), releves en jeu
-    MODEL_SWAP_NAMES = {0x313917: "vitals.model_swap_pmc_me", 0xE28B85: "vitals.model_swap_naomi_lab"}
+    MODEL_SWAP_NAMES = {0x313917: "vitals.model_swap_pmc_me", 0xE28B85: "vitals.model_swap_naomi_lab",
+                        0x9D31A0: "vitals.model_swap_meiling_navy"}
 
     def _on_model_swap_find(self):
         if not (self.live.connected and self.live.sane):

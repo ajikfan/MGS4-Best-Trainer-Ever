@@ -651,6 +651,13 @@ class EquipMixin:
         writes = [(node, self.proc.read_bytes(node + 0x14, 4), self.proc.read_bytes(node + 0x20, 8),
                    self.proc.read_bytes(nodes[alias] + 0x14, 4), self.proc.read_bytes(nodes[alias] + 0x20, 8))
                   for node, alias, _d, _z, _k in redirects]
+        # cinematique : son Snake ne recoit pas le message ; ses instances
+        # sont reconstruites sur place pendant la pause
+        changes, instances = [], {}
+        if not self._octocamo_controller():
+            changes = [(load_key & 0xFFFFFF, struct.unpack("<Q", old)[0], struct.unpack("<Q", new)[0])
+                       for (_n, _a, _d, _z, load_key), (_node, _s, old, _ns, new) in zip(redirects, writes)]
+            instances = self._model_find_instances(changes)
         call = self.speed.game_call
         state = call(funcs["state"])
         if state is None:
@@ -673,6 +680,8 @@ class EquipMixin:
                 for receiver in receivers:
                     if receiver:
                         call(send, receiver, self.MODEL_REBUILD_MESSAGE, 0)
+                if changes:
+                    self._model_rebuild_instances(changes, instances)
                 time.sleep(0.1)
             finally:
                 if pause:
@@ -691,6 +700,100 @@ class EquipMixin:
                 self.proc.write_bytes(node + 0x20, data)
                 self.proc.write_bytes(node + 0x14, size)
         return True
+
+    # Snake de cinematique (ESSAI 2026-11-15) : cree par 99B170 (objet,
+    # identifiant, drapeaux) -> A98C0(donnees) ; ne recoit pas 0x1E0002.
+    # Instance du modele : +0x14 identifiant du mdn, +0x70 donnees
+    # converties. A9080(instance, donnees) la reconstruit sur place (le
+    # Snake jouable s'en sert en 69A70A) et la rend, 0 si echec (instance
+    # liberee). Meme table d'os (corps hybride, visage masque) : meme taille.
+    MODEL_INSTANCE_FUNCS = {
+        "rebuild": (0xC37E0, "48895c240848896c2410488974241848897c242041564883ec20488bf2488bd9"),  # 1.4.2 A9080
+    }
+    MODEL_INSTANCE_ID, MODEL_INSTANCE_DATA = 0x14, 0x70
+    # Tableau global des instances de modele (1.4.2 0x18D2C10, lu par
+    # C6E52) : celles du Snake de cinematique, de sa tete et du Snake
+    # jouable y sont (399 pointeurs en s01a60l). Taille max inconnue :
+    # 0x400 places lues, chaque pointeur verifie par son identifiant.
+    MODEL_INSTANCE_LIST_RVA = 0x1F83410
+    MODEL_INSTANCE_LIST_SLOTS = 0x400
+    MODEL_SCAN_REGION_MAX = 0x40000000
+
+    def _model_instances(self, models) -> dict[int, list[int]]:
+        """{identifiant: [instances]} d'apres le tableau global des instances."""
+        count = self.MODEL_INSTANCE_LIST_SLOTS
+        table = self.proc.read_bytes(self.base + self.MODEL_INSTANCE_LIST_RVA, count * 8)
+        found = {model: [] for model in models}
+        for pointer in struct.unpack(f"<{count}Q", table):
+            if not 0x10000 <= pointer < 0x7FF000000000:
+                continue
+            try:
+                ident = struct.unpack("<I", self.proc.read_bytes(pointer + self.MODEL_INSTANCE_ID, 4))[0]
+            except OSError:
+                continue
+            if ident in found and pointer not in found[ident]:
+                found[ident].append(pointer)
+        return found
+
+    def _model_find_instances(self, changes) -> dict[int, list[int]]:
+        """Instances a reconstruire, cherchees avant la pause : tableau global
+        (instantane), sinon balayage de la memoire (une dizaine de secondes)
+        sur les donnees qu'elles peuvent afficher (celles du dictionnaire, ou
+        un modele deja donne par le trainer). Snake du briefing quand on
+        pilote le Mk.II : instance hors du tableau (s10a20l, 2026-11-15)."""
+        found = self._model_instances({model for model, _old, _new in changes})
+        if getattr(self, "_model_shown_pid", None) != self.pid:
+            self._model_shown_pid, self._model_shown = self.pid, {}
+        missing = [(model, old) for model, old, _new in changes if not found[model]]
+        if missing:
+            wanted = {}
+            for model, old in missing:
+                for data in {old} | self._model_shown.get(model, set()):
+                    wanted[data] = model
+            for data, hits in self._model_scan_instances(wanted).items():
+                found[wanted[data]] += [h for h in hits if h not in found[wanted[data]]]
+        return found
+
+    def _model_scan_instances(self, wanted: dict[int, int]) -> dict[int, list[int]]:
+        """wanted : {donnees: identifiant} -> {donnees: [instances]}."""
+        needles = {struct.pack("<Q", data): (data, model) for data, model in wanted.items()}
+        found = {data: [] for data in wanted}
+        for region, size in self.proc._writable_regions():
+            if size > self.MODEL_SCAN_REGION_MAX:
+                continue
+            try:
+                chunk = self.proc.read_bytes(region, size)
+            except OSError:
+                continue
+            for needle, (data, model) in needles.items():
+                at = chunk.find(needle)
+                while at >= 0:
+                    if not at % 8 and at >= self.MODEL_INSTANCE_DATA:
+                        ident = struct.unpack_from("<I", chunk, at - self.MODEL_INSTANCE_DATA + self.MODEL_INSTANCE_ID)[0]
+                        if ident == model:
+                            found[data].append(region + at - self.MODEL_INSTANCE_DATA)
+                    at = chunk.find(needle, at + 1)
+        return found
+
+    def _model_rebuild_instances(self, changes, instances: dict[int, list[int]]) -> int:
+        """changes : [(identifiant, anciennes donnees, nouvelles)] ; nombre
+        d'instances reconstruites (celles qui affichent deja les nouvelles
+        donnees, ou dont l'identifiant a change, sont laissees)."""
+        funcs = self._live_funcs(self.MODEL_INSTANCE_FUNCS)
+        if funcs is None:
+            return 0
+        done = 0
+        for model, _old, new in changes:
+            for instance in instances.get(model, ()):
+                head = self.proc.read_bytes(instance + self.MODEL_INSTANCE_ID, 4)
+                if struct.unpack("<I", head)[0] != model:
+                    continue
+                if struct.unpack("<Q", self.proc.read_bytes(instance + self.MODEL_INSTANCE_DATA, 8))[0] == new:
+                    continue
+                if self.speed.game_call(funcs["rebuild"], instance, new) == instance:
+                    done += 1
+            self._model_shown.setdefault(model, set()).add(new)
+        return done
 
     def _model_alias(self, seed: int) -> int:
         """Cle de rechange neuve a chaque application (un tampon neuf est

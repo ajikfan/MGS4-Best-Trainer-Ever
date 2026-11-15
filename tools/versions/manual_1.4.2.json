@@ -242,5 +242,13 @@
  "0x74c0b0": [
   5456400,
   "manuel : recherche d'une cle dans le dictionnaire (1re de deux fonctions identiques, table SPAWN_RESOURCES_RVA)"
+ ],
+ "0xc37e0": [
+  692352,
+  "manuel : reconstruction d'une instance de modele sur place (69A70A pour Snake), signature 0x20 octets + call + 0x30 octets"
+ ],
+ "0x1f83410": [
+  26029072,
+  "manuel : tableau global des instances de modele, lea r8 en EE5B2 (C6E52 en 1.4.2)"
  ]
 }

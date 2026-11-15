@@ -229,6 +229,7 @@
   "vitals.model_swap_no_room": "Not enough room for this model's textures in this area ({needed} to add, {free} free slots). Try it in a lighter area.",
   "vitals.model_swap_pmc_me": "PMC soldier (Middle East)",
   "vitals.model_swap_naomi_lab": "Naomi (lab coat)",
+  "vitals.model_swap_meiling_navy": "Mei Ling (military uniform)",
   "vitals.model_swap_tooltip": "Find: lists the area's models, then those of other areas (loaded on demand with their textures), whose skeleton is compatible with Snake's. Apply: Snake takes that model's geometry (his own head stays). The next outfit change restores his body. Experimental: save first.",
   "vitals.model_hide_head": "Hide his head",
   "vitals.model_hide_head_tooltip": "Makes Snake's head (face, bandana, Solid Eye) invisible when applying, to show the chosen model's own head. Also works with Snake's own body. Experimental.",
