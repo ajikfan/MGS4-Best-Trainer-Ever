@@ -969,6 +969,10 @@
    "0x8fcc70": "0x6317a0",
    "0x8fcef0": "0x631a20"
   },
+  "MODEL_LOAD_FUNCS": {
+   "0x749cc0": "0x532220",
+   "0x74c0b0": "0x534210"
+  },
   "MODEL_MANAGER_PTR_RVA": {
    "0x23eb5f58": "0x238020d8"
   },

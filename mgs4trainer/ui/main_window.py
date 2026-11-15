@@ -754,6 +754,7 @@ class TrainerWindow(QMainWindow):
         self.live.cutscene_quit_remove()
         self.live.load_menu_remove()
         self.live.model_variants_release()  # corps / visage : choix rendu au jeu
+        self.live.model_load_release()  # detour des chargements retire
         self.cutscene_overlay.close()
         self.curtain.close()
         self.overlay.close()

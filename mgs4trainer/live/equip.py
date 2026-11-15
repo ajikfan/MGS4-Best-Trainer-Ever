@@ -4,6 +4,7 @@ import threading
 import time
 
 import mgs4save
+from mgs4trainer.live.spawn import PAGE_READWRITE
 
 
 class EquipMixin:
@@ -594,6 +595,7 @@ class EquipMixin:
         present = {key & 0x7FFFFFFF for key in nodes}
         redirects = []  # (noeud, cle de rechange, contenu, zone)
         missing = {}    # zone -> [(cle, donnees)]
+        persist = []    # entrees du detour des chargements (_model_load_set)
         if source is not None:
             found = self._model_swap_source(source, location[0])
             if found is None:
@@ -604,31 +606,51 @@ class EquipMixin:
             except (ValueError, struct.error, IndexError):
                 return False
             missing.setdefault(zone, []).extend((key, files.read(p)) for key, p in txns if key not in present)
-            redirects.append((target, 0x0D000000 | ((source ^ body_id ^ self.MODEL_SWAP_XOR) & 0xFFFFFF), hybrid, zone))
+            redirects.append((target, self._model_alias(source ^ body_id ^ self.MODEL_SWAP_XOR), hybrid, zone,
+                              0x0D000000 | body_id))
+            # aux chargements : toujours les txn du catalogue (une cinematique
+            # ou une autre zone ne les a pas)
+            entry = self.model_swap_catalog().get(source)
+            if entry is not None:
+                paths = dict(files.zone_resources(entry[0]))
+                load_zone, load_txns = entry[0], [(k, files.read(paths[k])) for k in entry[2] if k in paths]
+            else:
+                load_zone, load_txns = zone, [(k, files.read(p)) for k, p in txns]
+            persist.append((0x0D000000 | body_id, len(skeleton_data), hybrid, load_zone, load_txns))
         if hide_head:
             for face_id, face_data in self._model_face_files():
+                hidden = mdn.hidden(face_data)
+                persist.append((0x0D000000 | face_id, len(face_data), hidden, location[0], []))
                 node = self._model_node(nodes, face_id)
                 if node:
-                    redirects.append((node, 0x0D000000 | ((face_id ^ self.MODEL_HIDE_XOR) & 0xFFFFFF),
-                                      mdn.hidden(face_data), location[0]))
-        for _node, alias, data, zone in redirects:
-            if alias not in present:
-                missing.setdefault(zone, []).append((alias, data))
+                    redirects.append((node, self._model_alias(face_id ^ self.MODEL_HIDE_XOR), hidden, location[0],
+                                      0x0D000000 | face_id))
         textures = sum(struct.unpack_from(">I", data, 8)[0]
                        for entries in missing.values() for key, data in entries if key >> 24 == 0x03)
         if textures and textures > self._model_texture_free():
             return False
+        # tampons du detour des chargements : le modele de rechange y est
+        # converti par le jeu (drapeaux du chargeur de paquets), puis repris
+        # tel quel au chargement d'une cinematique
+        load = self._model_load_set(persist)
+        if load is None:
+            return False
         for zone, entries in missing.items():
             if entries and not self._spawn_register_entries(spawn_funcs, zone, entries):
                 return False
-        if missing:
-            nodes = self._spawn_resource_nodes()
-        if any(alias not in nodes for _n, alias, _d, _z in redirects):
+        for _node, alias, data, zone, load_key in redirects:
+            work, entry = load[load_key]
+            self._spawn_blobs[alias] = work
+            if not self._spawn_register_entries(spawn_funcs, zone, [(alias, data)], self.MODEL_LOAD_FLAGS):
+                return False
+            self.proc.write_bytes(entry + 0xC, struct.pack("<I", 1))  # converti
+        nodes = self._spawn_resource_nodes()
+        if any(alias not in nodes for _n, alias, _d, _z, _k in redirects):
             return False
         # (noeud, taille et donnees d'origine, taille et donnees de rechange)
         writes = [(node, self.proc.read_bytes(node + 0x14, 4), self.proc.read_bytes(node + 0x20, 8),
                    self.proc.read_bytes(nodes[alias] + 0x14, 4), self.proc.read_bytes(nodes[alias] + 0x20, 8))
-                  for node, alias, _d, _z in redirects]
+                  for node, alias, _d, _z, _k in redirects]
         call = self.speed.game_call
         state = call(funcs["state"])
         if state is None:
@@ -670,12 +692,154 @@ class EquipMixin:
                 self.proc.write_bytes(node + 0x14, size)
         return True
 
+    def _model_alias(self, seed: int) -> int:
+        """Cle de rechange neuve a chaque application (un tampon neuf est
+        enregistre a chaque fois ; une cle deja presente serait doublee)."""
+        self._model_alias_serial = getattr(self, "_model_alias_serial", 0) + 1
+        return 0x0D000000 | ((seed ^ self._model_alias_serial * 0x010307) & 0xFFFFFF)
+
     @staticmethod
     def _model_node(nodes: dict[int, int], model: int) -> int:
         """Noeud du mdn ; la cle peut porter le bit 31 (s03a70l : 0x8D413AA8),
         que la recherche du jeu (534210) ignore ("btr r8d,0x1f")."""
         key = 0x0D000000 | model
         return nodes.get(key) or nodes.get(key | 0x80000000) or 0
+
+    # Modele garde aux chargements (ESSAI 2026-11-15) : un chargement (zone,
+    # cinematique) reenregistre le corps et le visage depuis le tampon de
+    # leur paquet (x64dbg : 532220 appele par le chargeur de paquets ED4E4,
+    # drapeaux 0x61 a la zone -> fichier converti sur place ; 0x70 a la
+    # cinematique -> tampon deja converti, bit 31 sur la cle). Detour a
+    # l'entree de cet enregistrement (tools/build_model_hook.py) : meme cle
+    # et meme taille -> notre tampon, rempli d'une copie neuve a la zone,
+    # repris tel quel a la cinematique, apres ses txn si la table des
+    # textures a la place (sinon le jeu garde son modele).
+    MODEL_LOAD_FUNCS = {
+        "core": (0x749CC0, "48895c241844894c2420"),   # 1.4.2 532220
+        "lookup": (0x74C0B0, "8bc1448bc148c1e803"),   # 1.4.2 534210, cle -> noeud
+    }
+    MODEL_LOAD_SITE_ORIG = bytes.fromhex("48895c2418")  # mov [rsp+0x18], rbx
+    MODEL_LOAD_CODE = bytes.fromhex(
+        "5356574154415541564157555152415041514883ec2848bd8877665544332211"
+        "837d3c00746f8b44243825ffffff7f488d5d408b4d3885c9745b3b0375098b54"
+        "24283b530474084883c340ffc9ebe7f644243010751fe85b00000085c0743648"
+        "8b7b10488b73188b4b08f3a4c7430c01000000eb0f837b0c00741ae836000000"
+        "85c07411488b431048894424408b43084889442428488b45104883c428415941"
+        "585a595d415f415e415d415c5f5e5b48895c2418ffe04883ec28448b632c4585"
+        "e40f84b60000004c8b452031c0b90100000081f921140000731b486bd1704983"
+        "7c100800750b6641837c1034ff7502ffc0ffc1ebdd4439e00f8289000000488b"
+        "4518488b00488b483448894d28488b484448894d30488b4b3048894834488948"
+        "444c8b6b20448b73284585f67438418b4d00ff55084885c07523498b7d08498b"
+        "7510418b4d04f3a4498b4d08418b550041b801000000458b4d04ff55004983c5"
+        "2041ffceebc3488b4518488b00488b4d2848894834488b4d3048894844b80100"
+        "00004883c428c331c04883c428c3"
+    )
+    MODEL_LOAD_BASE_AT = 0x18   # imm64 de "movabs rbp, page" dans le code
+    MODEL_LOAD_CODE_AT = 0x800
+    MODEL_LOAD_TXN_AT = 0x400
+    MODEL_LOAD_MAX_ENTRIES, MODEL_LOAD_MAX_TXNS = 8, 32
+
+    def _model_load_page(self, funcs: dict[str, int]) -> int:
+        """Page du detour, installe au besoin (repris s'il est deja la)."""
+        site = funcs["core"]
+        head = self.proc.read_bytes(site, 5)
+        if head[0] == 0xE9:
+            page = site + 5 + struct.unpack_from("<i", head, 1)[0] - self.MODEL_LOAD_CODE_AT
+            code = self.proc.read_bytes(page + self.MODEL_LOAD_CODE_AT, len(self.MODEL_LOAD_CODE))
+            mine = bytearray(self.MODEL_LOAD_CODE)
+            mine[self.MODEL_LOAD_BASE_AT:self.MODEL_LOAD_BASE_AT + 8] = struct.pack("<Q", page)
+            return page if code == bytes(mine) else 0
+        if head != self.MODEL_LOAD_SITE_ORIG:
+            return 0
+        page = self.proc.alloc_near(site)
+        if not page:
+            return 0
+        code = bytearray(self.MODEL_LOAD_CODE)
+        code[self.MODEL_LOAD_BASE_AT:self.MODEL_LOAD_BASE_AT + 8] = struct.pack("<Q", page)
+        header = struct.pack("<6Q", self._live_funcs(self.SPAWN_FUNCS)["register"], funcs["lookup"],
+                             site + 5, self.base + self.SPAWN_LINKVARBUF_RVA,
+                             self.base + self.MODEL_TEXTURE_TABLE_RVA, 0)
+        self.proc.write_bytes(page, header + bytes(0x10))   # +0x38 : 0 entree, inactif
+        self.proc.write_bytes(page + self.MODEL_LOAD_CODE_AT, bytes(code))
+        jump = page + self.MODEL_LOAD_CODE_AT - (site + 5)
+        self.proc.write_bytes(site, b"\xE9" + struct.pack("<i", jump))
+        return page
+
+    MODEL_LOAD_FLAGS = 0x61  # drapeaux du chargeur de paquets au chargement d'une zone
+
+    def _model_load_set(self, entries) -> dict[int, tuple[int, int]] | None:
+        """entries : [(cle, taille d'origine, remplacement, zone, [(cle, txn)])]
+        ; vide = detour inactif (le jeu reprend ses modeles au chargement)."""
+        # le debut de "core" est notre saut une fois le detour pose
+        site = self.base + self.MODEL_LOAD_FUNCS["core"][0]
+        installed = self.proc.read_bytes(site, 1) == b"\xE9"
+        funcs = self._live_funcs({name: value for name, value in self.MODEL_LOAD_FUNCS.items()
+                                  if not (installed and name == "core")})
+        if funcs is None:
+            return None if entries else {}
+        funcs["core"] = site
+        if not entries:
+            if self.proc.read_bytes(funcs["core"], 1) == b"\xE9":
+                page = self._model_load_page(funcs)
+                if page:
+                    self.proc.write_bytes(page + 0x3C, bytes(4))
+            return {}
+        if "lookup" not in funcs or len(entries) > self.MODEL_LOAD_MAX_ENTRIES:
+            return None
+        if sum(len(e[4]) for e in entries) > self.MODEL_LOAD_MAX_TXNS:
+            return None
+        page = self._model_load_page(funcs)
+        if not page:
+            return None
+        self.proc.write_bytes(page + 0x3C, bytes(4))  # inactif pendant l'ecriture
+        if getattr(self, "_spawn_blob_pid", None) != self.pid:
+            self._spawn_blob_pid, self._spawn_blobs = self.pid, {}
+            self._spawn_arena, self._spawn_arena_left = 0, 0
+
+        def buffers(data: bytes) -> tuple[int, int]:
+            # tampon neuf a chaque fois : l'ancien peut etre celui du
+            # dictionnaire de la zone (converti, en service)
+            work = self._spawn_blob(len(data))
+            pristine = self._spawn_alloc(len(data), PAGE_READWRITE)
+            if not work or not pristine:
+                raise OSError("place")
+            self.proc.write_bytes(pristine, data)
+            return work, pristine
+
+        table, txn_items, out = b"", b"", {}
+        txn_at = page + self.MODEL_LOAD_TXN_AT
+        for key, original, data, zone, txns in entries:
+            work, pristine = buffers(data)
+            out[key] = (work, page + 0x40 + len(table))
+            items = b""
+            needed = 0
+            for txn_key, txn in txns:
+                txn_work, txn_pristine = buffers(txn)
+                items += struct.pack("<IIQQQ", txn_key, len(txn), txn_work, txn_pristine, 0)
+                needed += struct.unpack_from(">I", txn, 8)[0]
+            name = zone.encode()[:7].ljust(8, b"\0")
+            table += struct.pack("<IIIIQQQII", key & 0x7FFFFFFF, original, len(data), 0, work, pristine,
+                                 txn_at + len(txn_items) if items else 0, len(txns), needed) + name + bytes(8)
+            txn_items += items
+        self.proc.write_bytes(page + self.MODEL_LOAD_TXN_AT, txn_items or bytes(1))
+        self.proc.write_bytes(page + 0x40, table)
+        self.proc.write_bytes(page + 0x38, struct.pack("<II", len(entries), 1))
+        return out
+
+    def model_load_release(self) -> None:
+        """Fermeture du trainer : detour retire (le modele en place reste
+        jusqu'au prochain chargement)."""
+        if not (self.connected and self.sane):
+            return
+        try:
+            site = self.base + self.MODEL_LOAD_FUNCS["core"][0]
+            if self.proc.read_bytes(site, 1) == b"\xE9":
+                page = self._model_load_page({"core": site})
+                if page:
+                    self.proc.write_bytes(page + 0x3C, bytes(4))
+                    self.proc.write_bytes(site, self.MODEL_LOAD_SITE_ORIG)
+        except OSError:
+            pass
 
     def _model_face_files(self) -> list[tuple[int, bytes]]:
         """[(identifiant, fichier)] des mdn du paquet du visage charge (visage

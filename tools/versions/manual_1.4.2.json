@@ -234,5 +234,13 @@
  "0x23be75f0": [
   592666832,
   "manuel : table de 0x1421 entrees de 0x70 de l'allocateur 677C80 (4D1060 en 1.4.2), lea rcx en +0x24"
+ ],
+ "0x749cc0": [
+  5448224,
+  "manuel : coeur de l'enregistrement des ressources, appele par 74C9B0 (534600 en 1.4.2)"
+ ],
+ "0x74c0b0": [
+  5456400,
+  "manuel : recherche d'une cle dans le dictionnaire (1re de deux fonctions identiques, table SPAWN_RESOURCES_RVA)"
  ]
 }

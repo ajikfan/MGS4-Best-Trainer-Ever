@@ -1831,7 +1831,8 @@ class SpawnMixin:
                     self.proc.write_bytes(target + self.SPAWN_NODE_SIZE, self.proc.read_bytes(source + self.SPAWN_NODE_SIZE, 4))
         return True
 
-    def _spawn_register_entries(self, funcs: dict[str, int], zone: str, missing) -> bool:
+    def _spawn_register_entries(self, funcs: dict[str, int], zone: str, missing,
+                                flags: int | None = None) -> bool:
         if getattr(self, "_spawn_blob_pid", None) != self.pid:
             self._spawn_blob_pid, self._spawn_blobs = self.pid, {}
             self._spawn_arena, self._spawn_arena_left = 0, 0
@@ -1843,7 +1844,8 @@ class SpawnMixin:
                     del self._spawn_blobs[key]
                     return False
             self.proc.write_bytes(self._spawn_blobs[key], data)
-            entries += struct.pack("<QIII", self._spawn_blobs[key], key, self.SPAWN_RESOURCE_FLAGS, len(data)) + bytes(4)
+            entries += struct.pack("<QIII", self._spawn_blobs[key], key,
+                                   self.SPAWN_RESOURCE_FLAGS if flags is None else flags, len(data)) + bytes(4)
         table = self._spawn_alloc(0x1000 + len(entries), PAGE_EXECUTE_READWRITE)
         self.proc.write_bytes(table + 0x1000, entries)
         stub = self._spawn_register_stub(table, table + 0x1000, len(missing), funcs["register"], zone)
