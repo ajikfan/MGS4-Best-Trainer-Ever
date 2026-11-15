@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.9.0
+# MGS4 Trainer — V2.9.1
 
 *[English version](README.en.md)*
 
@@ -51,20 +51,21 @@ des versions.
 - [Comment ça marche](docs/fonctionnement.md)
 - [Maintenance](docs/maintenance.md) (compatibilité, build, organisation du code)
 
-## Dernière version : V2.9.0
+## Dernière version : V2.9.1
 
-- **Nouvel onglet Événements** : Toute la zone, apparition de PNJ et
-  déclencheurs ; Points Drebin dans l'onglet Stats ; version du jeu
-  affichée dans le statut.
-- **Metal Gear Mk. II** : invisible pour les soldats, intouchable, et sa
-  batterie verrouillée ne se vide plus.
-- **Faire apparaître** (expérimental) : Laughing Octopus hors de son
-  arène (1.4.2), « Meryl me suit », plus d'alerte à l'apparition.
+- **Apparence de Snake** (onglet Événements) : corps et visage d'une
+  variante de tenue, et **Modèle du corps** (expérimental) : Snake prend
+  le corps d'un autre personnage parmi 187 modèles de tout le jeu, tête
+  masquable, gardé aux chargements et aux cinématiques.
+- **Faire apparaître** (expérimental) : le Gekko apparaît partout et
+  combat ; PMC et Gekko dans l'arène de Mantis.
+- **Salle blanche** : le bouton retrouve la Beauty après des
+  apparitions.
 - Livrée par la **mise à jour intégrée** ; DLL inchangée.
 
-Avec la **V2.8.1** : Crying Wolf (armure) avec Un coup, un mort, menu
-pause des cinématiques fiable, plus de plantage au rechargement après
-une apparition.
+Avec la **V2.9.0** : nouvel onglet Événements, Metal Gear Mk. II
+invisible et intouchable, Laughing Octopus hors de son arène, « Meryl me
+suit ».
 
 Détail dans [Nouveautés par version](docs/nouveautes.md).
 

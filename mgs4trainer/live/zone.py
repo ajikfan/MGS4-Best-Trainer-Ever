@@ -558,6 +558,9 @@ class ZoneMixin:
         for _ in range(0x1000):
             if not task or task == head:
                 break
+            # Une tache illisible a cet endroit (autre structure : la 42e de 67
+            # face a Laughing Octopus, 2026-11-15) est sautee, pas une fin de
+            # recherche : la Beauty venait apres et n'etait jamais atteinte.
             try:
                 obj = task + self.BEAUTY_TASK_OBJECT
                 if self._in_beauty_phase(obj):
@@ -568,6 +571,9 @@ class ZoneMixin:
                     if phase == 1 and not in_room and 0 < duration <= 1000 and 0 < countdown <= duration:
                         self.proc.write_bytes(obj + self.BEAUTY_COUNTDOWN, struct.pack("<f", 0.0))
                         return True
+            except OSError:
+                pass
+            try:
                 task = struct.unpack("<Q", self.proc.read_bytes(task + self.ZONE_TASK_NEXT, 8))[0]
             except OSError:
                 break

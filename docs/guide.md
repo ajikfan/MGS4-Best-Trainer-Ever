@@ -187,8 +187,13 @@ Ce qui agit sur la zone et le scénario :
     du Sud, Gekko, Meryl, et Laughing Octopus en 1.4.2 seulement ; les
     personnages grisés ne sont pas encore disponibles ou pas pour la
     version du jeu détectée). L'apparition ne met plus les ennemis en
-    alerte. Patrouille pas toujours suivie, Gekko qui traverse le sol de
-    la salle blanche des Beauty : sauvegarde avant d'essayer.
+    alerte. Le Gekko apparaît dans toutes les zones et tire sur Snake et
+    sur les rebelles ; PMC et Gekko apparaissent aussi dans l'arène de
+    Screaming Mantis. Limites : patrouille pas toujours suivie ; laser du
+    Gekko en damier hors des zones à Gekko, roquettes des rebelles sans
+    effet sur lui, Gekko qui traverse le sol de la salle blanche des
+    Beauty et de l'arène de Laughing Octopus. Sauvegarde avant
+    d'essayer.
   - **Laughing Octopus** (forme Bête) apparaît hors de son arène : elle
     tire sur Snake en boucle et disparaît une fois vaincue.
   - **Meryl me suit (expérimental)** : une Meryl ajoutée suit Snake. Elle
@@ -196,6 +201,33 @@ Ce qui agit sur la zone et le scénario :
     s'arrête à une dizaine de mètres derrière lui, debout ou accroupie.
     Hors alerte, les ennemis l'ignorent ; pendant une alerte, les rebelles
     ajoutés combattent les PMC. Limite : Meryl ne se défend pas encore.
+- **Apparence de Snake** :
+  - **Corps** et **Visage** : choisis une variante de tenue puis clique
+    sur **Appliquer** ; Snake la garde quelle que soit la tenue portée
+    (15 corps et 31 visages nommés, paquet du jeu entre parenthèses). Les
+    combinaisons que le jeu ne sait pas assembler sont grisées.
+    **Automatique (tenue portée)** rend la main au jeu.
+  - **Modèle du corps (expérimental)** : **Chercher** liste les modèles
+    dont le squelette va avec celui de Snake, en deux groupes, **Humains**
+    puis **Animaux et autres** : ceux de la zone d'abord, puis ceux de
+    tout le jeu (187), précédés de leur zone d'origine et chargés à la
+    demande avec leurs textures. **Appliquer** donne à Snake le corps
+    choisi ; **Celui de Snake** lui rend le sien (au prochain chargement
+    s'il y en a eu un depuis).
+  - **Masquer sa tête** : cochée à l'application, la tête de Snake
+    (visage, bandana, Solid Eye) devient invisible, pour laisser voir
+    celle du modèle.
+  - Le modèle tient aux chargements et aux cinématiques. Il se change
+    aussi pendant une cinématique ; quand Snake pilote le Mk. II dans un
+    briefing, il faut une dizaine de secondes pour le retrouver.
+  - Les petits modèles (enfants, Little Gray) sont agrandis à la taille
+    de Snake, sinon ils léviteraient (les animations placent son bassin à
+    hauteur d'adulte).
+  - Limites : un changement de tenue rend son corps à Snake ; une zone
+    déjà pleine de textures refuse un modèle d'une autre zone (un message
+    le dit, essaie ailleurs) ; les objets tenus restent placés pour les
+    mains de Snake ; certains modèles donnent des résultats étranges.
+    Sauvegarde avant d'essayer.
 - **Déclencheurs** : choisis une action dans la liste et clique sur
   **Déclencher** pour que Snake la joue. En tête : **Tomber de haut**,
   **Mal de dos accroupi** (seulement accroupi et immobile) et **Vomir**

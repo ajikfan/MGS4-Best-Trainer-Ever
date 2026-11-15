@@ -4,6 +4,45 @@
 
 Details of the latest versions. The full history is also in the trainer's **Help** button and on the [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases) page.
 
+## What's new in V2.9.1
+
+### Snake's appearance (Events tab)
+
+- **Body** and **Face**: impose on Snake the body and face of an outfit
+  variant, whatever the worn outfit (15 bodies and 31 faces named:
+  suit, Nomad, shirtless, Altaïr, young Snake, FaceCamo…). Combinations
+  the game cannot assemble are greyed out; **Automatic** hands control
+  back to the game.
+- **Body model (experimental)**: Snake takes another character's body.
+  **Find** lists the compatible models, humans then animals and others:
+  the area's first, then 187 models from the whole game, loaded on
+  demand with their textures (soldiers, Naomi in her lab coat, Mei Ling
+  in military uniform, Akiba in his wedding suit, Little Gray, a
+  chicken…).
+  - **Hide his head**: Snake's head disappears to show the model's own.
+  - The model holds through loads and cutscenes, and can also be changed
+    during a cutscene (about ten seconds of waiting when Snake drives the
+    Mk. II in a briefing).
+  - Small models (children, Little Gray) are scaled up to Snake's size so
+    they don't float.
+  - Limits: an outfit change gives Snake his body back; an area already
+    full of textures refuses the model (a message says so); held items
+    stay placed for Snake's hands.
+
+### Spawn (experimental)
+
+- **Gekko**: it appears in every area, with its real textures, spots
+  Snake and the rebels and shoots at them. Limits: its laser shows as a
+  checkerboard outside Gekko areas, rebel rockets don't damage it, and it
+  falls through the floor of Laughing Octopus's arena.
+- **Screaming Mantis's arena**: PMCs and Gekko appear there too. Johnny,
+  woken up in the arena, no longer freezes the game.
+
+### Fixes
+
+- **White Room**: the button finds the Beauty again even after NPC
+  spawns.
+
 ## What's new in V2.9.0
 
 ### New Events tab

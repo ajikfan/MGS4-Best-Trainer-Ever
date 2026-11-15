@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.9.0
+# MGS4 Trainer — V2.9.1
 
 *[Version française](README.md)*
 
@@ -49,18 +49,19 @@ up the compatible version, the warnings and the version history.
 - [How it works](docs/en/how-it-works.md)
 - [Maintenance](docs/en/maintenance.md) (compatibility, build, code layout)
 
-## Latest version: V2.9.0
+## Latest version: V2.9.1
 
-- **New Events tab**: Whole area, NPC spawning and triggers; Drebin
-  Points in the Stats tab; game version shown in the status.
-- **Metal Gear Mk. II**: invisible to soldiers, untouchable, and its
-  locked battery no longer drains.
-- **Spawn** (experimental): Laughing Octopus outside her arena (1.4.2),
-  "Meryl follows me", no more alert when spawning.
+- **Snake's appearance** (Events tab): body and face of an outfit
+  variant, and **Body model** (experimental): Snake takes another
+  character's body among 187 models from the whole game, head can be
+  hidden, kept through loads and cutscenes.
+- **Spawn** (experimental): the Gekko appears everywhere and fights;
+  PMCs and Gekko in Mantis's arena.
+- **White Room**: the button finds the Beauty after spawns.
 - Delivered by the **built-in update**; DLL unchanged.
 
-With **V2.8.1**: Crying Wolf (armor) with One Shot, One Kill, reliable
-cutscene pause menu, no more crash on reload after a spawn.
+With **V2.9.0**: new Events tab, Metal Gear Mk. II invisible and
+untouchable, Laughing Octopus outside her arena, "Meryl follows me".
 
 Details in [What's new in each version](docs/en/whats-new.md).
 

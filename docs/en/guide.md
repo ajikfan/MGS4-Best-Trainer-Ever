@@ -180,9 +180,13 @@ What acts on the area and the story:
     from the three regions, Middle East or South American rebel, Gekko,
     Meryl, and Laughing Octopus on 1.4.2 only; greyed-out characters are
     not available yet, or not for the detected game version). Spawning
-    no longer alerts the enemies. Patrol not always followed, a Gekko
-    that falls through the floor of the Beauties' white room: save
-    before trying.
+    no longer alerts the enemies. The Gekko appears in every area and
+    shoots at Snake and at the rebels; PMCs and Gekko also appear in
+    Screaming Mantis's arena. Limits: patrol not always followed; Gekko
+    laser shown as a checkerboard outside Gekko areas, rebel rockets with
+    no effect on it, a Gekko that falls through the floor of the
+    Beauties' white room and of Laughing Octopus's arena. Save before
+    trying.
   - **Laughing Octopus** (Beast form) appears outside her arena: she
     shoots at Snake in a loop and vanishes once defeated.
   - **Meryl follows me (experimental)**: an added Meryl follows Snake. She
@@ -190,6 +194,30 @@ What acts on the area and the story:
     ten meters behind him, standing or crouched. Outside alerts, enemies
     ignore her; during an alert, added rebels fight the PMCs. Limit:
     Meryl does not defend herself yet.
+- **Snake's appearance**:
+  - **Body** and **Face**: pick an outfit variant then click **Apply**;
+    Snake keeps it whatever the worn outfit (15 bodies and 31 faces
+    named, game package in brackets). Combinations the game cannot
+    assemble are greyed out. **Automatic (worn outfit)** hands control
+    back to the game.
+  - **Body model (experimental)**: **Find** lists the models whose
+    skeleton fits Snake's, in two groups, **Humans** then **Animals and
+    others**: the area's first, then those of the whole game (187),
+    preceded by their area of origin and loaded on demand with their
+    textures. **Apply** gives Snake the chosen body; **Snake's own**
+    gives him his back (at the next load if there has been one since).
+  - **Hide his head**: when checked on apply, Snake's head (face,
+    bandana, Solid Eye) becomes invisible, to show the model's own.
+  - The model holds through loads and cutscenes. It can also be changed
+    during a cutscene; when Snake drives the Mk. II in a briefing, it
+    takes about ten seconds to find him.
+  - Small models (children, Little Gray) are scaled up to Snake's size,
+    otherwise they would float (animations put his hips at adult
+    height).
+  - Limits: an outfit change gives Snake his body back; an area already
+    full of textures refuses a model from another area (a message says
+    so, try elsewhere); held items stay placed for Snake's hands; some
+    models give strange results. Save before trying.
 - **Triggers**: pick an action in the list and click **Trigger** to make
   Snake play it. At the top: **High fall**, **Crouching back pain**
   (only crouching and still) and **Vomit** (standing or crouching

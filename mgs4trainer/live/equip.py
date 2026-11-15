@@ -285,6 +285,10 @@ class EquipMixin:
             action(*args)
         except OSError:
             pass
+        except AttributeError:
+            # jeu ferme pendant l'operation : detach() a vide self.proc
+            if self.proc is not None:
+                raise
         finally:
             self._equip_lock.release()
 

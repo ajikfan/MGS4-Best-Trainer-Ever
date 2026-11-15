@@ -4,6 +4,47 @@
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
+## Nouveautés de la V2.9.1
+
+### Apparence de Snake (onglet Événements)
+
+- **Corps** et **Visage** : imposent à Snake le corps et le visage d'une
+  variante de tenue, quelle que soit la tenue portée (15 corps et 31
+  visages nommés : costume, Nomad, torse nu, Altaïr, Snake jeune,
+  FaceCamo…). Les combinaisons que le jeu ne sait pas assembler sont
+  grisées ; **Automatique** rend la main au jeu.
+- **Modèle du corps (expérimental)** : Snake prend le corps d'un autre
+  personnage. **Chercher** liste les modèles compatibles, humains puis
+  animaux et autres : ceux de la zone d'abord, puis 187 modèles de tout
+  le jeu, chargés à la demande avec leurs textures (soldats, Naomi en
+  blouse blanche, Mei Ling en tenue militaire, Akiba en costume de
+  marié, Little Gray, une poule…).
+  - **Masquer sa tête** : la tête de Snake disparaît pour laisser voir
+    celle du modèle.
+  - Le modèle tient aux chargements et aux cinématiques, et se change
+    aussi pendant une cinématique (une dizaine de secondes d'attente
+    quand Snake pilote le Mk. II dans un briefing).
+  - Les petits modèles (enfants, Little Gray) sont agrandis à la taille
+    de Snake pour ne pas léviter.
+  - Limites : un changement de tenue rend son corps à Snake ; une zone
+    déjà pleine de textures refuse le modèle (un message le dit) ; les
+    objets tenus restent placés pour les mains de Snake.
+
+### Faire apparaître (expérimental)
+
+- **Gekko** : il apparaît dans toutes les zones, avec ses vraies
+  textures, repère Snake et les rebelles et leur tire dessus. Limites :
+  son laser s'affiche en damier hors des zones à Gekko, les roquettes des
+  rebelles ne l'abîment pas, et il traverse le sol de l'arène de Laughing
+  Octopus.
+- **Arène de Screaming Mantis** : les PMC et les Gekko y apparaissent
+  aussi. Johnny, réveillé dans l'arène, ne fige plus le jeu.
+
+### Corrections
+
+- **Salle blanche** : le bouton retrouve la Beauty même après des
+  apparitions de PNJ.
+
 ## Nouveautés de la V2.9.0
 
 ### Nouvel onglet Événements

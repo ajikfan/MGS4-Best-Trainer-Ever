@@ -998,7 +998,13 @@ class VitalsTab(QWidget):
 
     # Modeles connus (identifiant -> nom), releves en jeu
     MODEL_SWAP_NAMES = {0x313917: "vitals.model_swap_pmc_me", 0xE28B85: "vitals.model_swap_naomi_lab",
-                        0x9D31A0: "vitals.model_swap_meiling_navy"}
+                        0x9D31A0: "vitals.model_swap_meiling_navy", 0x0C1AB6: "vitals.model_swap_akiba_groom",
+                        0x1137D7: "vitals.model_swap_chicken", 0xC13923: "vitals.model_swap_little_gray"}
+    # Groupes de la liste : pas de critere sur (le singe de Drebin a 126 os,
+    # un squelette presque humain) ; moins de MODEL_SWAP_HUMAN_BONES os =
+    # animal ou autre (poule : 28), plus les animaux reconnus en jeu.
+    MODEL_SWAP_ANIMALS = {0x1137D7, 0xC13923}
+    MODEL_SWAP_HUMAN_BONES = 60
 
     def _on_model_swap_find(self):
         if not (self.live.connected and self.live.sane):
@@ -1008,19 +1014,35 @@ class VitalsTab(QWidget):
             catalog = self.live.model_swap_catalog()
         except OSError:
             return
-        self.model_swap_combo.clear()
-        self.model_swap_combo.addItem(tr("vitals.model_swap_none"), None)
-        for model in candidates:
+        combo = self.model_swap_combo
+        combo.clear()
+        combo.addItem(tr("vitals.model_swap_none"), None)
+
+        def animal(model: int) -> bool:
+            entry = catalog.get(model)
+            return model in self.MODEL_SWAP_ANIMALS or (entry is not None and entry[1] < self.MODEL_SWAP_HUMAN_BONES)
+
+        def label(model: int, here: bool) -> str:
             key = self.MODEL_SWAP_NAMES.get(model)
-            label = tr(key) if key else tr("vitals.model_swap_model")
-            self.model_swap_combo.addItem(f"{label} ({model:#08x})", model)
-        # Modeles des autres zones (catalogue), par zone d'origine
-        for model, (zone, _bones, _txns) in sorted(catalog.items(), key=lambda item: (item[1][0], item[0])):
-            if model in candidates:
+            name = tr(key) if key else tr("vitals.model_swap_model" if here else "vitals.model_swap_other")
+            return f"{name} ({model:#08x})" if here else f"{catalog[model][0]} : {name} ({model:#08x})"
+
+        # zone courante d'abord, puis le catalogue par zone d'origine
+        others = sorted((m for m in catalog if m not in candidates), key=lambda m: (catalog[m][0], m))
+        entries = [(m, True) for m in candidates] + [(m, False) for m in others]
+        for group, wanted in (("vitals.model_swap_humans", False), ("vitals.model_swap_animals", True)):
+            chosen = [(m, here) for m, here in entries if animal(m) == wanted]
+            if not chosen:
                 continue
-            key = self.MODEL_SWAP_NAMES.get(model)
-            label = tr(key) if key else tr("vitals.model_swap_other")
-            self.model_swap_combo.addItem(f"{zone} : {label} ({model:#08x})", model)
+            combo.insertSeparator(combo.count())
+            combo.addItem(tr(group), None)
+            header = combo.model().item(combo.count() - 1)
+            header.setEnabled(False)
+            font = header.font()
+            font.setBold(True)
+            header.setFont(font)
+            for model, here in chosen:
+                combo.addItem(label(model, here), model)
         # Liste deroulante a la largeur de son plus long nom (tronque sinon)
         view = self.model_swap_combo.view()
         view.setMinimumWidth(view.sizeHintForColumn(0) + 2 * view.frameWidth() + 24)
