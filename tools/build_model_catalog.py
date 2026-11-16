@@ -23,7 +23,13 @@ SNAKE_BODY = "00413aa8.mdn"  # corps de Snake (paquet de tenue), squelette de re
 ZONE = re.compile(r"s\d\d[a-z]\d\d[a-z]$")
 TEXTURE_SIZE = 0x20
 HEAD_BONE = 0x29A56C   # os de la tete (identifiant commun aux squelettes humains)
-LAYER_WINDOW = 12      # lignes du data.cnf autour du modele
+LAYER_WINDOW = 20      # lignes du data.cnf autour du modele (queue de cheval de Raven : +16)
+# Couches ajoutees a la main, la ou les regles ne suffisent pas (elles
+# aggravaient d'autres modeles quand on les elargissait, 2026-11-16) :
+# modele -> couches de sa zone du catalogue.
+MANUAL_LAYERS = {
+    0xB531B9: (0x2A9FA2,),  # Old Snake des cinematiques : sa tete (visage et cheveux)
+}
 
 
 def texture_ids(data: bytes) -> list[int]:
@@ -48,6 +54,30 @@ def linked_pieces(files, resources, model: int, cache: dict) -> list[tuple[int, 
         for other, other_path in mdns.items():
             if other != model and struct.pack(">I", other) in data:
                 pieces[other] = other_path
+    # pieces accrochees par le .cnp du modele (os racine cite comme point
+    # d'attache, aucun os commun avec le corps : cheveux de Big Mama 0x78A3F2
+    # sur la tete, leur .eqpp ne cite pas le corps) ; une par racine (deux
+    # coiffures partagent la sienne : la premiere listee)
+    cnp_path = dict(resources).get(0x11000000 | model)
+    if cnp_path:
+        if cnp_path not in cache:
+            cache[cnp_path] = files.read(cnp_path)
+        attachments = mdn.cnp_attachments(cache[cnp_path])
+        body_bones = {bone for bone, _p in mdn.bone_ids(files.read(mdns[model]))} if model in mdns else set()
+        roots = set()
+        for other, other_path in mdns.items():
+            if other == model or other in pieces:
+                continue
+            key = ("os", other_path)
+            if key not in cache:
+                try:
+                    cache[key] = [bone for bone, _p in mdn.bone_ids(files.read(other_path))]
+                except (ValueError, struct.error, IndexError):
+                    cache[key] = []
+            bones = cache[key]
+            if bones and bones[0] in attachments and bones[0] not in roots and not body_bones & set(bones):
+                roots.add(bones[0])
+                pieces[other] = other_path
     return sorted(pieces.items())
 
 
@@ -58,9 +88,10 @@ def model_layers(files, zone: str, resources, model: int, pieces, cache: dict) -
     Cheveux : 12 a 45 os, l'os de la tete, au moins 30 % d'os communs.
     Couche complete : meme squelette (90 %), aucune texture commune (les
     variantes de soldats partagent toutes les leurs), 4 textures au plus.
-    Couche partielle : 25 a 90 % d'os communs, sans la tete, au moins la
-    moitie de ses textures prises au corps (torse de Vamp en manteau
-    0xB979AF sous 0xD38F5A : sans lui, la tete flotte). Sans .cnp a elles, et rattachees au personnage (mdn + .cnp, humain) le
+    Couche partielle : au moins 5 os dont 25 % communs (tous si moins de
+    60 os : la queue de cheval de Raven 0xAFBAB est sur son squelette),
+    sans la tete, au moins la moitie de ses textures prises au corps (torse
+    de Vamp en manteau 0xB979AF sous 0xD38F5A : sans lui, la tete flotte). Sans .cnp a elles, et rattachees au personnage (mdn + .cnp, humain) le
     plus proche dans la liste."""
     if zone not in cache:
         config = next(p for p in files.entries if p.endswith(f"/{zone}/data.cnf"))
@@ -96,11 +127,16 @@ def model_layers(files, zone: str, resources, model: int, pieces, cache: dict) -
         shared = len(other_bones & bones)
         hair = 12 <= count <= 45 and HEAD_BONE in other_bones and shared >= 0.3 * count
         full = count >= 60 and shared >= 0.9 * count and not (other_textures & textures) and len(other_textures) <= 4
-        partial = (count >= 20 and 0.25 * count <= shared < 0.9 * count and HEAD_BONE not in other_bones
+        partial = (count >= 5 and shared >= 0.25 * count and (shared < 0.9 * count or count < 60)
+                   and HEAD_BONE not in other_bones
                    and other_textures and len(other_textures & textures) >= 0.5 * len(other_textures))
         if (hair or full or partial) and min(owners, key=lambda owner: abs(owner[0] - index))[1] == model:
             if other not in [ident for ident, _p in found]:
                 found.append((other, path))
+    for other in MANUAL_LAYERS.get(model, ()):
+        path = infos[other][3] if other in infos else None
+        if path and other not in [ident for ident, _p in found]:
+            found.append((other, path))
     return found
 
 

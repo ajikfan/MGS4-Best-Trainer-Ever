@@ -609,11 +609,25 @@ class EquipMixin:
         places = [dict(files.zone_resources(zone))]
         if entry[0] != zone:
             places.append(dict(files.zone_resources(entry[0])))
+        cnp = self._model_cnp(source, zone)
         for piece in entry[3]:
             piece_path = next((place[0x0D000000 | piece] for place in places if 0x0D000000 | piece in place), None)
             if piece_path is not None:
-                data = mdn.merge(data, files.read(piece_path))
+                data = mdn.merge(data, files.read(piece_path), cnp)
         return data
+
+    def _model_cnp(self, model: int, zone: str) -> bytes | None:
+        """.cnp du modele (points d'attache des pieces sans os commun : queue
+        de cheval et cables de Raven, cheveux de Big Mama), zone donnee puis
+        zone du catalogue."""
+        files = self._model_files()
+        entry = self.model_swap_catalog().get(model)
+        for place in (zone, entry[0] if entry else None):
+            if place:
+                path = dict(files.zone_resources(place)).get(0x11000000 | model)
+                if path:
+                    return files.read(path)
+        return None
 
     def set_body_model(self, source: int | None, hide_head: bool = False, layers=()) -> bool:
         """Corps de Snake = geometrie du modele source (None = son modele) ;
@@ -633,6 +647,14 @@ class EquipMixin:
         skeleton = self._model_body_skeleton()
         if None in (funcs, spawn_funcs, location, skeleton) or not manager:
             return False
+        # modele sans tete dont la tete est un visage de Snake (FaceCamo) :
+        # visage impose AVANT le corps (ce rechargement reconstruit Snake
+        # d'apres le dictionnaire, ou le corps d'origine est remis apres le
+        # changement : fait apres, il rendait la tenue de Snake, 2026-11-16)
+        face = self.MODEL_SWAP_FACES.get(source)
+        if face is not None and not hide_head and self._octocamo_controller():
+            if self._set_model_variants_live(self._model_forced_variant("body"), face):
+                skeleton = self._model_body_skeleton() or skeleton
         body_id, skeleton_data = skeleton
         nodes = self._spawn_resource_nodes()
         target = self._model_node(nodes, body_id)
@@ -676,8 +698,9 @@ class EquipMixin:
                         load_txns.setdefault(key, (files.read(p), model_zone))
             try:
                 data = datas[0]
+                cnp = self._model_cnp(source, zone)
                 for layer in datas[1:]:
-                    data = mdn.merge(data, layer)
+                    data = mdn.merge(data, layer, cnp)
                 hybrid = mdn.build_hybrid(data, skeleton_data)
             except (ValueError, struct.error, IndexError):
                 return False
@@ -768,6 +791,19 @@ class EquipMixin:
                 self.proc.write_bytes(node + 0x20, data)
                 self.proc.write_bytes(node + 0x14, size)
         return True
+
+    # Modele -> variante de visage de Snake qui lui donne sa tete (2026-11-16) :
+    # camouflage lave de Raging Raven (0x0F874D, sans tete) + visage 0xB,
+    # celui du FaceCamo Raging Beauty (objet 0x23).
+    MODEL_SWAP_FACES = {0x0F874D: 0xB}
+
+    def _model_forced_variant(self, part: str) -> int | None:
+        """Variante imposee par le trainer (fonction "mov eax, N ; ret"), sinon None."""
+        manager = struct.unpack("<Q", self.proc.read_bytes(self.base + self.MODEL_MANAGER_PTR_RVA, 8))[0]
+        pointer = struct.unpack("<Q", self.proc.read_bytes(manager + self.MODEL_VARIANT_TABLES[part][2], 8))[0]
+        if not self._model_pick_is_ours(pointer):
+            return None
+        return struct.unpack("<I", self.proc.read_bytes(pointer + 1, 4))[0]
 
     # Snake de cinematique (ESSAI 2026-11-15) : cree par 99B170 (objet,
     # identifiant, drapeaux) -> A98C0(donnees) ; ne recoit pas 0x1E0002.

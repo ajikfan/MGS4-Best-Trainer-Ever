@@ -325,9 +325,64 @@ def _shift_vertices(piece: bytes, offsets) -> bytes:
     return bytes(out)
 
 
-def merge(body: bytes, piece: bytes) -> bytes:
+# Points d'attache du .cnp (2026-11-16) : nombre en +8, entrees de 0x40 en
+# +0x10 : point, os du corps, os racine d'une piece (ou 1), drapeaux (0 si
+# piece) ; decalage (x, y, z, w) en +0x10, rotation (quaternion x, y, z, w)
+# en +0x20. Les pieces de Raven sans os commun avec son corps (queue de
+# cheval 0xC0D252 : racine 0xDFDCA5 sur la tete, 148 plus haut et 142 en
+# arriere ; cables de la tete, des bras, des jambes) y sont accrochees.
+CNP_ENTRY = 0x40
+
+
+def cnp_attachments(cnp: bytes) -> dict[int, tuple[int, tuple, tuple]]:
+    """os racine d'une piece -> (os du corps, decalage, rotation)."""
+    count, = struct.unpack_from(">I", cnp, 8)
+    out = {}
+    for i in range(count):
+        base = 0x10 + i * CNP_ENTRY
+        _point, bone, root, flags = struct.unpack_from(">4I", cnp, base)
+        if flags == 0:
+            out[root] = (bone, struct.unpack_from(">3f", cnp, base + 0x10), struct.unpack_from(">4f", cnp, base + 0x20))
+    return out
+
+
+def _rotate(q, v):
+    x, y, z, w = q
+    vx, vy, vz = v
+    # v' = v + 2w (q x v) + 2 q x (q x v)
+    cx, cy, cz = y * vz - z * vy, z * vx - x * vz, x * vy - y * vx
+    ex, ey, ez = y * cz - z * cy, z * cx - x * cz, x * cy - y * cx
+    return (vx + 2 * (w * cx + ex), vy + 2 * (w * cy + ey), vz + 2 * (w * cz + ez))
+
+
+def _place_piece(piece: bytes, rotation, translation) -> bytes:
+    """Positions des sommets tournees puis deplacees (piece accrochee)."""
+    header = MdnHeader(piece)
+    out = bytearray(piece)
+    done = set()
+    for m in range(header.mesh_count):
+        base = header.mesh_offset + m * MESH_SIZE
+        definition, = struct.unpack_from(">I", out, base + MESH_VERTEX_DEF)
+        vertices, = struct.unpack_from(">I", out, base + MESH_VERTEX_COUNT)
+        vdef = header.vertex_def_offset + definition * VERTEX_DEF_SIZE
+        _pad, fields, stride, start = struct.unpack_from(">4I", out, vdef)
+        at = dict(zip([k & 0x0F for k in out[vdef + 0x10:vdef + 0x10 + fields]], out[vdef + 0x20:vdef + 0x20 + fields]))
+        if VERTEX_POSITION not in at:
+            continue
+        for v in range(vertices):
+            position = header.vertex_buffer_offset + start + v * stride + at[VERTEX_POSITION]
+            if position in done:
+                continue
+            done.add(position)
+            moved = _rotate(rotation, struct.unpack_from(">3f", out, position))
+            struct.pack_into(">3f", out, position, *(p + t for p, t in zip(moved, translation)))
+    return bytes(out)
+
+
+def merge(body: bytes, piece: bytes, cnp: bytes | None = None) -> bytes:
     """Corps + piece liee ou couche, sur les os du corps (piece ramenee dans
-    le repere du corps si ses os communs sont ailleurs)."""
+    le repere du corps si ses os communs sont ailleurs ; sans os commun,
+    placee au point d'attache du .cnp du corps qui cite son os racine)."""
     body_bones = _bone_worlds(body)
     by_id = {bone: i for i, (bone, _w) in enumerate(body_bones)}
 
@@ -335,14 +390,21 @@ def merge(body: bytes, piece: bytes) -> bytes:
         return min(range(len(body_bones)),
                    key=lambda i: sum((a - b) ** 2 for a, b in zip(body_bones[i][1], position)))
 
-    offsets = _piece_offsets(body, piece)
-    if any(any(abs(c) > 0.01 for c in o) for o in offsets):
-        piece = _shift_vertices(piece, offsets)
-    worlds = [(bone, tuple(w + o for w, o in zip(world, offset)))
-              for (bone, world), offset in zip(_bone_worlds(piece), offsets)]
-    bone_map = [by_id[bone] if bone in by_id else nearest(world) for bone, world in worlds]
+    piece_bones = _bone_worlds(piece)
+    attach = cnp_attachments(cnp).get(piece_bones[0][0]) if cnp and piece_bones else None
+    if attach and attach[0] in by_id and not any(bone in by_id for bone, _w in piece_bones):
+        bone, offset, rotation = attach
+        anchor = body_bones[by_id[bone]][1]
+        piece = _place_piece(piece, rotation, tuple(a + o for a, o in zip(anchor, offset)))
+        bone_map = [by_id[bone]] * len(piece_bones)
+    else:
+        offsets = _piece_offsets(body, piece)
+        if any(any(abs(c) > 0.01 for c in o) for o in offsets):
+            piece = _shift_vertices(piece, offsets)
+        worlds = [(bone, tuple(w + o for w, o in zip(world, offset)))
+                  for (bone, world), offset in zip(piece_bones, offsets)]
+        bone_map = [by_id[bone] if bone in by_id else nearest(world) for bone, world in worlds]
     a, b = _sections(body), _sections(piece)
-    ha = MdnHeader(body)
     counts = {name: len(a[name]) // size for name, size in (
         ("groups", GROUP_SIZE), ("faces", FACE_SIZE), ("vdefs", VERTEX_DEF_SIZE),
         ("materials", MATERIAL_SIZE), ("textures", TEXTURE_SIZE), ("skins", SKIN_SIZE))}
@@ -384,7 +446,12 @@ def merge(body: bytes, piece: bytes) -> bytes:
              ("faces", a["faces"] + faces), ("vdefs", a["vdefs"] + vdefs),
              ("materials", a["materials"] + materials), ("textures", a["textures"] + b["textures"]),
              ("skins", a["skins"] + skins), ("vbuf", vbuf_a + b["vbuf"]), ("fbuf", fbuf_a + b["fbuf"]))
-    out = bytearray(body[:HEADER_END])
+    return _assemble(body, order)
+
+
+def _assemble(model: bytes, order) -> bytes:
+    """Fichier MDN refait : en-tete de model, sections dans l'ordre, alignees sur 16."""
+    out = bytearray(model[:HEADER_END])
     offsets = {}
     for name, data in order:
         out += bytes(-len(out) % 16)
@@ -395,8 +462,8 @@ def merge(body: bytes, piece: bytes) -> bytes:
         ("bones", BONE_SIZE), ("groups", GROUP_SIZE), ("meshes", MESH_SIZE), ("faces", FACE_SIZE),
         ("vdefs", VERTEX_DEF_SIZE), ("materials", MATERIAL_SIZE), ("textures", TEXTURE_SIZE),
         ("skins", SKIN_SIZE))}
-    struct.pack_into(">21I", out, 4, ha.id, n["bones"], n["groups"], n["meshes"], n["faces"], n["vdefs"],
-                     n["materials"], n["textures"], n["skins"],
+    struct.pack_into(">21I", out, 4, MdnHeader(model).id, n["bones"], n["groups"], n["meshes"], n["faces"],
+                     n["vdefs"], n["materials"], n["textures"], n["skins"],
                      offsets["bones"][0], offsets["groups"][0], offsets["meshes"][0], offsets["faces"][0],
                      offsets["vdefs"][0], offsets["materials"][0], offsets["textures"][0], offsets["skins"][0],
                      offsets["vbuf"][0], offsets["vbuf"][1], offsets["fbuf"][0], offsets["fbuf"][1])
