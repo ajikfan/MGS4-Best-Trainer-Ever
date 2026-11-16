@@ -246,8 +246,22 @@ class VitalsTab(QWidget):
         self.model_swap_apply_btn.clicked.connect(self._on_model_swap_apply)
         self.model_hide_head_cb = QCheckBox(tr("vitals.model_hide_head"))
         self.model_hide_head_cb.setToolTip(tr("vitals.model_hide_head_tooltip"))
+        # Couches (2026-11-16) : modeles ajoutes par-dessus le corps applique
+        # (foulard, cheveux : modeles a part que rien ne relie au corps)
+        self.model_layer_btn = QPushButton(tr("vitals.model_layer_add"))
+        self.model_layer_btn.setToolTip(tr("vitals.model_layer_tooltip"))
+        self.model_layer_btn.clicked.connect(self._on_model_layer_add)
+        # couches en place (automatiques du catalogue + ajoutees), retirables
+        self.model_layers_combo = QComboBox()
+        self.model_layers_combo.setToolTip(tr("vitals.model_layers_tooltip"))
+        self.model_layer_remove_btn = QPushButton(tr("vitals.model_layer_remove"))
+        self.model_layer_remove_btn.setToolTip(tr("vitals.model_layers_tooltip"))
+        self.model_layer_remove_btn.clicked.connect(self._on_model_layer_remove)
+        self._model_applied = (None, [])  # (modele, couches)
+        self._show_model_layers()
         self.zone_buttons += [self.model_swap_combo, self.model_swap_find_btn, self.model_hide_head_cb,
-                              self.model_swap_apply_btn]
+                              self.model_swap_apply_btn, self.model_layer_btn, self.model_layers_combo,
+                              self.model_layer_remove_btn]
 
         weapons_group = QGroupBox(tr("vitals.weapons_group"))
         weapons_layout = QVBoxLayout(weapons_group)
@@ -363,8 +377,15 @@ class VitalsTab(QWidget):
         swap_row.addWidget(self.model_swap_find_btn)
         swap_row.addWidget(self.model_hide_head_cb)
         swap_row.addWidget(self.model_swap_apply_btn)
+        swap_row.addWidget(self.model_layer_btn)
         swap_row.addStretch(1)
         model_layout.addLayout(swap_row)
+        layers_row = QHBoxLayout()
+        layers_row.addWidget(QLabel(tr("vitals.model_layers")))
+        layers_row.addWidget(self.model_layers_combo)
+        layers_row.addWidget(self.model_layer_remove_btn)
+        layers_row.addStretch(1)
+        model_layout.addLayout(layers_row)
         page_layout.addWidget(model_group)
 
         triggers_group = QGroupBox(tr("vitals.triggers_group"))
@@ -999,7 +1020,11 @@ class VitalsTab(QWidget):
     # Modeles connus (identifiant -> nom), releves en jeu
     MODEL_SWAP_NAMES = {0x313917: "vitals.model_swap_pmc_me", 0xE28B85: "vitals.model_swap_naomi_lab",
                         0x9D31A0: "vitals.model_swap_meiling_navy", 0x0C1AB6: "vitals.model_swap_akiba_groom",
-                        0x1137D7: "vitals.model_swap_chicken", 0xC13923: "vitals.model_swap_little_gray"}
+                        0x1137D7: "vitals.model_swap_chicken", 0xC13923: "vitals.model_swap_little_gray",
+                        0x2DA964: "vitals.model_swap_naomi_black", 0x6C29C2: "vitals.model_swap_naomi_scarf",
+                        0xD8B3EE: "vitals.model_swap_naomi_hair", 0x5931A8: "vitals.model_swap_liquid",
+                        0x313B67: "vitals.model_swap_vamp_shirtless", 0xD38F5A: "vitals.model_swap_vamp_coat",
+                        0x1D31B4: "vitals.model_swap_raiden", 0x7731AA: "vitals.model_swap_otacon_white"}
     # Groupes de la liste : pas de critere sur (le singe de Drebin a 126 os,
     # un squelette presque humain) ; moins de MODEL_SWAP_HUMAN_BONES os =
     # animal ou autre (poule : 28), plus les animaux reconnus en jeu.
@@ -1047,20 +1072,68 @@ class VitalsTab(QWidget):
         view = self.model_swap_combo.view()
         view.setMinimumWidth(view.sizeHintForColumn(0) + 2 * view.frameWidth() + 24)
 
+    def _model_room_ok(self, model: int) -> bool:
+        """Assez de places de textures pour ce modele (sinon message)."""
+        try:
+            cost = self.live.model_swap_textures(model)
+        except OSError:
+            return False
+        if cost is not None and cost[0] > cost[1]:
+            QMessageBox.warning(self, tr("vitals.model_swap"),
+                                tr("vitals.model_swap_no_room").format(needed=cost[0], free=cost[1]))
+            return False
+        return True
+
+    def _model_label(self, model: int) -> str:
+        key = self.MODEL_SWAP_NAMES.get(model)
+        return f"{tr(key)} ({model:#08x})" if key else f"{model:#08x}"
+
+    def _show_model_layers(self):
+        _source, layers = self._model_applied
+        combo = self.model_layers_combo
+        combo.clear()
+        if not layers:
+            combo.addItem(tr("vitals.model_layers_none"), None)
+        for model in layers:
+            combo.addItem(self._model_label(model), model)
+        view = combo.view()
+        view.setMinimumWidth(view.sizeHintForColumn(0) + 2 * view.frameWidth() + 24)
+
+    def _apply_model(self, source, layers) -> None:
+        if self.live.set_body_model(source, self.model_hide_head_cb.isChecked(), layers):
+            self._model_applied = (source, list(layers))
+            self._show_model_layers()
+
     def _on_model_swap_apply(self):
         if not (self.live.connected and self.live.sane):
             return
         source = self.model_swap_combo.currentData()
-        if source is not None:
-            try:
-                cost = self.live.model_swap_textures(source)
-            except OSError:
-                return
-            if cost is not None and cost[0] > cost[1]:
-                QMessageBox.warning(self, tr("vitals.model_swap"),
-                                    tr("vitals.model_swap_no_room").format(needed=cost[0], free=cost[1]))
-                return
-        self.live.set_body_model(source, self.model_hide_head_cb.isChecked())
+        if source is not None and not self._model_room_ok(source):
+            return
+        # couches du catalogue (cheveux, foulard...) d'office ; Retirer les enleve
+        layers = self.live.model_auto_layers(source) if source is not None else []
+        self._apply_model(source, layers)
+
+    def _on_model_layer_remove(self):
+        if not (self.live.connected and self.live.sane):
+            return
+        source, layers = self._model_applied
+        layer = self.model_layers_combo.currentData()
+        if source is None or layer not in layers:
+            return
+        self._apply_model(source, [m for m in layers if m != layer])
+
+    def _on_model_layer_add(self):
+        if not (self.live.connected and self.live.sane):
+            return
+        source, layers = self._model_applied
+        layer = self.model_swap_combo.currentData()
+        if source is None:
+            QMessageBox.information(self, tr("vitals.model_swap"), tr("vitals.model_layer_need_body"))
+            return
+        if layer is None or layer == source or layer in layers or not self._model_room_ok(layer):
+            return
+        self._apply_model(source, layers + [layer])
 
     def _on_model_apply(self):
         if self.live.connected and self.live.sane:

@@ -19,8 +19,9 @@ Page (rdx de chaque champ) :
   +0x40 entrees de 0x40 : +0 cle (sans bit 31), +4 taille d'origine,
         +8 taille du remplacement, +0xC converti, +0x10 tampon,
         +0x18 copie intacte, +0x20 liste des txn, +0x28 nombre de txn,
-        +0x2C textures necessaires, +0x30 nom de zone des txn (8 octets)
-  txn de 0x20 : +0 cle, +4 taille, +8 tampon, +0x10 copie intacte
+        +0x2C textures necessaires
+  txn de 0x20 : +0 cle, +4 taille, +8 tampon, +0x10 copie intacte,
+        +0x18 nom de sa zone (8 octets ; couches d'autres zones, 2026-11-16)
   +0x800 code (entree du detour)
 
     python tools/build_model_hook.py
@@ -135,9 +136,6 @@ count_end:
     mov qword ptr [rbp + 0x28], rcx
     mov rcx, qword ptr [rax + {ZONE_SECOND:#x}]
     mov qword ptr [rbp + 0x30], rcx
-    mov rcx, qword ptr [rbx + 0x30]
-    mov qword ptr [rax + {ZONE_FIRST:#x}], rcx
-    mov qword ptr [rax + {ZONE_SECOND:#x}], rcx
     mov r13, qword ptr [rbx + 0x20]
     mov r14d, dword ptr [rbx + 0x28]
 txn_loop:
@@ -151,6 +149,11 @@ txn_loop:
     mov rsi, qword ptr [r13 + 0x10]
     mov ecx, dword ptr [r13 + 4]
     rep movsb
+    mov rax, qword ptr [rbp + 0x18]
+    mov rax, qword ptr [rax]
+    mov rcx, qword ptr [r13 + 0x18]
+    mov qword ptr [rax + {ZONE_FIRST:#x}], rcx
+    mov qword ptr [rax + {ZONE_SECOND:#x}], rcx
     mov rcx, qword ptr [r13 + 8]
     mov edx, dword ptr [r13]
     mov r8d, 1

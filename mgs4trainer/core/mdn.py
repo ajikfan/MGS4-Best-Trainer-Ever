@@ -218,3 +218,193 @@ def hidden(source: bytes) -> bytes:
     out = bytearray(source)
     out[header.face_buffer_offset:header.face_buffer_offset + header.face_buffer_size] = bytes(header.face_buffer_size)
     return bytes(out)
+
+
+# Pieces liees (2026-11-16) : un .eqpp de la zone cite le corps et une piece
+# a part (foulard de Naomi 0x44911B pour 0xE28B85, physique de tissu) ; le
+# jeu l'accroche au corps. Fusionnees dans le corps avant le modele hybride :
+# leurs sections sont ajoutees a la suite (memes tailles d'entrees), leurs os
+# propres (ceux de la physique) suivent l'os du corps le plus proche au
+# repos (le foulard suit le cou, pas le bassin) : piece raide, sans tissu.
+GROUP_SIZE, FACE_SIZE, MATERIAL_SIZE, TEXTURE_SIZE = 0x10, 0x10, 0x70, 0x20
+HEADER_END = 0x80  # en-tete : ..., bourrage, taille du fichier, boite englobante
+NO_PARENT = 0xFFFFFFFF
+
+
+def _sections(data: bytes) -> dict[str, bytes]:
+    h = MdnHeader(data)
+    return {
+        "bones": data[h.bone_offset:h.bone_offset + h.bone_count * BONE_SIZE],
+        "groups": data[h.group_offset:h.group_offset + h.group_count * GROUP_SIZE],
+        "meshes": data[h.mesh_offset:h.mesh_offset + h.mesh_count * MESH_SIZE],
+        "faces": data[h.face_offset:h.face_offset + h.face_count * FACE_SIZE],
+        "vdefs": data[h.vertex_def_offset:h.vertex_def_offset + h.vertex_def_count * VERTEX_DEF_SIZE],
+        "materials": data[h.material_offset:h.material_offset + h.material_count * MATERIAL_SIZE],
+        "textures": data[h.texture_offset:h.texture_offset + h.texture_count * TEXTURE_SIZE],
+        "skins": data[h.skin_offset:h.skin_offset + h.skin_count * SKIN_SIZE],
+        "vbuf": data[h.vertex_buffer_offset:h.vertex_buffer_offset + h.vertex_buffer_size],
+        "fbuf": data[h.face_buffer_offset:h.face_buffer_offset + h.face_buffer_size],
+    }
+
+
+def _bone_worlds(data: bytes) -> list[tuple[int, tuple[float, float, float]]]:
+    h = MdnHeader(data)
+    return [(struct.unpack_from(">I", data, h.bone_offset + i * BONE_SIZE)[0],
+             struct.unpack_from(">3f", data, h.bone_offset + i * BONE_SIZE + BONE_WORLD))
+            for i in range(h.bone_count)]
+
+
+def _pad16(data: bytes) -> bytes:
+    return data + bytes(-len(data) % 16)
+
+
+VERTEX_WEIGHT, VERTEX_BONES = 1, 7  # types de champ : poids (4 octets /255), os (4 numeros de palette)
+
+
+def _piece_offsets(body: bytes, piece: bytes) -> list[tuple[float, float, float]]:
+    """Decalage (corps - piece) de chaque os de la piece : par identifiant
+    pour les os communs, celui du parent pour les autres. Les cheveux de
+    Naomi en noir (0xD8B3EE) sont 240 plus bas que son corps (bassin a 0
+    au lieu de 240) ; son foulard (0x6C29C2) a les memes positions."""
+    body_world = dict(_bone_worlds(body))
+    worlds = _bone_worlds(piece)
+    parents = [parent for _bone, parent in bone_ids(piece)]
+    offsets = [None] * len(worlds)
+
+    def offset(i: int, depth: int = 0):
+        if offsets[i] is None:
+            bone, world = worlds[i]
+            if bone in body_world:
+                offsets[i] = tuple(b - p for b, p in zip(body_world[bone], world))
+            elif 0 <= parents[i] < len(worlds) and depth < len(worlds):
+                offsets[i] = offset(parents[i], depth + 1)
+            else:
+                offsets[i] = (0.0, 0.0, 0.0)
+        return offsets[i]
+
+    return [offset(i) for i in range(len(worlds))]
+
+
+def _shift_vertices(piece: bytes, offsets) -> bytes:
+    """Sommets de la piece deplaces du decalage de leurs os (ponderes)."""
+    header = MdnHeader(piece)
+    out = bytearray(piece)
+    done = set()
+    for m in range(header.mesh_count):
+        base = header.mesh_offset + m * MESH_SIZE
+        definition, skin_index, vertices = struct.unpack_from(">I", out, base + MESH_VERTEX_DEF)[0], \
+            struct.unpack_from(">I", out, base + 0x14)[0], struct.unpack_from(">I", out, base + MESH_VERTEX_COUNT)[0]
+        palette = [0]
+        if header.skin_count:
+            skin = header.skin_offset + skin_index * SKIN_SIZE
+            count, = struct.unpack_from(">H", piece, skin + 4)
+            palette = list(piece[skin + SKIN_PALETTE:skin + SKIN_PALETTE + min(count, 32)]) or [0]
+        vdef = header.vertex_def_offset + definition * VERTEX_DEF_SIZE
+        _pad, fields, stride, start = struct.unpack_from(">4I", out, vdef)
+        kinds = [k & 0x0F for k in out[vdef + 0x10:vdef + 0x10 + fields]]
+        at = dict(zip(kinds, out[vdef + 0x20:vdef + 0x20 + fields]))
+        if VERTEX_POSITION not in at:
+            continue
+        for v in range(vertices):
+            vertex = header.vertex_buffer_offset + start + v * stride
+            if vertex + at[VERTEX_POSITION] in done:
+                continue
+            done.add(vertex + at[VERTEX_POSITION])
+            slots = list(out[vertex + at[VERTEX_BONES]:vertex + at[VERTEX_BONES] + 4]) if VERTEX_BONES in at else [0]
+            weights = [w / 255 for w in out[vertex + at[VERTEX_WEIGHT]:vertex + at[VERTEX_WEIGHT] + 4]] \
+                if VERTEX_WEIGHT in at else [1.0]
+            total = sum(weights[:len(slots)]) or 1.0
+            shift = [0.0, 0.0, 0.0]
+            for slot, weight in zip(slots, weights):
+                bone = palette[slot] if slot < len(palette) else palette[0]
+                for k in range(3):
+                    shift[k] += weight / total * offsets[bone][k]
+            position = vertex + at[VERTEX_POSITION]
+            values = struct.unpack_from(">3f", out, position)
+            struct.pack_into(">3f", out, position, *(p + s for p, s in zip(values, shift)))
+    return bytes(out)
+
+
+def merge(body: bytes, piece: bytes) -> bytes:
+    """Corps + piece liee ou couche, sur les os du corps (piece ramenee dans
+    le repere du corps si ses os communs sont ailleurs)."""
+    body_bones = _bone_worlds(body)
+    by_id = {bone: i for i, (bone, _w) in enumerate(body_bones)}
+
+    def nearest(position) -> int:
+        return min(range(len(body_bones)),
+                   key=lambda i: sum((a - b) ** 2 for a, b in zip(body_bones[i][1], position)))
+
+    offsets = _piece_offsets(body, piece)
+    if any(any(abs(c) > 0.01 for c in o) for o in offsets):
+        piece = _shift_vertices(piece, offsets)
+    worlds = [(bone, tuple(w + o for w, o in zip(world, offset)))
+              for (bone, world), offset in zip(_bone_worlds(piece), offsets)]
+    bone_map = [by_id[bone] if bone in by_id else nearest(world) for bone, world in worlds]
+    a, b = _sections(body), _sections(piece)
+    ha = MdnHeader(body)
+    counts = {name: len(a[name]) // size for name, size in (
+        ("groups", GROUP_SIZE), ("faces", FACE_SIZE), ("vdefs", VERTEX_DEF_SIZE),
+        ("materials", MATERIAL_SIZE), ("textures", TEXTURE_SIZE), ("skins", SKIN_SIZE))}
+    vbuf_a, fbuf_a = _pad16(a["vbuf"]), _pad16(a["fbuf"])
+
+    groups = bytearray(b["groups"])
+    for i in range(0, len(groups), GROUP_SIZE):
+        parent, = struct.unpack_from(">I", groups, i + 8)
+        if parent != NO_PARENT:
+            struct.pack_into(">I", groups, i + 8, parent + counts["groups"])
+    meshes = bytearray(b["meshes"])
+    for i in range(0, len(meshes), MESH_SIZE):
+        group, flags, nfaces, face, vdef, skin = struct.unpack_from(">6I", meshes, i)
+        struct.pack_into(">6I", meshes, i, group + counts["groups"], flags, nfaces,
+                         face + counts["faces"], vdef + counts["vdefs"], skin + counts["skins"])
+    faces = bytearray(b["faces"])
+    for i in range(0, len(faces), FACE_SIZE):
+        offset, material = struct.unpack_from(">II", faces, i + 4)
+        struct.pack_into(">II", faces, i + 4, offset + len(fbuf_a), material + counts["materials"])
+    vdefs = bytearray(b["vdefs"])
+    for i in range(0, len(vdefs), VERTEX_DEF_SIZE):
+        offset, = struct.unpack_from(">I", vdefs, i + 0xC)
+        struct.pack_into(">I", vdefs, i + 0xC, offset + len(vbuf_a))
+    materials = bytearray(b["materials"])
+    for i in range(0, len(materials), MATERIAL_SIZE):
+        count, = struct.unpack_from(">I", materials, i + 8)
+        for t in range(min(count, 8)):
+            texture, = struct.unpack_from(">I", materials, i + 0x10 + t * 4)
+            struct.pack_into(">I", materials, i + 0x10 + t * 4, texture + counts["textures"])
+    skins = bytearray(b["skins"])
+    for i in range(0, len(skins), SKIN_SIZE):
+        count, = struct.unpack_from(">H", skins, i + 4)
+        for k in range(min(count, 32)):
+            skins[i + SKIN_PALETTE + k] = bone_map[skins[i + SKIN_PALETTE + k]]
+    if max(bone_map, default=0) > 0xFF:
+        raise ValueError("palette sur un octet : trop d'os")
+
+    order = (("bones", a["bones"]), ("groups", a["groups"] + groups), ("meshes", a["meshes"] + meshes),
+             ("faces", a["faces"] + faces), ("vdefs", a["vdefs"] + vdefs),
+             ("materials", a["materials"] + materials), ("textures", a["textures"] + b["textures"]),
+             ("skins", a["skins"] + skins), ("vbuf", vbuf_a + b["vbuf"]), ("fbuf", fbuf_a + b["fbuf"]))
+    out = bytearray(body[:HEADER_END])
+    offsets = {}
+    for name, data in order:
+        out += bytes(-len(out) % 16)
+        offsets[name] = (len(out), len(data))
+        out += data
+    out += bytes(-len(out) % 16)
+    n = {name: offsets[name][1] // size for name, size in (
+        ("bones", BONE_SIZE), ("groups", GROUP_SIZE), ("meshes", MESH_SIZE), ("faces", FACE_SIZE),
+        ("vdefs", VERTEX_DEF_SIZE), ("materials", MATERIAL_SIZE), ("textures", TEXTURE_SIZE),
+        ("skins", SKIN_SIZE))}
+    struct.pack_into(">21I", out, 4, ha.id, n["bones"], n["groups"], n["meshes"], n["faces"], n["vdefs"],
+                     n["materials"], n["textures"], n["skins"],
+                     offsets["bones"][0], offsets["groups"][0], offsets["meshes"][0], offsets["faces"][0],
+                     offsets["vdefs"][0], offsets["materials"][0], offsets["textures"][0], offsets["skins"][0],
+                     offsets["vbuf"][0], offsets["vbuf"][1], offsets["fbuf"][0], offsets["fbuf"][1])
+    struct.pack_into(">I", out, HEADER.size + 4, len(out))
+    return bytes(out)
+
+
+def texture_ids(data: bytes) -> list[int]:
+    header = MdnHeader(data)
+    return [struct.unpack_from(">I", data, header.texture_offset + i * TEXTURE_SIZE)[0]
+            for i in range(header.texture_count)]

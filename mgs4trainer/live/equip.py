@@ -552,7 +552,8 @@ class EquipMixin:
     # textures). Comme pour l'apparition d'ennemis, les txn et le modele sont
     # enregistres sous le nom de leur zone : le jeu en deduit le dossier des
     # textures HD (sous un autre nom : modele noir).
-    def model_swap_catalog(self) -> dict[int, tuple[str, int, tuple[int, ...]]]:
+    def model_swap_catalog(self) -> dict[int, tuple[str, int, tuple[int, ...], tuple[int, ...], tuple[int, ...]]]:
+        """identifiant -> (zone, os, txn, pieces liees, couches automatiques)."""
         from mgs4trainer.core.model_catalog import MODELS
         return MODELS
 
@@ -562,12 +563,15 @@ class EquipMixin:
         files = self._model_files()
         resources = files.zone_resources(zone)
         path = next((p for k, p in resources if k == 0x0D000000 | source), None)
-        if path is not None:
-            return zone, path, []
         entry = self.model_swap_catalog().get(source)
+        if path is not None:
+            # txn du catalogue quand meme (pieces liees) : seuls les absents
+            # du dictionnaire sont enregistres
+            here = dict(resources)
+            return zone, path, [(t, here[t]) for t in (entry[2] if entry else ()) if t in here]
         if entry is None:
             return None
-        other, _bones, txns = entry
+        other, txns = entry[0], entry[2]
         resources = files.zone_resources(other)
         paths = dict(resources)
         path = paths.get(0x0D000000 | source)
@@ -575,13 +579,52 @@ class EquipMixin:
             return None
         return other, path, [(t, paths[t]) for t in txns]
 
-    def set_body_model(self, source: int | None, hide_head: bool = False) -> bool:
+    def model_auto_layers(self, source: int) -> list[int]:
+        """Couches que le catalogue associe au modele (cheveux, foulard)."""
+        entry = self.model_swap_catalog().get(source)
+        return list(entry[4]) if entry else []
+
+    def _model_layer_source(self, layer: int, owner: int):
+        """Couche absente du catalogue (petits modeles : cheveux) : prise dans
+        la zone du modele qu'elle accompagne, avec les txn de celui-ci."""
+        entry = self.model_swap_catalog().get(owner)
+        if entry is None:
+            return None
+        resources = dict(self._model_files().zone_resources(entry[0]))
+        path = resources.get(0x0D000000 | layer)
+        if path is None:
+            return None
+        return entry[0], path, [(t, resources[t]) for t in entry[2] if t in resources]
+
+    def _model_source_data(self, source: int, path: str, zone: str) -> bytes:
+        """Le mdn du modele, avec ses pieces liees fusionnees (catalogue :
+        pans de blouse de Naomi, ailes de Raging Raven...), prises dans la
+        zone d'enregistrement ou, a defaut, dans la zone du catalogue."""
+        from mgs4trainer.core import mdn
+        files = self._model_files()
+        data = files.read(path)
+        entry = self.model_swap_catalog().get(source)
+        if entry is None or not entry[3]:
+            return data
+        places = [dict(files.zone_resources(zone))]
+        if entry[0] != zone:
+            places.append(dict(files.zone_resources(entry[0])))
+        for piece in entry[3]:
+            piece_path = next((place[0x0D000000 | piece] for place in places if 0x0D000000 | piece in place), None)
+            if piece_path is not None:
+                data = mdn.merge(data, files.read(piece_path))
+        return data
+
+    def set_body_model(self, source: int | None, hide_head: bool = False, layers=()) -> bool:
         """Corps de Snake = geometrie du modele source (None = son modele) ;
         hide_head : tete de Snake (paquet du visage) invisible, pour un
-        modele qui a la sienne."""
-        return self._start_equip(self._set_body_model_live, source, hide_head)
+        modele qui a la sienne ; layers : modeles ajoutes par-dessus (le
+        foulard 0x6C29C2 et les cheveux de Naomi en noir 0x2DA964 sont des
+        modeles a part, sur le meme squelette, lies par aucun fichier :
+        2026-11-16)."""
+        return self._start_equip(self._set_body_model_live, source, hide_head, tuple(layers))
 
-    def _set_body_model_live(self, source: int | None, hide_head: bool = False) -> bool:
+    def _set_body_model_live(self, source: int | None, hide_head: bool = False, layers=()) -> bool:
         from mgs4trainer.core import mdn
         funcs = self._live_funcs(self.MODEL_LIVE_FUNCS)
         spawn_funcs = self._live_funcs(self.SPAWN_FUNCS)
@@ -601,30 +644,51 @@ class EquipMixin:
         missing = {}    # zone -> [(cle, donnees)]
         persist = []    # entrees du detour des chargements (_model_load_set)
         if source is not None:
-            found = self._model_swap_source(source, location[0])
-            if found is None:
-                return False
-            zone, path, txns = found
+            # modele puis couches ajoutees par-dessus (foulard, cheveux...) :
+            # fusionnes avant le modele hybride ; txn de chacun sous sa zone
+            catalog = self.model_swap_catalog()
+            datas, load_txns, zone = [], {}, None
+            for model in (source, *layers):
+                found = self._model_swap_source(model, location[0])
+                if found is None and model != source:
+                    found = self._model_layer_source(model, source)
+                if found is None:
+                    return False
+                model_zone, path, txns = found
+                zone = zone or model_zone
+                try:
+                    datas.append(self._model_source_data(model, path, model_zone))
+                except (ValueError, struct.error, IndexError):
+                    return False
+                waiting = {key for key, _data in missing.get(model_zone, [])}
+                missing.setdefault(model_zone, []).extend(
+                    (key, files.read(p)) for key, p in txns if key not in present and key not in waiting)
+                # aux chargements : toujours les txn du catalogue (une
+                # cinematique ou une autre zone ne les a pas)
+                entry = catalog.get(model)
+                if entry is not None:
+                    paths = dict(files.zone_resources(entry[0]))
+                    for key in entry[2]:
+                        if key in paths and key not in load_txns:
+                            load_txns[key] = (files.read(paths[key]), entry[0])
+                else:
+                    for key, p in txns:
+                        load_txns.setdefault(key, (files.read(p), model_zone))
             try:
-                hybrid = mdn.build_hybrid(files.read(path), skeleton_data)
+                data = datas[0]
+                for layer in datas[1:]:
+                    data = mdn.merge(data, layer)
+                hybrid = mdn.build_hybrid(data, skeleton_data)
             except (ValueError, struct.error, IndexError):
                 return False
-            missing.setdefault(zone, []).extend((key, files.read(p)) for key, p in txns if key not in present)
             redirects.append((target, self._model_alias(source ^ body_id ^ self.MODEL_SWAP_XOR), hybrid, zone,
                               0x0D000000 | body_id))
-            # aux chargements : toujours les txn du catalogue (une cinematique
-            # ou une autre zone ne les a pas)
-            entry = self.model_swap_catalog().get(source)
-            if entry is not None:
-                paths = dict(files.zone_resources(entry[0]))
-                load_zone, load_txns = entry[0], [(k, files.read(paths[k])) for k in entry[2] if k in paths]
-            else:
-                load_zone, load_txns = zone, [(k, files.read(p)) for k, p in txns]
-            persist.append((0x0D000000 | body_id, len(skeleton_data), hybrid, load_zone, load_txns))
+            persist.append((0x0D000000 | body_id, len(skeleton_data), hybrid,
+                            [(key, txn, txn_zone) for key, (txn, txn_zone) in load_txns.items()]))
         if hide_head:
             for face_id, face_data in self._model_face_files():
                 hidden = mdn.hidden(face_data)
-                persist.append((0x0D000000 | face_id, len(face_data), hidden, location[0], []))
+                persist.append((0x0D000000 | face_id, len(face_data), hidden, []))
                 node = self._model_node(nodes, face_id)
                 if node:
                     redirects.append((node, self._model_alias(face_id ^ self.MODEL_HIDE_XOR), hidden, location[0],
@@ -833,13 +897,13 @@ class EquipMixin:
         "8b7b10488b73188b4b08f3a4c7430c01000000eb0f837b0c00741ae836000000"
         "85c07411488b431048894424408b43084889442428488b45104883c428415941"
         "585a595d415f415e415d415c5f5e5b48895c2418ffe04883ec28448b632c4585"
-        "e40f84b60000004c8b452031c0b90100000081f921140000731b486bd1704983"
-        "7c100800750b6641837c1034ff7502ffc0ffc1ebdd4439e00f8289000000488b"
-        "4518488b00488b483448894d28488b484448894d30488b4b3048894834488948"
-        "444c8b6b20448b73284585f67438418b4d00ff55084885c07523498b7d08498b"
-        "7510418b4d04f3a4498b4d08418b550041b801000000458b4d04ff55004983c5"
-        "2041ffceebc3488b4518488b00488b4d2848894834488b4d3048894844b80100"
-        "00004883c428c331c04883c428c3"
+        "e40f84bd0000004c8b452031c0b90100000081f921140000731b486bd1704983"
+        "7c100800750b6641837c1034ff7502ffc0ffc1ebdd4439e00f8290000000488b"
+        "4518488b00488b483448894d28488b484448894d304c8b6b20448b73284585f6"
+        "744b418b4d00ff55084885c07536498b7d08498b7510418b4d04f3a4488b4518"
+        "488b00498b4d184889483448894844498b4d08418b550041b801000000458b4d"
+        "04ff55004983c52041ffceebb0488b4518488b00488b4d2848894834488b4d30"
+        "48894844b8010000004883c428c331c04883c428c3"
     )
     MODEL_LOAD_BASE_AT = 0x18   # imm64 de "movabs rbp, page" dans le code
     MODEL_LOAD_CODE_AT = 0x800
@@ -875,7 +939,7 @@ class EquipMixin:
     MODEL_LOAD_FLAGS = 0x61  # drapeaux du chargeur de paquets au chargement d'une zone
 
     def _model_load_set(self, entries) -> dict[int, tuple[int, int]] | None:
-        """entries : [(cle, taille d'origine, remplacement, zone, [(cle, txn)])]
+        """entries : [(cle, taille d'origine, remplacement, [(cle, txn, zone du txn)])]
         ; vide = detour inactif (le jeu reprend ses modeles au chargement)."""
         # le debut de "core" est notre saut une fois le detour pose
         site = self.base + self.MODEL_LOAD_FUNCS["core"][0]
@@ -893,7 +957,7 @@ class EquipMixin:
             return {}
         if "lookup" not in funcs or len(entries) > self.MODEL_LOAD_MAX_ENTRIES:
             return None
-        if sum(len(e[4]) for e in entries) > self.MODEL_LOAD_MAX_TXNS:
+        if sum(len(e[3]) for e in entries) > self.MODEL_LOAD_MAX_TXNS:
             return None
         page = self._model_load_page(funcs)
         if not page:
@@ -915,18 +979,19 @@ class EquipMixin:
 
         table, txn_items, out = b"", b"", {}
         txn_at = page + self.MODEL_LOAD_TXN_AT
-        for key, original, data, zone, txns in entries:
+        for key, original, data, txns in entries:
             work, pristine = buffers(data)
             out[key] = (work, page + 0x40 + len(table))
             items = b""
             needed = 0
-            for txn_key, txn in txns:
+            for txn_key, txn, txn_zone in txns:
                 txn_work, txn_pristine = buffers(txn)
-                items += struct.pack("<IIQQQ", txn_key, len(txn), txn_work, txn_pristine, 0)
+                # nom de la zone du txn (couches venues d'autres zones)
+                items += struct.pack("<IIQQ", txn_key, len(txn), txn_work, txn_pristine) \
+                    + txn_zone.encode()[:7].ljust(8, b"\0")
                 needed += struct.unpack_from(">I", txn, 8)[0]
-            name = zone.encode()[:7].ljust(8, b"\0")
             table += struct.pack("<IIIIQQQII", key & 0x7FFFFFFF, original, len(data), 0, work, pristine,
-                                 txn_at + len(txn_items) if items else 0, len(txns), needed) + name + bytes(8)
+                                 txn_at + len(txn_items) if items else 0, len(txns), needed) + bytes(16)
             txn_items += items
         self.proc.write_bytes(page + self.MODEL_LOAD_TXN_AT, txn_items or bytes(1))
         self.proc.write_bytes(page + 0x40, table)
