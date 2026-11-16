@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.9.1
+# MGS4 Trainer — V2.9.2
 
 *[English version](README.en.md)*
 
@@ -51,21 +51,19 @@ des versions.
 - [Comment ça marche](docs/fonctionnement.md)
 - [Maintenance](docs/maintenance.md) (compatibilité, build, organisation du code)
 
-## Dernière version : V2.9.1
+## Dernière version : V2.9.2
 
-- **Apparence de Snake** (onglet Événements) : corps et visage d'une
-  variante de tenue, et **Modèle du corps** (expérimental) : Snake prend
-  le corps d'un autre personnage parmi 187 modèles de tout le jeu, tête
-  masquable, gardé aux chargements et aux cinématiques.
-- **Faire apparaître** (expérimental) : le Gekko apparaît partout et
-  combat ; PMC et Gekko dans l'arène de Mantis.
-- **Salle blanche** : le bouton retrouve la Beauty après des
-  apparitions.
+- **Modèle du corps** : les personnages arrivent complets, avec leurs
+  pièces (manteau, queue de cheval, câbles…) et leurs couches (cheveux,
+  foulard…). Ligne **Par-dessus** pour les retirer, **Ajouter
+  par-dessus** pour en empiler d'autres.
+- Raging Raven en camouflage lave avec son visage ; une quarantaine de
+  modèles nommés.
 - Livrée par la **mise à jour intégrée** ; DLL inchangée.
 
-Avec la **V2.9.0** : nouvel onglet Événements, Metal Gear Mk. II
-invisible et intouchable, Laughing Octopus hors de son arène, « Meryl me
-suit ».
+Avec la **V2.9.1** : Apparence de Snake (corps et visage d'une tenue,
+modèle du corps d'un autre personnage), Gekko partout, salle blanche
+corrigée.
 
 Détail dans [Nouveautés par version](docs/nouveautes.md).
 

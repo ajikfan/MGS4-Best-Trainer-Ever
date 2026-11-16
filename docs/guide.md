@@ -209,7 +209,7 @@ Ce qui agit sur la zone et le scénario :
     **Automatique (tenue portée)** rend la main au jeu.
   - **Modèle du corps (expérimental)** : **Chercher** liste les modèles
     dont le squelette va avec celui de Snake, en deux groupes, **Humains**
-    puis **Animaux et autres** : ceux de la zone d'abord, puis ceux de
+    puis **Animaux, pièces et autres** : ceux de la zone d'abord, puis ceux de
     tout le jeu (187), précédés de leur zone d'origine et chargés à la
     demande avec leurs textures. **Appliquer** donne à Snake le corps
     choisi ; **Celui de Snake** lui rend le sien (au prochain chargement
@@ -217,6 +217,13 @@ Ce qui agit sur la zone et le scénario :
   - **Masquer sa tête** : cochée à l'application, la tête de Snake
     (visage, bandana, Solid Eye) devient invisible, pour laisser voir
     celle du modèle.
+  - Les morceaux d'un personnage sont ajoutés tout seuls : ses **pièces
+    liées** (manteau, pans de blouse, queue de cheval, câbles…), placées
+    là où le jeu les accroche, et ses **couches** (cheveux, foulard,
+    chemise, tête), posées par-dessus. La ligne **Par-dessus** montre les
+    couches en place : **Retirer** enlève celle choisie. **Ajouter
+    par-dessus** empile le modèle choisi dans la liste sur le corps
+    appliqué ; **Appliquer** remet les couches du personnage.
   - Le modèle tient aux chargements et aux cinématiques. Il se change
     aussi pendant une cinématique ; quand Snake pilote le Mk. II dans un
     briefing, il faut une dizaine de secondes pour le retrouver.

@@ -4,6 +4,25 @@
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
+## Nouveautés de la V2.9.2
+
+### Modèle du corps : des personnages complets
+
+- **Pièces liées**, ajoutées toutes seules et placées là où le jeu les
+  accroche : manteau de Vamp, pans de blouse de Naomi, queue de cheval et
+  câbles de Raging Raven, cheveux de Big Mama.
+- **Couches**, posées par-dessus le corps : cheveux, foulard de Naomi,
+  chemise de Vamp, tête du Old Snake des cinématiques. La nouvelle ligne
+  **Par-dessus** les montre, avec **Retirer** pour en enlever une ;
+  **Ajouter par-dessus** empile un autre modèle de la liste.
+- **Raging Raven en camouflage lave** reçoit son visage, celui du FaceCamo
+  Raging Beauty.
+- Une quarantaine de modèles nommés (Naomi, Vamp, Raiden, Otacon, Liquid,
+  Big Mama, Raging Raven, soldats, civils et rebelles…), rangés en deux
+  groupes : **Humains**, puis **Animaux, pièces et autres**.
+- Limite connue : Naomi en blouse blanche reste noire avec ses pièces et
+  ses cheveux.
+
 ## Nouveautés de la V2.9.1
 
 ### Apparence de Snake (onglet Événements)

@@ -1,4 +1,4 @@
-# MGS4 Trainer — V2.9.1
+# MGS4 Trainer — V2.9.2
 
 *[Version française](README.md)*
 
@@ -49,19 +49,16 @@ up the compatible version, the warnings and the version history.
 - [How it works](docs/en/how-it-works.md)
 - [Maintenance](docs/en/maintenance.md) (compatibility, build, code layout)
 
-## Latest version: V2.9.1
+## Latest version: V2.9.2
 
-- **Snake's appearance** (Events tab): body and face of an outfit
-  variant, and **Body model** (experimental): Snake takes another
-  character's body among 187 models from the whole game, head can be
-  hidden, kept through loads and cutscenes.
-- **Spawn** (experimental): the Gekko appears everywhere and fights;
-  PMCs and Gekko in Mantis's arena.
-- **White Room**: the button finds the Beauty after spawns.
+- **Body model**: characters come complete, with their pieces (coat,
+  ponytail, cables…) and layers (hair, scarf…). **On top** row to remove
+  them, **Add on top** to stack others.
+- Raging Raven in lava camo with her face; about forty models named.
 - Delivered by the **built-in update**; DLL unchanged.
 
-With **V2.9.0**: new Events tab, Metal Gear Mk. II invisible and
-untouchable, Laughing Octopus outside her arena, "Meryl follows me".
+With **V2.9.1**: Snake's appearance (body and face of an outfit, another
+character's body model), Gekko everywhere, White Room fixed.
 
 Details in [What's new in each version](docs/en/whats-new.md).
 

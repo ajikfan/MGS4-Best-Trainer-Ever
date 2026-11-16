@@ -1,4 +1,8 @@
 {
+  "V2.9.2": {
+    "date": "November 16, 2026",
+    "description": "• Body model: the parts that go with a character are added automatically. Linked pieces (Vamp's coat, lab coat flaps, Raging Raven's ponytail and cables, Big Mama's hair) are placed where the game attaches them; layers (hair, Naomi's scarf, Vamp's shirt, the cutscene Old Snake's head) are put on top.\n• New \"On top\" row: the layers in place, with Remove; \"Add on top\" stacks another model from the list.\n• Raging Raven in lava camo gets her face (the Raging Beauty FaceCamo one).\n• About forty models named in the list (Naomi, Vamp, Raiden, Otacon, Liquid, Big Mama, Raging Raven, soldiers, civilians and rebels…), in two groups: Humans, then Animals, parts and others.\n• Known limit: Naomi in her white lab coat stays black with her pieces and hair."
+  },
   "V2.9.1": {
     "date": "November 15, 2026",
     "description": "• New in the Events tab, Snake's appearance: Body and Face impose those of an outfit variant (15 bodies and 31 faces named, impossible combinations greyed out; Automatic hands control back to the game).\n• New, experimental: Body model. Snake takes another character's body (soldiers, Naomi, Mei Ling, Akiba, animals…) among 187 models from the whole game, loaded with their textures. Hide his head shows the model's own head. The model holds through loads and cutscenes, and can also be changed during a cutscene.\n• Spawn: the Gekko appears in every area, shoots at Snake and at the rebels, with its real textures; PMCs and Gekko also appear in Screaming Mantis's arena.\n• No more frozen game when Johnny, woken up in Mantis's arena, starts walking again.\n• The White Room button finds the Beauty again even after NPC spawns."

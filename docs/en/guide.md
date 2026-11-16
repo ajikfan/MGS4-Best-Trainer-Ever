@@ -201,13 +201,19 @@ What acts on the area and the story:
     assemble are greyed out. **Automatic (worn outfit)** hands control
     back to the game.
   - **Body model (experimental)**: **Find** lists the models whose
-    skeleton fits Snake's, in two groups, **Humans** then **Animals and
-    others**: the area's first, then those of the whole game (187),
+    skeleton fits Snake's, in two groups, **Humans** then **Animals,
+    parts and others**: the area's first, then those of the whole game (187),
     preceded by their area of origin and loaded on demand with their
     textures. **Apply** gives Snake the chosen body; **Snake's own**
     gives him his back (at the next load if there has been one since).
   - **Hide his head**: when checked on apply, Snake's head (face,
     bandana, Solid Eye) becomes invisible, to show the model's own.
+  - A character's parts are added automatically: its **linked pieces**
+    (coat, lab coat flaps, ponytail, cables…), placed where the game
+    attaches them, and its **layers** (hair, scarf, shirt, head), put on
+    top. The **On top** row shows the layers in place: **Remove** takes
+    the chosen one off. **Add on top** stacks the model chosen in the list
+    onto the applied body; **Apply** puts back the character's own layers.
   - The model holds through loads and cutscenes. It can also be changed
     during a cutscene; when Snake drives the Mk. II in a briefing, it
     takes about ten seconds to find him.
