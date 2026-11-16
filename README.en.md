@@ -52,8 +52,9 @@ up the compatible version, the warnings and the version history.
 ## Latest version: V2.9.2
 
 - **Body model**: characters come complete, with their pieces (coat,
-  ponytail, cables…) and layers (hair, scarf…). **On top** row to remove
-  them, **Add on top** to stack others.
+  ponytail, cables…) and layers (hair, scarf…). The **On top** list shows
+  the added layers and lets you remove one; **Add on top** puts another
+  model over the applied body.
 - Raging Raven in lava camo with her face; about forty models named.
 - Delivered by the **built-in update**; DLL unchanged.
 

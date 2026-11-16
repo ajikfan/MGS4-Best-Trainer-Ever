@@ -1,7 +1,7 @@
 {
   "V2.9.2": {
     "date": "November 16, 2026",
-    "description": "• Body model: the parts that go with a character are added automatically. Linked pieces (Vamp's coat, lab coat flaps, Raging Raven's ponytail and cables, Big Mama's hair) are placed where the game attaches them; layers (hair, Naomi's scarf, Vamp's shirt, the cutscene Old Snake's head) are put on top.\n• New \"On top\" row: the layers in place, with Remove; \"Add on top\" stacks another model from the list.\n• Raging Raven in lava camo gets her face (the Raging Beauty FaceCamo one).\n• About forty models named in the list (Naomi, Vamp, Raiden, Otacon, Liquid, Big Mama, Raging Raven, soldiers, civilians and rebels…), in two groups: Humans, then Animals, parts and others.\n• Known limit: Naomi in her white lab coat stays black with her pieces and hair."
+    "description": "• Body model: every character comes complete. The trainer automatically adds its linked pieces (Vamp's coat, Naomi's lab coat flaps, Raging Raven's ponytail and cables, Big Mama's hair), placed where the game attaches them, and its layers (hair, Naomi's scarf, Vamp's shirt, the cutscene Old Snake's head).\n• Under the body model, the new \"On top\" list shows the added layers: pick one and click Remove to take it off. The \"Add on top\" button puts the model chosen in the list over the applied body (a scarf, hair…).\n• Raging Raven in lava camo gets her face (the Raging Beauty FaceCamo one).\n• About forty models named in the list (Naomi, Vamp, Raiden, Otacon, Liquid, Big Mama, Raging Raven, soldiers, civilians and rebels…), in two groups: Humans, then Animals, parts and others."
   },
   "V2.9.1": {
     "date": "November 15, 2026",

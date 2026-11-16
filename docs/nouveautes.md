@@ -12,16 +12,16 @@ Le détail des dernières versions. L'historique complet est aussi dans le bouto
   accroche : manteau de Vamp, pans de blouse de Naomi, queue de cheval et
   câbles de Raging Raven, cheveux de Big Mama.
 - **Couches**, posées par-dessus le corps : cheveux, foulard de Naomi,
-  chemise de Vamp, tête du Old Snake des cinématiques. La nouvelle ligne
-  **Par-dessus** les montre, avec **Retirer** pour en enlever une ;
-  **Ajouter par-dessus** empile un autre modèle de la liste.
+  chemise de Vamp, tête du Old Snake des cinématiques.
+- Sous le modèle du corps, la nouvelle liste **Par-dessus** montre les
+  couches ajoutées : choisis-en une et clique sur **Retirer** pour
+  l'enlever. Le bouton **Ajouter par-dessus** superpose au corps appliqué
+  le modèle choisi dans la liste (un foulard, des cheveux…).
 - **Raging Raven en camouflage lave** reçoit son visage, celui du FaceCamo
   Raging Beauty.
 - Une quarantaine de modèles nommés (Naomi, Vamp, Raiden, Otacon, Liquid,
   Big Mama, Raging Raven, soldats, civils et rebelles…), rangés en deux
   groupes : **Humains**, puis **Animaux, pièces et autres**.
-- Limite connue : Naomi en blouse blanche reste noire avec ses pièces et
-  ses cheveux.
 
 ## Nouveautés de la V2.9.1
 

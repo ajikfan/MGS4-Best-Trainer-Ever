@@ -55,8 +55,9 @@ des versions.
 
 - **Modèle du corps** : les personnages arrivent complets, avec leurs
   pièces (manteau, queue de cheval, câbles…) et leurs couches (cheveux,
-  foulard…). Ligne **Par-dessus** pour les retirer, **Ajouter
-  par-dessus** pour en empiler d'autres.
+  foulard…). La liste **Par-dessus** montre les couches ajoutées et
+  permet d'en retirer une ; **Ajouter par-dessus** superpose un autre
+  modèle au corps appliqué.
 - Raging Raven en camouflage lave avec son visage ; une quarantaine de
   modèles nommés.
 - Livrée par la **mise à jour intégrée** ; DLL inchangée.

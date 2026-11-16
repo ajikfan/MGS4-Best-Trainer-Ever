@@ -12,16 +12,16 @@ Details of the latest versions. The full history is also in the trainer's **Help
   attaches them: Vamp's coat, Naomi's lab coat flaps, Raging Raven's
   ponytail and cables, Big Mama's hair.
 - **Layers**, put on top of the body: hair, Naomi's scarf, Vamp's shirt,
-  the cutscene Old Snake's head. The new **On top** row shows them, with
-  **Remove** to take one off; **Add on top** stacks another model from
-  the list.
+  the cutscene Old Snake's head.
+- Under the body model, the new **On top** list shows the added layers:
+  pick one and click **Remove** to take it off. The **Add on top** button
+  puts the model chosen in the list over the applied body (a scarf,
+  hair…).
 - **Raging Raven in lava camo** gets her face, the Raging Beauty FaceCamo
   one.
 - About forty models named (Naomi, Vamp, Raiden, Otacon, Liquid, Big Mama,
   Raging Raven, soldiers, civilians and rebels…), sorted in two groups:
   **Humans**, then **Animals, parts and others**.
-- Known limit: Naomi in her white lab coat stays black with her pieces and
-  hair.
 
 ## What's new in V2.9.1
 
