@@ -194,36 +194,6 @@ What acts on the area and the story:
     ten meters behind him, standing or crouched. Outside alerts, enemies
     ignore her; during an alert, added rebels fight the PMCs. Limit:
     Meryl does not defend herself yet.
-- **Snake's appearance**:
-  - **Body** and **Face**: pick an outfit variant then click **Apply**;
-    Snake keeps it whatever the worn outfit (15 bodies and 31 faces
-    named, game package in brackets). Combinations the game cannot
-    assemble are greyed out. **Automatic (worn outfit)** hands control
-    back to the game.
-  - **Body model (experimental)**: **Find** lists the models whose
-    skeleton fits Snake's, in two groups, **Humans** then **Animals,
-    parts and others**: the area's first, then those of the whole game (187),
-    preceded by their area of origin and loaded on demand with their
-    textures. **Apply** gives Snake the chosen body; **Snake's own**
-    gives him his back (at the next load if there has been one since).
-  - **Hide his head**: when checked on apply, Snake's head (face,
-    bandana, Solid Eye) becomes invisible, to show the model's own.
-  - A character's parts are added automatically: its **linked pieces**
-    (coat, lab coat flaps, ponytail, cables…), placed where the game
-    attaches them, and its **layers** (hair, scarf, shirt, head), put on
-    top. The **On top** row shows the layers in place: **Remove** takes
-    the chosen one off. **Add on top** stacks the model chosen in the list
-    onto the applied body; **Apply** puts back the character's own layers.
-  - The model holds through loads and cutscenes. It can also be changed
-    during a cutscene; when Snake drives the Mk. II in a briefing, it
-    takes about ten seconds to find him.
-  - Small models (children, Little Gray) are scaled up to Snake's size,
-    otherwise they would float (animations put his hips at adult
-    height).
-  - Limits: an outfit change gives Snake his body back; an area already
-    full of textures refuses a model from another area (a message says
-    so, try elsewhere); held items stay placed for Snake's hands; some
-    models give strange results. Save before trying.
 - **Triggers**: pick an action in the list and click **Trigger** to make
   Snake play it. At the top: **High fall**, **Crouching back pain**
   (only crouching and still) and **Vomit** (standing or crouching
@@ -233,6 +203,48 @@ What acts on the area and the story:
   posture, with no damage or sound; Snake then goes back to his posture
   (crouching, prone, face down, on his back). Animations meant for
   another posture (ladder, hanging...) can look strange.
+
+### Appearance
+
+- **Snake's outfit and face**: pick a body and face variant then click
+  **Apply**; Snake keeps it whatever the worn outfit (15 bodies and 31
+  faces named, game package in brackets). Combinations the game cannot
+  assemble are greyed out. **Automatic (worn outfit)** hands control back
+  to the game.
+- **Another character's model (experimental)**:
+  - The list fills itself when the tab opens (**Refresh list** after an
+    area change): the area's models, then those of the whole game,
+    followed by their area of origin and loaded on demand with their
+    textures. The search field filters by name, number or area; the menu,
+    by group (Humans, Animals, Parts).
+  - Picking a model shows its **parts** on the right: linked pieces (coat,
+    lab coat flaps, ponytail, cables…), placed where the game attaches
+    them, layers (hair, scarf…) put on top, and added parts. Checked by
+    default; an unchecked part stays in the list.
+  - **Add a part…** (or right-click a model in the list) puts any model on
+    the chosen model; it arrives unchecked. **Remove from list** removes
+    an added part.
+  - **Head**: Snake's head, the model's own head only (Snake's hidden), or
+    a separate head (Old Snake's faces, Naomi's head).
+  - For the model in game, checking or unchecking a part or changing the
+    head applies **right away**. For another model, set the boxes then
+    click **Apply changes** (or double-click the model). **In game**
+    reminds the worn model.
+  - **Give Snake his body back** restores the real body of the worn
+    outfit.
+  - The number of textures to load shows under the parts. Textures of
+    applied models add up until the next load: **Free memory** reloads the
+    last checkpoint (pause menu closed) and the model comes back on its
+    own.
+  - The model holds through loads and cutscenes, and can be changed during
+    a cutscene. Small models (children, Little Gray) are brought to
+    Snake's size, big ones (Psycho Mantis) scaled down.
+  - Beast forms: Octopus's tentacles, Raven's wings and missiles, Mantis's
+    arms and dolls are frozen in a pose from the fight.
+  - Limits: an outfit change gives Snake his body back; an area full of
+    textures refuses a model (a message says so); a separate head can show
+    holes at the mouth and eyes up close; held items stay placed for
+    Snake's hands; some models give strange results. Save before trying.
 
 ### Weapons
 

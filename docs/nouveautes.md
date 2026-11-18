@@ -4,6 +4,60 @@
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
+## Nouveautés de la V2.9.3
+
+### Onglet Apparence
+
+- Un onglet à part, après Événements : la **tenue et le visage** de Snake
+  en haut, puis le **modèle d'un autre personnage**.
+- La liste des modèles se remplit à l'ouverture de l'onglet, se
+  **cherche** (nom, numéro ou zone) et se **filtre** : Humains, Animaux,
+  Pièces.
+- Choisir un modèle affiche ses **pièces à cocher** : pièces liées
+  (manteau, queue de cheval…), couches (cheveux, foulard…) et pièces
+  ajoutées. Une pièce décochée **reste dans la liste**. Pour le modèle
+  en jeu, cocher ou décocher s'applique **tout de suite** ; pour un autre
+  modèle, on prépare puis on clique sur **Appliquer** (ou double-clic).
+- **Ajouter une pièce…** (ou clic droit sur la liste) pose n'importe quel
+  modèle de la liste sur le modèle choisi : une blessure, des cheveux,
+  un accessoire. Elle arrive décochée.
+- Section **Tête** : la tête de Snake, la tête du modèle seule, ou une
+  **tête à part** (visages de Old Snake, tête de Naomi).
+- **Rendre son corps à Snake** remet le vrai corps de la tenue portée,
+  même après un chargement.
+- Le nombre de textures à charger s'affiche avant d'appliquer ;
+  **Libérer la mémoire** recharge le dernier point de passage pour vider
+  les textures ajoutées (un compteur les suit).
+
+### Formes Bête complètes
+
+- **Laughing Octopus** avec ses pieuvres, **Raging Raven** avec ses ailes
+  et ses six missiles, **Screaming Mantis** avec ses six bras et ses deux
+  poupées. Ces pièces sont figées dans une pose relevée pendant le
+  combat : elles suivent Snake mais ne s'animent pas.
+- **Crying Wolf (Beauty)** a ses cheveux sur la tête.
+- La blessure par balle de **Big Mama** est ajoutée avec elle.
+
+### Des noms pour (presque) tout
+
+- Les **noms d'origine** du jeu sont retrouvés pour 78 modèles, avec leur
+  version : simplifiée, intermédiaire ou complète (civils, miliciens,
+  PMC, rebelles, soldats en exosquelette…).
+- Un modèle sans nom prend celui du personnage dont il partage les
+  textures ; les déductions moins sûres portent un **?**.
+- Les fantômes, effets (eau, blessures, visages de la cinématique de
+  l'acte 4) et accessoires sont rangés dans les pièces ; les modèles
+  vides ne sont plus listés.
+
+### Corrections
+
+- Un message dit quand un modèle n'a pas pu être appliqué.
+- Les modèles chargent moins de textures (ceux d'Octopus ne chargent plus
+  le fichier de toute la zone).
+- Lancé depuis une console, le trainer se ferme bien.
+- Limite connue : une tête à part (visage de Old Snake) peut montrer des
+  trous à la bouche et aux yeux de près, quand le jeu anime le visage.
+
 ## Nouveautés de la V2.9.2
 
 ### Modèle du corps : des personnages complets

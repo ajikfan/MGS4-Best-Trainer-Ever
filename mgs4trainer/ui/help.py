@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 from mgs4trainer.core.i18n import CHANGELOG_STRINGS, current_language, tr
 
 
-TRAINER_VERSION = "V2.9.2"
+TRAINER_VERSION = "V2.9.3"
 
 TRAINER_HELP_TEXT = tr("help.text")
 

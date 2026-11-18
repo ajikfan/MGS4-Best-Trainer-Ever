@@ -49,17 +49,18 @@ up the compatible version, the warnings and the version history.
 - [How it works](docs/en/how-it-works.md)
 - [Maintenance](docs/en/maintenance.md) (compatibility, build, code layout)
 
-## Latest version: V2.9.2
+## Latest version: V2.9.3
 
-- **Body model**: characters come complete, with their pieces (coat,
-  ponytail, cables…) and layers (hair, scarf…). The **On top** list shows
-  the added layers and lets you remove one; **Add on top** puts another
-  model over the applied body.
-- Raging Raven in lava camo with her face; about forty models named.
+- New **Appearance** tab: model list with search and filters, **parts to
+  check** (a removed part stays in the list, the model in game changes
+  right away), **Head** section.
+- Complete Beast forms: Octopus's tentacles, Raven's wings and missiles,
+  Mantis's arms and dolls.
+- Many more models named; **Free memory**; "Give Snake his body back"
+  fixed.
 - Delivered by the **built-in update**; DLL unchanged.
 
-With **V2.9.1**: Snake's appearance (body and face of an outfit, another
-character's body model), Gekko everywhere, White Room fixed.
+With **V2.9.2**: complete characters (pieces and layers).
 
 Details in [What's new in each version](docs/en/whats-new.md).
 

@@ -4,6 +4,58 @@
 
 Details of the latest versions. The full history is also in the trainer's **Help** button and on the [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases) page.
 
+## What's new in V2.9.3
+
+### Appearance tab
+
+- A tab of its own, after Events: Snake's **outfit and face** at the top,
+  then **another character's model**.
+- The model list fills itself when the tab opens, can be **searched**
+  (name, number or area) and **filtered**: Humans, Animals, Parts.
+- Picking a model shows its **parts to check**: linked pieces (coat,
+  ponytail…), layers (hair, scarf…) and added parts. An unchecked part
+  **stays in the list**. For the model in game, checking or unchecking
+  applies **right away**; for another model, prepare it then click
+  **Apply** (or double-click).
+- **Add a part…** (or right-click the list) puts any model of the list on
+  the chosen model: a wound, hair, an accessory. It arrives unchecked.
+- **Head** section: Snake's head, the model's own head only, or a
+  **separate head** (Old Snake's faces, Naomi's head).
+- **Give Snake his body back** restores the real body of the worn outfit,
+  even after a load.
+- The number of textures to load shows before applying; **Free memory**
+  reloads the last checkpoint to clear added textures (a counter tracks
+  them).
+
+### Complete Beast forms
+
+- **Laughing Octopus** with her tentacles, **Raging Raven** with her wings
+  and six missiles, **Screaming Mantis** with her six arms and two dolls.
+  These parts are frozen in a pose taken during the fight: they follow
+  Snake but do not animate.
+- **Crying Wolf (Beauty)** has her hair on her head.
+- **Big Mama**'s bullet wound comes with her.
+
+### Names for (almost) everything
+
+- The game's **original names** are recovered for 78 models, with their
+  version: simplified, intermediate or full (civilians, militia, PMCs,
+  rebels, Powered Suit soldiers…).
+- An unnamed model takes the name of the character whose textures it
+  shares; less certain guesses carry a **?**.
+- Ghosts, effects (water, wounds, faces of the act 4 cutscene) and
+  accessories are sorted with the parts; empty models are no longer
+  listed.
+
+### Fixes
+
+- A message says when a model could not be applied.
+- Models load fewer textures (Octopus's no longer load the whole area's
+  file).
+- Launched from a console, the trainer closes properly.
+- Known limit: a separate head (Old Snake's face) can show holes at the
+  mouth and eyes up close, when the game animates the face.
+
 ## What's new in V2.9.2
 
 ### Body model: complete characters

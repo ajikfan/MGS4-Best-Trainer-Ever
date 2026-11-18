@@ -51,20 +51,18 @@ des versions.
 - [Comment ça marche](docs/fonctionnement.md)
 - [Maintenance](docs/maintenance.md) (compatibilité, build, organisation du code)
 
-## Dernière version : V2.9.2
+## Dernière version : V2.9.3
 
-- **Modèle du corps** : les personnages arrivent complets, avec leurs
-  pièces (manteau, queue de cheval, câbles…) et leurs couches (cheveux,
-  foulard…). La liste **Par-dessus** montre les couches ajoutées et
-  permet d'en retirer une ; **Ajouter par-dessus** superpose un autre
-  modèle au corps appliqué.
-- Raging Raven en camouflage lave avec son visage ; une quarantaine de
-  modèles nommés.
+- Nouvel onglet **Apparence** : liste des modèles avec recherche et
+  filtres, **pièces à cocher** (une pièce retirée reste dans la liste,
+  le modèle en jeu change tout de suite), section **Tête**.
+- Formes Bête complètes : pieuvres d'Octopus, ailes et missiles de Raven,
+  bras et poupées de Mantis.
+- Bien plus de modèles nommés ; **Libérer la mémoire** ; « Rendre son
+  corps à Snake » corrigé.
 - Livrée par la **mise à jour intégrée** ; DLL inchangée.
 
-Avec la **V2.9.1** : Apparence de Snake (corps et visage d'une tenue,
-modèle du corps d'un autre personnage), Gekko partout, salle blanche
-corrigée.
+Avec la **V2.9.2** : personnages complets (pièces et couches).
 
 Détail dans [Nouveautés par version](docs/nouveautes.md).
 

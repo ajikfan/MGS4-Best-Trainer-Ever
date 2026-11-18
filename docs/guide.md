@@ -201,40 +201,6 @@ Ce qui agit sur la zone et le scénario :
     s'arrête à une dizaine de mètres derrière lui, debout ou accroupie.
     Hors alerte, les ennemis l'ignorent ; pendant une alerte, les rebelles
     ajoutés combattent les PMC. Limite : Meryl ne se défend pas encore.
-- **Apparence de Snake** :
-  - **Corps** et **Visage** : choisis une variante de tenue puis clique
-    sur **Appliquer** ; Snake la garde quelle que soit la tenue portée
-    (15 corps et 31 visages nommés, paquet du jeu entre parenthèses). Les
-    combinaisons que le jeu ne sait pas assembler sont grisées.
-    **Automatique (tenue portée)** rend la main au jeu.
-  - **Modèle du corps (expérimental)** : **Chercher** liste les modèles
-    dont le squelette va avec celui de Snake, en deux groupes, **Humains**
-    puis **Animaux, pièces et autres** : ceux de la zone d'abord, puis ceux de
-    tout le jeu (187), précédés de leur zone d'origine et chargés à la
-    demande avec leurs textures. **Appliquer** donne à Snake le corps
-    choisi ; **Celui de Snake** lui rend le sien (au prochain chargement
-    s'il y en a eu un depuis).
-  - **Masquer sa tête** : cochée à l'application, la tête de Snake
-    (visage, bandana, Solid Eye) devient invisible, pour laisser voir
-    celle du modèle.
-  - Les morceaux d'un personnage sont ajoutés tout seuls : ses **pièces
-    liées** (manteau, pans de blouse, queue de cheval, câbles…), placées
-    là où le jeu les accroche, et ses **couches** (cheveux, foulard,
-    chemise, tête), posées par-dessus. La ligne **Par-dessus** montre les
-    couches en place : **Retirer** enlève celle choisie. **Ajouter
-    par-dessus** empile le modèle choisi dans la liste sur le corps
-    appliqué ; **Appliquer** remet les couches du personnage.
-  - Le modèle tient aux chargements et aux cinématiques. Il se change
-    aussi pendant une cinématique ; quand Snake pilote le Mk. II dans un
-    briefing, il faut une dizaine de secondes pour le retrouver.
-  - Les petits modèles (enfants, Little Gray) sont agrandis à la taille
-    de Snake, sinon ils léviteraient (les animations placent son bassin à
-    hauteur d'adulte).
-  - Limites : un changement de tenue rend son corps à Snake ; une zone
-    déjà pleine de textures refuse un modèle d'une autre zone (un message
-    le dit, essaie ailleurs) ; les objets tenus restent placés pour les
-    mains de Snake ; certains modèles donnent des résultats étranges.
-    Sauvegarde avant d'essayer.
 - **Déclencheurs** : choisis une action dans la liste et clique sur
   **Déclencher** pour que Snake la joue. En tête : **Tomber de haut**,
   **Mal de dos accroupi** (seulement accroupi et immobile) et **Vomir**
@@ -245,6 +211,50 @@ Ce qui agit sur la zone et le scénario :
   ensuite sa posture (accroupi, allongé, face contre le sol, sur le
   dos). Les animations prévues pour une autre posture (échelle,
   suspendu…) peuvent donner un résultat étrange.
+
+### Apparence
+
+- **Tenue et visage de Snake** : choisis une variante de corps et de
+  visage puis clique sur **Appliquer** ; Snake la garde quelle que soit
+  la tenue portée (15 corps et 31 visages nommés, paquet du jeu entre
+  parenthèses). Les combinaisons que le jeu ne sait pas assembler sont
+  grisées. **Automatique (tenue portée)** rend la main au jeu.
+- **Modèle d'un autre personnage (expérimental)** :
+  - La liste se remplit à l'ouverture de l'onglet (**Actualiser la
+    liste** après un changement de zone) : les modèles de la zone, puis
+    ceux de tout le jeu, suivis de leur zone d'origine et chargés à la
+    demande avec leurs textures. Le champ de recherche filtre par nom,
+    numéro ou zone ; le menu, par groupe (Humains, Animaux, Pièces).
+  - Choisir un modèle affiche à droite ses **pièces** : pièces liées
+    (manteau, pans de blouse, queue de cheval, câbles…), placées là où le
+    jeu les accroche, couches (cheveux, foulard…) posées par-dessus, et
+    pièces ajoutées. Cochées par défaut ; une pièce décochée reste dans
+    la liste.
+  - **Ajouter une pièce…** (ou clic droit sur un modèle de la liste) pose
+    n'importe quel modèle sur le modèle choisi ; elle arrive décochée.
+    **Enlever de la liste** retire une pièce ajoutée.
+  - **Tête** : la tête de Snake, la tête du modèle seule (celle de Snake
+    masquée), ou une tête à part (visages de Old Snake, tête de Naomi).
+  - Pour le modèle en jeu, cocher ou décocher une pièce ou changer de
+    tête s'applique **tout de suite**. Pour un autre modèle, prépare les
+    cases puis clique sur **Appliquer les changements** (ou double-clic
+    sur le modèle). **En jeu** rappelle le modèle porté.
+  - **Rendre son corps à Snake** remet le vrai corps de la tenue portée.
+  - Le nombre de textures à charger s'affiche sous les pièces. Les
+    textures des modèles appliqués s'additionnent jusqu'au prochain
+    chargement : **Libérer la mémoire** recharge le dernier point de
+    passage (menu pause fermé) et le modèle revient seul.
+  - Le modèle tient aux chargements et aux cinématiques, et se change
+    aussi pendant une cinématique. Les petits modèles (enfants, Little
+    Gray) sont mis à la taille de Snake, les grands (Psycho Mantis)
+    réduits.
+  - Formes Bête : les pieuvres d'Octopus, les ailes et missiles de Raven,
+    les bras et poupées de Mantis sont figés dans une pose du combat.
+  - Limites : un changement de tenue rend son corps à Snake ; une zone
+    pleine de textures refuse un modèle (un message le dit) ; une tête à
+    part peut montrer des trous à la bouche et aux yeux de près ; les
+    objets tenus restent placés pour les mains de Snake ; certains
+    modèles donnent des résultats étranges. Sauvegarde avant d'essayer.
 
 ### Armes
 
