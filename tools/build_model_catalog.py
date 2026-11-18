@@ -23,6 +23,7 @@ SNAKE_BODY = "00413aa8.mdn"  # corps de Snake (paquet de tenue), squelette de re
 ZONE = re.compile(r"s\d\d[a-z]\d\d[a-z]$")
 TEXTURE_SIZE = 0x20
 HEAD_BONE = 0x29A56C   # os de la tete (identifiant commun aux squelettes humains)
+NECK_BONE = 0xF8D3CC   # cou : racine des tetes a part (visages de Old Snake, tete de Naomi)
 LIGHT_GEOMETRY = 100000  # octets de sommets sous lesquels un modele n'est pas un personnage (blessure de Big Mama 0x88811d : 16 Ko)
 ALSO_SHARED = 0.15      # parente faible : nom deduit avec un point d'interrogation
 KIN_SHARED = 0.6        # part de textures communes pour reprendre le nom d'un autre modele
@@ -310,6 +311,17 @@ def main(root: str) -> None:
             if not wanted:
                 sources[layer] = (zone, tuple(needed))
                 break
+    # tetes : visage complet a part (os de la tete, racine au cou, 30 os ou plus)
+    heads = set()
+    for owner, (zone, _b, _t, pieces_of, layers_of) in catalog.items():
+        paths = dict(files.zone_resources(zone))
+        for model in (owner,) + pieces_of + layers_of:
+            path = paths.get(0x0D000000 | model)
+            if path is None or model in heads:
+                continue
+            ids = mdn.bone_ids(files.read(path))
+            if len(ids) >= 30 and ids[0][0] == NECK_BONE and HEAD_BONE in {b for b, _p in ids}:
+                heads.add(model)
     textures = {}
     for model, (zone, _b, _t, _p, _l) in catalog.items():
         path = dict(files.zone_resources(zone)).get(0x0D000000 | model)
@@ -386,6 +398,10 @@ def main(root: str) -> None:
         handle.write("\n# Parente faible (15 % des textures ou plus) : modele -> ((autre, %), ...).\nALSO = {\n")
         for model in sorted(also):
             handle.write(f"    {model:#08x}: ({''.join(f'({m:#08x}, {s}), ' for m, s in also[model])})," + "\n")
+        handle.write("}\n")
+        handle.write("\n# Tetes a part (visage complet sur le cou) : choix exclusif dans l'onglet Apparence.\nHEADS = {\n")
+        for model in sorted(heads):
+            handle.write(f"    {model:#08x}," + "\n")
         handle.write("}\n")
     print(len(catalog), "modeles,", len(names), "noms d'origine,", len(with_head & set(catalog)), "avec tete")
 

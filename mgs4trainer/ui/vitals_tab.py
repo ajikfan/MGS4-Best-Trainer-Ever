@@ -2,8 +2,9 @@
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QFrame, QGridLayout, QGroupBox, QHBoxLayout,
-    QHeaderView, QLabel, QMessageBox, QPushButton, QScrollArea, QSlider, QTableWidget,
-    QTableWidgetItem, QVBoxLayout, QWidget,
+    QDialog, QDialogButtonBox, QHeaderView, QRadioButton, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu,
+    QMessageBox, QPushButton, QScrollArea, QSlider, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout,
+    QWidget,
 )
 
 import mgs4save
@@ -236,38 +237,75 @@ class VitalsTab(QWidget):
         self.model_apply_btn.setToolTip(tr("vitals.model_tooltip"))
         self.model_apply_btn.clicked.connect(self._on_model_apply)
         self.zone_buttons += [self.model_body_combo, self.model_face_combo, self.model_apply_btn]
-        self.model_swap_combo = QComboBox()
-        self.model_swap_combo.addItem(tr("vitals.model_swap_none"), None)
-        self.model_swap_find_btn = QPushButton(tr("vitals.model_swap_find"))
+        # Onglet Apparence (2026-11-18) : liste avec recherche et filtre,
+        # pieces du modele choisi a cocher (la liste ne retrecit plus quand
+        # on en retire une), changements regroupes sur un seul Appliquer.
+        self.model_search = QLineEdit()
+        self.model_search.setPlaceholderText(tr("vitals.model_search"))
+        self.model_search.setClearButtonEnabled(True)
+        self.model_search.textChanged.connect(lambda _text: self._filter_model_list())
+        self.model_filter = QComboBox()
+        for key, group in (("vitals.model_filter_all", None), ("vitals.model_swap_humans", "human"),
+                           ("vitals.model_swap_animals", "animal"), ("vitals.model_swap_parts", "part")):
+            self.model_filter.addItem(tr(key).strip("— "), group)
+        self.model_filter.currentIndexChanged.connect(lambda _index: self._filter_model_list())
+        self.model_swap_find_btn = QPushButton(tr("vitals.model_swap_refresh"))
         self.model_swap_find_btn.setToolTip(tr("vitals.model_swap_tooltip"))
         self.model_swap_find_btn.clicked.connect(self._on_model_swap_find)
+        self.model_list = QListWidget()
+        self.model_list.setToolTip(tr("vitals.model_list_tooltip"))
+        self.model_list.currentItemChanged.connect(lambda _cur, _prev: self._on_model_selected())
+        self.model_list.itemDoubleClicked.connect(lambda _item: self._on_model_swap_apply())
+        self.model_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.model_list.customContextMenuRequested.connect(self._on_model_list_menu)
+        self.model_pieces_list = QListWidget()
+        self.model_pieces_list.setToolTip(tr("vitals.model_pieces_tooltip"))
+        self.model_pieces_list.itemChanged.connect(lambda _item: self._on_model_piece_toggled())
+        # pieces du modele en jeu appliquees des qu'on coche (2026-11-18),
+        # clics rapproches regroupes
+        self._model_auto_timer = QTimer(self)
+        self._model_auto_timer.setSingleShot(True)
+        self._model_auto_timer.setInterval(700)
+        self._model_auto_timer.timeout.connect(self._model_auto_apply)
+        self.model_piece_add_btn = QPushButton(tr("vitals.model_piece_add"))
+        self.model_piece_add_btn.setToolTip(tr("vitals.model_piece_add_tooltip"))
+        self.model_piece_add_btn.clicked.connect(self._on_model_piece_add)
+        self.model_piece_drop_btn = QPushButton(tr("vitals.model_piece_drop"))
+        self.model_piece_drop_btn.setToolTip(tr("vitals.model_piece_drop_tooltip"))
+        self.model_piece_drop_btn.clicked.connect(self._on_model_piece_drop)
+        # Tete (2026-11-18) : choix exclusif. Tete de Snake, tete du modele
+        # seule (celle de Snake masquee), ou une tete a part (visages de Old
+        # Snake, tete de Naomi) qui remplace celle de Snake.
+        self.model_head_group = QGroupBox(tr("vitals.model_heads"))
+        self.model_head_layout = QVBoxLayout(self.model_head_group)
+        self.model_head_buttons = QButtonGroup(self)
+        self.model_head_buttons.setExclusive(True)
+        self.model_head_buttons.buttonToggled.connect(
+            lambda _button, on: on and self._on_model_piece_toggled())
         self.model_swap_apply_btn = QPushButton(tr("vitals.model_apply"))
-        self.model_swap_apply_btn.setToolTip(tr("vitals.model_swap_tooltip"))
+        self.model_swap_apply_btn.setToolTip(tr("vitals.model_apply_pending_tooltip"))
         self.model_swap_apply_btn.clicked.connect(self._on_model_swap_apply)
-        self.model_hide_head_cb = QCheckBox(tr("vitals.model_hide_head"))
-        self.model_hide_head_cb.setToolTip(tr("vitals.model_hide_head_tooltip"))
-        # Couches (2026-11-16) : modeles ajoutes par-dessus le corps applique
-        # (foulard, cheveux : modeles a part que rien ne relie au corps)
-        self.model_layer_btn = QPushButton(tr("vitals.model_layer_add"))
-        self.model_layer_btn.setToolTip(tr("vitals.model_layer_tooltip"))
-        self.model_layer_btn.clicked.connect(self._on_model_layer_add)
-        # couches en place (automatiques du catalogue + ajoutees), retirables
-        self.model_layers_combo = QComboBox()
-        self.model_layers_combo.setToolTip(tr("vitals.model_layers_tooltip"))
-        self.model_layer_remove_btn = QPushButton(tr("vitals.model_layer_remove"))
-        self.model_layer_remove_btn.setToolTip(tr("vitals.model_layers_tooltip"))
-        self.model_layer_remove_btn.clicked.connect(self._on_model_layer_remove)
-        self._model_applied = (None, [])  # (modele, couches)
+        self.model_reset_btn = QPushButton(tr("vitals.model_swap_reset"))
+        self.model_reset_btn.setToolTip(tr("vitals.model_swap_reset_tooltip"))
+        self.model_reset_btn.clicked.connect(self._on_model_swap_reset)
+        self.model_cost_label = QLabel("")
+        self.model_applied_label = QLabel("")
+        # (corps, pieces liees gardees, couches, tete masquee) applique en jeu
+        self._model_applied = (None, (), (), False)
+        self._model_extras = {}   # corps -> pieces ajoutees a la main
+        self._model_extra_checked = set()  # pieces ajoutees cochees (modele pas encore en jeu)
+        self._model_groups = {}   # modele -> "human" / "animal" / "part"
         # memoire des textures ajoutees par les modeles, liberee en
         # rechargeant le point de passage (le modele applique revient seul)
         self.model_memory_label = QLabel("")
         self.model_free_btn = QPushButton(tr("vitals.model_free_memory"))
         self.model_free_btn.setToolTip(tr("vitals.model_free_memory_tooltip"))
         self.model_free_btn.clicked.connect(self._on_model_free_memory)
-        self._show_model_layers()
-        self.zone_buttons += [self.model_swap_combo, self.model_swap_find_btn, self.model_hide_head_cb,
-                              self.model_swap_apply_btn, self.model_layer_btn, self.model_layers_combo,
-                              self.model_layer_remove_btn, self.model_free_btn]
+        self.zone_buttons += [self.model_search, self.model_filter, self.model_swap_find_btn, self.model_list,
+                              self.model_pieces_list, self.model_piece_add_btn, self.model_piece_drop_btn,
+                              self.model_head_group, self.model_swap_apply_btn,
+                              self.model_reset_btn,
+                              self.model_free_btn]
 
         weapons_group = QGroupBox(tr("vitals.weapons_group"))
         weapons_layout = QVBoxLayout(weapons_group)
@@ -340,6 +378,7 @@ class VitalsTab(QWidget):
         layout.addStretch(1)
         self._build_gauges_page()
         self._build_events_page()
+        self._build_appearance_page()
 
         # Minuteur dedie (AMMO_LOCK_REFRESH_MS, plus rapide que le cycle
         # general REFRESH_MS) pour "Munitions infinies"/"Pas de
@@ -347,6 +386,61 @@ class VitalsTab(QWidget):
         self.ammo_lock_timer = QTimer(self)
         self.ammo_lock_timer.timeout.connect(self._reassert_ammo_locks)
         self.ammo_lock_timer.start(AMMO_LOCK_REFRESH_MS)
+
+    def _build_appearance_page(self):
+        """Onglet Apparence (2026-11-18) : tenue et visage de Snake, puis le
+        corps d'un autre personnage avec ses pieces a cocher."""
+        page = QWidget()
+        page_layout = QVBoxLayout(page)
+
+        variants_group = QGroupBox(tr("vitals.model_group"))
+        model_row = QHBoxLayout(variants_group)
+        model_row.addWidget(QLabel(tr("vitals.model_body")))
+        model_row.addWidget(self.model_body_combo)
+        model_row.addWidget(QLabel(tr("vitals.model_face")))
+        model_row.addWidget(self.model_face_combo)
+        model_row.addWidget(self.model_apply_btn)
+        model_row.addStretch(1)
+        page_layout.addWidget(variants_group)
+
+        swap_group = QGroupBox(tr("vitals.model_swap_group"))
+        swap_layout = QVBoxLayout(swap_group)
+        search_row = QHBoxLayout()
+        search_row.addWidget(self.model_search, 1)
+        search_row.addWidget(self.model_filter)
+        search_row.addWidget(self.model_swap_find_btn)
+        swap_layout.addLayout(search_row)
+
+        pieces_box = QWidget()
+        pieces_layout = QVBoxLayout(pieces_box)
+        pieces_layout.setContentsMargins(0, 0, 0, 0)
+        pieces_layout.addWidget(QLabel(tr("vitals.model_pieces")))
+        pieces_layout.addWidget(self.model_pieces_list, 1)
+        pieces_row = QHBoxLayout()
+        pieces_row.addWidget(self.model_piece_add_btn)
+        pieces_row.addWidget(self.model_piece_drop_btn)
+        pieces_row.addStretch(1)
+        pieces_layout.addLayout(pieces_row)
+        pieces_layout.addWidget(self.model_head_group)
+        pieces_layout.addWidget(self.model_cost_label)
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.addWidget(self.model_list)
+        splitter.addWidget(pieces_box)
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 2)
+        swap_layout.addWidget(splitter, 1)
+
+        bottom_row = QHBoxLayout()
+        bottom_row.addWidget(self.model_applied_label)
+        bottom_row.addStretch(1)
+        bottom_row.addWidget(self.model_memory_label)
+        bottom_row.addWidget(self.model_free_btn)
+        bottom_row.addWidget(self.model_reset_btn)
+        bottom_row.addWidget(self.model_swap_apply_btn)
+        swap_layout.addLayout(bottom_row)
+        page_layout.addWidget(swap_group, 1)
+        self.appearance_page = page
+        self._update_model_pending()
 
     def _build_events_page(self):
         """Page de l'onglet "Evenements" (self.events_page, ajoutee par la
@@ -365,36 +459,6 @@ class VitalsTab(QWidget):
         spawn_row.addWidget(self.ally_follow_check)
         spawn_row.addStretch(1)
         page_layout.addWidget(spawn_group)
-
-        model_group = QGroupBox(tr("vitals.model_group"))
-        model_layout = QVBoxLayout(model_group)
-        model_row = QHBoxLayout()
-        model_row.addWidget(QLabel(tr("vitals.model_body")))
-        model_row.addWidget(self.model_body_combo)
-        model_row.addWidget(QLabel(tr("vitals.model_face")))
-        model_row.addWidget(self.model_face_combo)
-        model_row.addWidget(self.model_apply_btn)
-        model_row.addStretch(1)
-        model_layout.addLayout(model_row)
-        # Corps d'un autre personnage (MGS4Live.set_body_model, experimental)
-        swap_row = QHBoxLayout()
-        swap_row.addWidget(QLabel(tr("vitals.model_swap")))
-        swap_row.addWidget(self.model_swap_combo)
-        swap_row.addWidget(self.model_swap_find_btn)
-        swap_row.addWidget(self.model_hide_head_cb)
-        swap_row.addWidget(self.model_swap_apply_btn)
-        swap_row.addWidget(self.model_layer_btn)
-        swap_row.addStretch(1)
-        model_layout.addLayout(swap_row)
-        layers_row = QHBoxLayout()
-        layers_row.addWidget(QLabel(tr("vitals.model_layers")))
-        layers_row.addWidget(self.model_layers_combo)
-        layers_row.addWidget(self.model_layer_remove_btn)
-        layers_row.addStretch(1)
-        layers_row.addWidget(self.model_memory_label)
-        layers_row.addWidget(self.model_free_btn)
-        model_layout.addLayout(layers_row)
-        page_layout.addWidget(model_group)
 
         triggers_group = QGroupBox(tr("vitals.triggers_group"))
         triggers_layout = QVBoxLayout(triggers_group)
@@ -1100,7 +1164,13 @@ class VitalsTab(QWidget):
                         0xD34AB6: "vitals.model_swap_meryl_wedding",
                         0x637A6F: "vitals.model_swap_raiden_one_arm", 0xB9DCFD: "vitals.model_swap_raiden_shoulders",
                         0x63C031: "vitals.model_swap_naomi_head", 0x2A9F63: "vitals.model_swap_fx_bigboss_corpse",
-                        0x2F2970: "vitals.model_swap_fx_snake_mgs1",
+                        0x2F2970: "vitals.model_swap_fx_snake_mgs1", 0xE3469F: "vitals.model_swap_otacon_hair_piece",
+                        0x227C95: "vitals.model_swap_meiling_hat", 0xEC02C6: "vitals.model_swap_akiba_tails",
+                        0x80758D: "vitals.model_swap_zero_oxygen",
+                        0x862651: "vitals.model_swap_snake_hair",
+                        0xF5ABDB: "vitals.model_swap_snake_suit_tails",
+                        0x123B37: "vitals.model_swap_old_snake_face_burnt",
+                        0x78DCCA: "vitals.model_swap_old_snake_face",
                         0x434ADE: "vitals.model_swap_act4_intro_face",
                         0x837F6C: "vitals.model_swap_act4_intro_face",
                         0x991CDC: "vitals.model_swap_act4_intro_face",
@@ -1124,7 +1194,7 @@ class VitalsTab(QWidget):
                         0x63F843, 0x43F843, 0xE3F5F9, 0x6EB366, 0x43FAC3, 0x205BD6,
                         0x88811D, 0xEAD962, 0xE56F84,
                         0x073440, 0x773388, 0xE4B650, 0xE4B656, 0xD84BA9, 0x0AEFAB,
-                        0x4525E8, 0xCE9BCD, 0xB9DCFD, 0x63C031, 0x2A9F63, 0x2F2970, 0x434ADE, 0x837F6C, 0x991CDC, 0xCAEB87, 0xF9569B, 0xF982D9,
+                        0x4525E8, 0xCE9BCD, 0xB9DCFD, 0x63C031, 0x2A9F63, 0x2F2970, 0xE3469F, 0x227C95, 0xEC02C6, 0x80758D, 0x862651, 0xF5ABDB, 0x123B37, 0x78DCCA, 0x434ADE, 0x837F6C, 0x991CDC, 0xCAEB87, 0xF9569B, 0xF982D9,
                         0x665346, 0xFE1BB1, 0x261C34, 0x258979, 0x4AA4CE, 0xEB9E27, 0xC1451A}
     MODEL_SWAP_EMPTY = {0x83EEAF, 0xF8521D, 0x186F53, 0x18B5F8, 0x1C6614}  # rien a l'ecran (2026-11-18)
     MODEL_ANIMAL_CODES = ("hen", "pgn", "rvn", "mky")
@@ -1169,38 +1239,249 @@ class VitalsTab(QWidget):
         # modeles vides (rien a l'ecran, valide en jeu) : hors de la liste
         candidates = [m for m in candidates if m not in self.MODEL_SWAP_EMPTY]
         catalog = {m: e for m, e in catalog.items() if m not in self.MODEL_SWAP_EMPTY}
-        combo = self.model_swap_combo
-        combo.clear()
-        combo.addItem(tr("vitals.model_swap_none"), None)
-
-        groups = {m: self._model_group(m, catalog) for m in set(catalog) | set(candidates)}
-
-        names = self._model_names(set(catalog) | set(candidates))
-
-        def label(model: int, here: bool) -> str:
-            name = names.get(model) or tr("vitals.model_swap_model" if here else "vitals.model_swap_other")
-            return f"{name} ({model:#08x})" if here else f"{catalog[model][0]} : {name} ({model:#08x})"
-
+        models = set(catalog) | set(candidates)
+        self._model_groups = {m: self._model_group(m, catalog) for m in models}
+        names = self._model_names(models)
+        current = self._model_selected()
         # zone courante d'abord, puis le catalogue par zone d'origine
         others = sorted((m for m in catalog if m not in candidates), key=lambda m: (catalog[m][0], m))
-        entries = [(m, True) for m in candidates] + [(m, False) for m in others]
-        for group, wanted in (("vitals.model_swap_humans", "human"), ("vitals.model_swap_animals", "animal"),
-                              ("vitals.model_swap_parts", "part")):
-            chosen = [(m, here) for m, here in entries if groups.get(m, "human") == wanted]
-            if not chosen:
+        self.model_list.blockSignals(True)
+        self.model_list.clear()
+        for model, here in [(m, True) for m in candidates] + [(m, False) for m in others]:
+            name = names.get(model) or tr("vitals.model_swap_model" if here else "vitals.model_swap_other")
+            zone = tr("vitals.model_here") if here else catalog[model][0]
+            item = QListWidgetItem(f"{name} ({model:#08x}) — {zone}")
+            item.setData(Qt.UserRole, model)
+            self.model_list.addItem(item)
+            if model == current:
+                self.model_list.setCurrentItem(item)
+        self.model_list.blockSignals(False)
+        self._filter_model_list()
+        self._on_model_selected()
+
+    def _filter_model_list(self) -> None:
+        """Recherche (nom, numero, zone) et filtre de groupe."""
+        text = self.model_search.text().strip().lower()
+        group = self.model_filter.currentData()
+        for row in range(self.model_list.count()):
+            item = self.model_list.item(row)
+            model = item.data(Qt.UserRole)
+            hidden = (group is not None and self._model_groups.get(model, "human") != group) \
+                or (text and text not in item.text().lower())
+            item.setHidden(bool(hidden))
+
+    def _model_selected(self) -> int | None:
+        item = self.model_list.currentItem()
+        return item.data(Qt.UserRole) if item is not None else None
+
+    def _on_model_list_menu(self, pos) -> None:
+        item = self.model_list.itemAt(pos)
+        if item is None:
+            return
+        menu = QMenu(self)
+        add = menu.addAction(tr("vitals.model_piece_add_this"))
+        if menu.exec(self.model_list.mapToGlobal(pos)) == add:
+            self._add_model_piece(item.data(Qt.UserRole))
+
+    # Pieces du corps choisi (2026-11-18) : pieces liees, couches du
+    # catalogue, pieces ajoutees a la main ; cochees = posees. Pour le corps
+    # deja applique, les cases reprennent ce qui est en jeu.
+    PIECE_LINKED, PIECE_LAYER, PIECE_EXTRA = "linked", "layer", "extra"
+
+    def _on_model_selected(self) -> None:
+        source = self._model_selected()
+        applied, a_pieces, a_layers, a_hide = self._model_applied
+        rows = []
+        if source is not None:
+            linked = self.live.model_linked_pieces(source)
+            layers = self.live.model_auto_layers(source)
+            extras = [m for m in self._model_extras.get(source, []) if m not in layers]
+            same = source == applied
+            rows += [(m, self.PIECE_LINKED, (m in a_pieces) if same else True) for m in linked]
+            rows += [(m, self.PIECE_LAYER, (m in a_layers) if same else True) for m in layers]
+            # pieces ajoutees a la main : decochees tant qu'on ne les coche pas
+            rows += [(m, self.PIECE_EXTRA, (m in a_layers) if same else (m in self._model_extra_checked))
+                     for m in extras]
+        from mgs4trainer.core.model_catalog import HEADS, WITH_HEAD
+        heads = [(m, checked) for m, kind, checked in rows if m in HEADS]
+        rows = [row for row in rows if row[0] not in HEADS]
+        self._build_model_heads(source, heads, same=source is not None and source == applied,
+                                applied_hide=a_hide, applied_layers=a_layers,
+                                own_head=source in WITH_HEAD)
+        self.model_pieces_list.blockSignals(True)
+        self.model_pieces_list.clear()
+        for model, kind, checked in rows:
+            item = QListWidgetItem(f"{self._model_label(model)} — {tr('vitals.model_piece_kind_' + kind)}")
+            item.setData(Qt.UserRole, (model, kind))
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+            self.model_pieces_list.addItem(item)
+        if not rows:
+            item = QListWidgetItem(tr("vitals.model_pieces_none"))
+            item.setFlags(Qt.NoItemFlags)
+            self.model_pieces_list.addItem(item)
+        self.model_pieces_list.blockSignals(False)
+        self._show_model_cost(source)
+        self._update_model_pending()
+
+    def _on_model_piece_toggled(self) -> None:
+        for row in range(self.model_pieces_list.count()):
+            item = self.model_pieces_list.item(row)
+            data = item.data(Qt.UserRole)
+            if data and data[1] == self.PIECE_EXTRA:
+                if item.checkState() == Qt.Checked:
+                    self._model_extra_checked.add(data[0])
+                else:
+                    self._model_extra_checked.discard(data[0])
+        self._update_model_pending()
+        if self._model_selected() == self._model_applied[0]:
+            self._model_auto_timer.start()
+
+    def _model_auto_apply(self) -> None:
+        """Pieces du modele en jeu changees : appliquees (apres l'application
+        en cours, s'il y en a une)."""
+        if self.live._equip_lock.locked() or not self.model_swap_apply_btn.isEnabled():
+            self._model_auto_timer.start()
+            return
+        pending = self._model_pending()
+        if pending[0] is not None and pending[0] == self._model_applied[0] and pending != self._model_applied:
+            self._on_model_swap_apply()
+
+    HEAD_SNAKE, HEAD_MODEL = -1, -2  # choix de tete hors pieces
+    # tete par defaut quand le modele en a plusieurs (costume de Snake : le
+    # visage de Old Snake plutot que sa version brulee)
+    MODEL_DEFAULT_HEAD = {0xF40F6C: 0x78DCCA}
+
+    def _build_model_heads(self, source, heads, same, applied_hide, applied_layers, own_head) -> None:
+        """Boutons de la section Tete ; choix par defaut : la premiere tete a
+        part du modele, sinon la tete du modele s'il en a une, sinon Snake."""
+        for button in self.model_head_buttons.buttons():
+            self.model_head_buttons.removeButton(button)
+            button.deleteLater()
+        options = [(self.HEAD_SNAKE, tr("vitals.model_head_snake")),
+                   (self.HEAD_MODEL, tr("vitals.model_head_model"))]
+        options += [(m, self._model_label(m)) for m, _checked in heads]
+        if same:
+            chosen = next((m for m, _c in heads if m in applied_layers), None)
+            chosen = chosen if chosen is not None else (self.HEAD_MODEL if applied_hide else self.HEAD_SNAKE)
+        else:
+            preferred = self.MODEL_DEFAULT_HEAD.get(source)
+            chosen = preferred if preferred in [m for m, _c in heads] else (
+                heads[0][0] if heads else (self.HEAD_MODEL if own_head else self.HEAD_SNAKE))
+        self.model_head_buttons.blockSignals(True)
+        for value, label in options:
+            button = QRadioButton(label)
+            button.setProperty("head", value)
+            button.setChecked(value == chosen)
+            self.model_head_buttons.addButton(button)
+            self.model_head_layout.addWidget(button)
+        self.model_head_buttons.blockSignals(False)
+        self.model_head_group.setEnabled(source is not None)
+
+    def _model_head_choice(self):
+        button = self.model_head_buttons.checkedButton()
+        return button.property("head") if button is not None else self.HEAD_SNAKE
+
+    def _model_pending(self):
+        """(corps, pieces liees, couches dans l'ordre, tete masquee) des cases."""
+        pieces, layers = [], []
+        for row in range(self.model_pieces_list.count()):
+            item = self.model_pieces_list.item(row)
+            data = item.data(Qt.UserRole)
+            if not data or item.checkState() != Qt.Checked:
                 continue
-            combo.insertSeparator(combo.count())
-            combo.addItem(tr(group), None)
-            header = combo.model().item(combo.count() - 1)
-            header.setEnabled(False)
-            font = header.font()
-            font.setBold(True)
-            header.setFont(font)
-            for model, here in chosen:
-                combo.addItem(label(model, here), model)
-        # Liste deroulante a la largeur de son plus long nom (tronque sinon)
-        view = self.model_swap_combo.view()
-        view.setMinimumWidth(view.sizeHintForColumn(0) + 2 * view.frameWidth() + 24)
+            model, kind = data
+            (pieces if kind == self.PIECE_LINKED else layers).append(model)
+        head = self._model_head_choice()
+        if head not in (self.HEAD_SNAKE, self.HEAD_MODEL):
+            layers.append(head)
+        return self._model_selected(), tuple(pieces), tuple(layers), head != self.HEAD_SNAKE
+
+    def _update_model_pending(self) -> None:
+        """Appliquer en gras quand les cases different de ce qui est en jeu."""
+        pending = self._model_pending()
+        changed = pending[0] is not None and pending != self._model_applied
+        self.model_swap_apply_btn.setStyleSheet("font-weight: bold;" if changed else "")
+        self.model_swap_apply_btn.setText(tr("vitals.model_apply_pending") if changed else tr("vitals.model_apply"))
+        applied = self._model_applied[0]
+        self.model_applied_label.setText(tr("vitals.model_applied").format(
+            name=self._model_label(applied) if applied is not None else tr("vitals.model_applied_none")))
+
+    def _show_model_cost(self, source) -> None:
+        if source is None or not (self.live.connected and self.live.sane):
+            self.model_cost_label.setText("")
+            return
+        try:
+            cost = self.live.model_swap_textures(source)
+        except OSError:
+            cost = None
+        if cost is None:
+            self.model_cost_label.setText("")
+            return
+        needed, free = cost
+        self.model_cost_label.setText(tr("vitals.model_cost").format(needed=needed, free=free))
+        self.model_cost_label.setStyleSheet("color: #d04040;" if needed > free else "")
+
+    def _add_model_piece(self, piece) -> None:
+        source = self._model_selected()
+        if source is None or piece is None or piece == source:
+            return
+        extras = self._model_extras.setdefault(source, [])
+        if piece not in extras and piece not in self.live.model_auto_layers(source):
+            extras.append(piece)
+        self._on_model_selected()
+
+    def _on_model_piece_add(self) -> None:
+        if self._model_selected() is None:
+            QMessageBox.information(self, tr("vitals.model_swap"), tr("vitals.model_layer_need_body"))
+            return
+        piece = self._pick_model_piece()
+        if piece is not None:
+            self._add_model_piece(piece)
+
+    def _on_model_piece_drop(self) -> None:
+        """Enleve de la liste une piece ajoutee a la main (les autres se decochent)."""
+        item = self.model_pieces_list.currentItem()
+        source = self._model_selected()
+        data = item.data(Qt.UserRole) if item is not None else None
+        if not data or data[1] != self.PIECE_EXTRA or source is None:
+            return
+        self._model_extras[source] = [m for m in self._model_extras.get(source, []) if m != data[0]]
+        self._on_model_selected()
+
+    def _pick_model_piece(self):
+        """Fenetre de choix d'une piece : recherche sur toute la liste, pieces d'abord."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(tr("vitals.model_piece_add"))
+        layout = QVBoxLayout(dialog)
+        search = QLineEdit()
+        search.setPlaceholderText(tr("vitals.model_search"))
+        search.setClearButtonEnabled(True)
+        listing = QListWidget()
+        rows = [(self._model_groups.get(self.model_list.item(r).data(Qt.UserRole)) != "part", r)
+                for r in range(self.model_list.count())]
+        for _not_part, r in sorted(rows):
+            source_item = self.model_list.item(r)
+            item = QListWidgetItem(source_item.text())
+            item.setData(Qt.UserRole, source_item.data(Qt.UserRole))
+            listing.addItem(item)
+
+        def refilter(text):
+            text = text.strip().lower()
+            for r in range(listing.count()):
+                listing.item(r).setHidden(bool(text) and text not in listing.item(r).text().lower())
+        search.textChanged.connect(refilter)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        listing.itemDoubleClicked.connect(lambda _item: dialog.accept())
+        layout.addWidget(search)
+        layout.addWidget(listing)
+        layout.addWidget(buttons)
+        dialog.resize(560, 480)
+        if dialog.exec() != QDialog.Accepted or listing.currentItem() is None:
+            return None
+        return listing.currentItem().data(Qt.UserRole)
 
     def _model_room_ok(self, model: int) -> bool:
         """Assez de places de textures pour ce modele (sinon message)."""
@@ -1307,20 +1588,11 @@ class VitalsTab(QWidget):
             name = self._model_name_with(name, extra)
         return name
 
-    def _show_model_layers(self):
-        _source, layers = self._model_applied
-        combo = self.model_layers_combo
-        combo.clear()
-        if not layers:
-            combo.addItem(tr("vitals.model_layers_none"), None)
-        for model in layers:
-            combo.addItem(self._model_label(model), model)
-        view = combo.view()
-        view.setMinimumWidth(view.sizeHintForColumn(0) + 2 * view.frameWidth() + 24)
-
-    def _apply_model(self, source, layers) -> None:
-        if self.live.set_body_model(source, self.model_hide_head_cb.isChecked(), layers):
-            self._model_waiting = (source, list(layers), 0)
+    def _apply_model(self, source, layers, pieces=None, hide=None) -> None:
+        hide = bool(hide)
+        if self.live.set_body_model(source, hide, layers, pieces):
+            self._model_waiting = ((source, tuple(pieces or ()), tuple(layers), hide), 0)
+            self.model_swap_apply_btn.setEnabled(False)
             QTimer.singleShot(300, self._check_model_applied)
 
     MODEL_WAIT_TICKS = 300  # x 0,3 s : 90 s au plus (balayage de la memoire en cinematique)
@@ -1328,15 +1600,16 @@ class VitalsTab(QWidget):
     def _check_model_applied(self) -> None:
         """Le changement tourne dans un fil : resultat lu a sa fin (avant le
         2026-11-17, un echec ne disait rien)."""
-        source, layers, ticks = self._model_waiting
+        state, ticks = self._model_waiting
         if self.live._equip_lock.locked() and ticks < self.MODEL_WAIT_TICKS:
-            self._model_waiting = (source, layers, ticks + 1)
+            self._model_waiting = (state, ticks + 1)
             QTimer.singleShot(300, self._check_model_applied)
             return
+        self.model_swap_apply_btn.setEnabled(True)
         error = self.live.equip_error
         if error is None:
-            self._model_applied = (source, layers)
-            self._show_model_layers()
+            self._model_applied = state
+            self._on_model_selected()
             QTimer.singleShot(4000, self._show_model_memory)
             return
         import os
@@ -1368,33 +1641,17 @@ class VitalsTab(QWidget):
     def _on_model_swap_apply(self):
         if not (self.live.connected and self.live.sane):
             return
-        source = self.model_swap_combo.currentData()
-        if source is not None and not self._model_room_ok(source):
-            return
-        # couches du catalogue (cheveux, foulard...) d'office ; Retirer les enleve
-        layers = self.live.model_auto_layers(source) if source is not None else []
-        self._apply_model(source, layers)
-
-    def _on_model_layer_remove(self):
-        if not (self.live.connected and self.live.sane):
-            return
-        source, layers = self._model_applied
-        layer = self.model_layers_combo.currentData()
-        if source is None or layer not in layers:
-            return
-        self._apply_model(source, [m for m in layers if m != layer])
-
-    def _on_model_layer_add(self):
-        if not (self.live.connected and self.live.sane):
-            return
-        source, layers = self._model_applied
-        layer = self.model_swap_combo.currentData()
+        source, pieces, layers, hide = self._model_pending()
         if source is None:
-            QMessageBox.information(self, tr("vitals.model_swap"), tr("vitals.model_layer_need_body"))
             return
-        if layer is None or layer == source or layer in layers or not self._model_room_ok(layer):
+        if not all(self._model_room_ok(m) for m in (source,) + layers):
             return
-        self._apply_model(source, layers + [layer])
+        self._apply_model(source, list(layers), list(pieces), hide)
+
+    def _on_model_swap_reset(self):
+        """Snake reprend son propre corps."""
+        if self.live.connected and self.live.sane and self._model_applied[0] is not None:
+            self._apply_model(None, [], None, False)
 
     def _on_model_apply(self):
         if self.live.connected and self.live.sane:

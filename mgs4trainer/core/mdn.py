@@ -511,7 +511,19 @@ def merge(body: bytes, piece: bytes, cnp: bytes | None = None, _pose=None, _anch
             bone_map = [min(chain, key=lambda i: sum((a - b) ** 2 for a, b in zip(body_bones[i][1], position)))
                         for position in placed]
         else:
-            bone_map = [by_id[bone]] * len(piece_bones)
+            # chaque os de la piece cite par le .cnp suit son os du corps, les
+            # autres celui de leur parent (pans de veste du costume de Snake
+            # 0xF5ABDB : racine sur le bassin, deux os sur la colonne)
+            parents = [parent for _bone, parent in bone_ids(piece)]
+            bone_map = []
+            for i, (piece_bone, _w) in enumerate(piece_bones):
+                target = attachments.get(piece_bone) if not posed and i else None
+                if target and target[0] in by_id:
+                    bone_map.append(by_id[target[0]])
+                elif 0 <= parents[i] < i:
+                    bone_map.append(bone_map[parents[i]])
+                else:
+                    bone_map.append(by_id[bone])
     else:
         offsets = _piece_offsets(body, piece)
         if any(any(abs(c) > 0.01 for c in o) for o in offsets):

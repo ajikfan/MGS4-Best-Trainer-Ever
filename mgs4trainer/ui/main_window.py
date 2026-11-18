@@ -186,6 +186,11 @@ class TrainerWindow(QMainWindow):
         self.tabs.addTab(vitals_tab.gauges_page, tr("tab.gauges"))
         self.tabs.addTab(vitals_tab.boss_page, tr("tab.boss"))
         self.tabs.addTab(vitals_tab.events_page, tr("tab.events"))
+        self.tabs.addTab(vitals_tab.appearance_page, tr("tab.appearance"))
+        # liste des modeles remplie a la premiere ouverture de l'onglet
+        self.tabs.currentChanged.connect(
+            lambda _index: self.tabs.currentWidget() is vitals_tab.appearance_page
+            and vitals_tab.model_list.count() == 0 and vitals_tab._on_model_swap_find())
         self.item_tabs.append(vitals_tab)
 
         # Un seul onglet "Armes", sections empilees par categorie (meme

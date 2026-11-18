@@ -507,6 +507,7 @@ class EquipMixin:
     # de chaque mdn du paquet aux triangles aplatis (core/mdn.hidden),
     # branchee comme le corps hybride.
     MODEL_HIDE_XOR = 0x3C3C3C
+    MODEL_REAL_XOR = 0x5A5A5A  # cle de rechange du vrai corps rendu
     # Table de 0x1421 places de 0x70 (allocateur 677C80, 1.4.2 4D1060) :
     # chaque texture enregistree en prend une ; table pleine = indice -1 et
     # ecriture avant la table (plantage 4D1122 en s01a05l, 2026-11-15 : 0
@@ -633,6 +634,11 @@ class EquipMixin:
             return None
         return other, path, [(t, paths[t]) for t in txns]
 
+    def model_linked_pieces(self, source: int) -> list[int]:
+        """Pieces liees que le catalogue fusionne au modele (manteau, queue de cheval)."""
+        entry = self.model_swap_catalog().get(source)
+        return list(entry[3]) if entry else []
+
     def model_auto_layers(self, source: int) -> list[int]:
         """Couches que le catalogue associe au modele (cheveux, foulard)."""
         entry = self.model_swap_catalog().get(source)
@@ -650,7 +656,7 @@ class EquipMixin:
             return None
         return entry[0], path, [(t, resources[t]) for t in entry[2] if t in resources]
 
-    def _model_source_data(self, source: int, path: str, zone: str) -> bytes:
+    def _model_source_data(self, source: int, path: str, zone: str, pieces=None) -> bytes:
         """Le mdn du modele, avec ses pieces liees fusionnees (catalogue :
         pans de blouse de Naomi, ailes de Raging Raven...), prises dans la
         zone d'enregistrement ou, a defaut, dans la zone du catalogue."""
@@ -658,13 +664,14 @@ class EquipMixin:
         files = self._model_files()
         data = files.read(path)
         entry = self.model_swap_catalog().get(source)
-        if entry is None or not entry[3]:
+        wanted = entry[3] if entry is not None and pieces is None else tuple(pieces or ())
+        if entry is None or not wanted:
             return data
         places = [dict(files.zone_resources(zone))]
         if entry[0] != zone:
             places.append(dict(files.zone_resources(entry[0])))
         cnp = self._model_cnp(source, zone)
-        for piece in entry[3]:
+        for piece in wanted:
             piece_path = next((place[0x0D000000 | piece] for place in places if 0x0D000000 | piece in place), None)
             if piece_path is not None:
                 data = mdn.merge(data, files.read(piece_path), cnp)
@@ -683,16 +690,18 @@ class EquipMixin:
                     return files.read(path)
         return None
 
-    def set_body_model(self, source: int | None, hide_head: bool = False, layers=()) -> bool:
+    def set_body_model(self, source: int | None, hide_head: bool = False, layers=(), pieces=None) -> bool:
         """Corps de Snake = geometrie du modele source (None = son modele) ;
         hide_head : tete de Snake (paquet du visage) invisible, pour un
         modele qui a la sienne ; layers : modeles ajoutes par-dessus (le
         foulard 0x6C29C2 et les cheveux de Naomi en noir 0x2DA964 sont des
         modeles a part, sur le meme squelette, lies par aucun fichier :
         2026-11-16)."""
-        return self._start_equip(self._set_body_model_live, source, hide_head, tuple(layers))
+        # pieces : pieces liees gardees (None = toutes celles du catalogue)
+        return self._start_equip(self._set_body_model_live, source, hide_head, tuple(layers),
+                                 None if pieces is None else tuple(pieces))
 
-    def _set_body_model_live(self, source: int | None, hide_head: bool = False, layers=()) -> bool:
+    def _set_body_model_live(self, source: int | None, hide_head: bool = False, layers=(), pieces=None) -> bool:
         from mgs4trainer.core import mdn
         funcs = self._live_funcs(self.MODEL_LIVE_FUNCS)
         spawn_funcs = self._live_funcs(self.SPAWN_FUNCS)
@@ -733,7 +742,7 @@ class EquipMixin:
                 model_zone, path, txns = found
                 zone = zone or model_zone
                 try:
-                    datas.append(self._model_source_data(model, path, model_zone))
+                    datas.append(self._model_source_data(model, path, model_zone, pieces if model == source else None))
                 except (ValueError, struct.error, IndexError):
                     return self._model_fail("etape 4")
                 waiting = {key for key, _data in missing.get(model_zone, [])}
@@ -762,6 +771,15 @@ class EquipMixin:
                               0x0D000000 | body_id))
             persist.append((0x0D000000 | body_id, len(skeleton_data), hybrid,
                             [(key, txn, txn_zone) for key, (txn, txn_zone) in load_txns.items()]))
+        else:
+            # Corps rendu (2026-11-18) : apres un chargement, le detour a mis
+            # notre modele a la place du corps dans le dictionnaire ; Snake s'y
+            # reconstruisait avec. Le vrai fichier du corps de sa tenue
+            # actuelle (paquet charge) est enregistre et branche comme un
+            # modele de rechange, puis le detour est coupe.
+            redirects.append((target, self._model_alias(body_id ^ self.MODEL_REAL_XOR), skeleton_data, location[0],
+                              0x0D000000 | body_id))
+            persist.append((0x0D000000 | body_id, len(skeleton_data), skeleton_data, []))
         if hide_head:
             for face_id, face_data in self._model_face_files():
                 hidden = mdn.hidden(face_data)
@@ -841,9 +859,17 @@ class EquipMixin:
             # prochaine reconstruction.
             time.sleep(self.MODEL_SWAP_SETTLE)
         finally:
+            ours = getattr(self, "_model_work_buffers", set())
             for node, size, data, _size, _data in writes:
+                # corps rendu : un noeud qui pointait sur notre modele (mis par
+                # le detour au dernier chargement) garde le vrai corps (notre
+                # tampon aussi, qui dure) jusqu'au prochain chargement
+                if source is None and struct.unpack("<Q", data)[0] in ours:
+                    continue
                 self.proc.write_bytes(node + 0x20, data)
                 self.proc.write_bytes(node + 0x14, size)
+        if source is None:
+            self._model_load_set([])  # detour coupe : le jeu reprend ses chargements
         return True
 
     # Modele -> variante de visage de Snake qui lui donne sa tete (2026-11-16) :
@@ -1065,6 +1091,8 @@ class EquipMixin:
             if not work or not pristine:
                 raise OSError("place")
             self.proc.write_bytes(pristine, data)
+            # tampons ou le detour fait convertir nos modeles aux chargements
+            self._model_work_buffers = getattr(self, "_model_work_buffers", set()) | {work}
             return work, pristine
 
         table, txn_items, out = b"", b"", {}
