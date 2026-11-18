@@ -56,8 +56,10 @@ up the compatible version, the warnings and the version history.
   right away), **Head** section.
 - Complete Beast forms: Octopus's tentacles, Raven's wings and missiles,
   Mantis's arms and dolls.
-- Many more models named; **Free memory**; "Give Snake his body back"
-  fixed.
+- Many more models named; **Free memory**; **Restore Snake**; model and
+  imposed appearance exclude each other.
+- ⚠️ **Experimental** features: risk of inconsistencies or game crashes,
+  save before trying.
 - Delivered by the **built-in update**; DLL unchanged.
 
 With **V2.9.2**: complete characters (pieces and layers).

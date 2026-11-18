@@ -452,6 +452,9 @@ def _place_piece(piece: bytes, rotation, translation) -> bytes:
     return bytes(out)
 
 
+NECK_BONE = 0xF8D3CC  # cou : racine des modeles de tete (visage de Snake, tetes a part)
+
+
 def piece_key(data: bytes) -> tuple[int, int, int]:
     """Empreinte d'un mdn : (os racine, nombre d'os, taille des sommets).
     Pas l'identifiant d'en-tete : il change d'une copie a l'autre du meme

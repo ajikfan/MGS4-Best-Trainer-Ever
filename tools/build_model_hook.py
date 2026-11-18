@@ -16,7 +16,10 @@ Page (rdx de chaque champ) :
   +0x10 reprise (532225)          +0x18 adresse du pointeur linkvarbuf
   +0x20 table des textures        +0x28 nom de zone sauve (16 octets)
   +0x38 nombre d'entrees          +0x3C actif
-  +0x40 entrees de 0x40 : +0 cle (sans bit 31), +4 taille d'origine,
+  +0x40 entrees de 0x40 : +0 cle (sans bit 31), +4 taille d'origine
+        (0 = toute taille, cle sans bit 31 seulement : corps de la tenue
+        chargee, jamais la version residente du paquet commun, 128 os,
+        plantage 75FFDD quand elle etait remplacee, 2026-11-18),
         +8 taille du remplacement, +0xC converti, +0x10 tampon,
         +0x18 copie intacte, +0x20 liste des txn, +0x28 nombre de txn,
         +0x2C textures necessaires
@@ -60,8 +63,14 @@ find:
     cmp eax, dword ptr [rbx]
     jne next_entry
     mov edx, dword ptr [rsp + 0x28]
+    cmp dword ptr [rbx + 4], 0
+    je any_size
     cmp edx, dword ptr [rbx + 4]
     je match
+    jmp next_entry
+any_size:
+    test byte ptr [rsp + 0x3b], 0x80
+    jz match
 next_entry:
     add rbx, 0x40
     dec ecx

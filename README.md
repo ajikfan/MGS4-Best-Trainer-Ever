@@ -58,8 +58,10 @@ des versions.
   le modèle en jeu change tout de suite), section **Tête**.
 - Formes Bête complètes : pieuvres d'Octopus, ailes et missiles de Raven,
   bras et poupées de Mantis.
-- Bien plus de modèles nommés ; **Libérer la mémoire** ; « Rendre son
-  corps à Snake » corrigé.
+- Bien plus de modèles nommés ; **Libérer la mémoire** ; **Remettre
+  Snake d'origine** ; modèle et apparence imposée s'excluent.
+- ⚠️ Fonctions **expérimentales** : risque d'incohérences ou de plantage
+  du jeu, sauvegarde avant d'essayer.
 - Livrée par la **mise à jour intégrée** ; DLL inchangée.
 
 Avec la **V2.9.2** : personnages complets (pièces et couches).

@@ -248,6 +248,7 @@ class VitalsTab(QWidget):
         for key, group in (("vitals.model_filter_all", None), ("vitals.model_swap_humans", "human"),
                            ("vitals.model_swap_animals", "animal"), ("vitals.model_swap_parts", "part")):
             self.model_filter.addItem(tr(key).strip("— "), group)
+        self.model_filter.setCurrentIndex(1)  # Humains au lancement
         self.model_filter.currentIndexChanged.connect(lambda _index: self._filter_model_list())
         self.model_swap_find_btn = QPushButton(tr("vitals.model_swap_refresh"))
         self.model_swap_find_btn.setToolTip(tr("vitals.model_swap_tooltip"))
@@ -267,6 +268,13 @@ class VitalsTab(QWidget):
         self._model_auto_timer.setSingleShot(True)
         self._model_auto_timer.setInterval(700)
         self._model_auto_timer.timeout.connect(self._model_auto_apply)
+        # Apparence imposee (corps / visage) : le jeu remet son choix a zero
+        # au changement de zone (2026-11-18) ; reimposee apres le chargement.
+        self._appearance_wanted = (None, None)
+        self._appearance_timer = QTimer(self)
+        self._appearance_timer.setInterval(2000)
+        self._appearance_timer.timeout.connect(self._reassert_appearance)
+        self._appearance_timer.start()
         self.model_piece_add_btn = QPushButton(tr("vitals.model_piece_add"))
         self.model_piece_add_btn.setToolTip(tr("vitals.model_piece_add_tooltip"))
         self.model_piece_add_btn.clicked.connect(self._on_model_piece_add)
@@ -1302,12 +1310,12 @@ class VitalsTab(QWidget):
             # pieces ajoutees a la main : decochees tant qu'on ne les coche pas
             rows += [(m, self.PIECE_EXTRA, (m in a_layers) if same else (m in self._model_extra_checked))
                      for m in extras]
-        from mgs4trainer.core.model_catalog import HEADS, WITH_HEAD
+        from mgs4trainer.core.model_catalog import HEADED, HEADS
         heads = [(m, checked) for m, kind, checked in rows if m in HEADS]
         rows = [row for row in rows if row[0] not in HEADS]
         self._build_model_heads(source, heads, same=source is not None and source == applied,
                                 applied_hide=a_hide, applied_layers=a_layers,
-                                own_head=source in WITH_HEAD)
+                                own_head=source in HEADED)
         self.model_pieces_list.blockSignals(True)
         self.model_pieces_list.clear()
         for model, kind, checked in rows:
@@ -1590,6 +1598,13 @@ class VitalsTab(QWidget):
 
     def _apply_model(self, source, layers, pieces=None, hide=None) -> None:
         hide = bool(hide)
+        if source is not None:
+            # le modele rend au jeu le corps et le visage imposes
+            self._appearance_wanted = (None, None)
+            for combo in (self.model_body_combo, self.model_face_combo):
+                combo.blockSignals(True)
+                combo.setCurrentIndex(0)
+                combo.blockSignals(False)
         if self.live.set_body_model(source, hide, layers, pieces):
             self._model_waiting = ((source, tuple(pieces or ()), tuple(layers), hide), 0)
             self.model_swap_apply_btn.setEnabled(False)
@@ -1649,13 +1664,52 @@ class VitalsTab(QWidget):
         self._apply_model(source, list(layers), list(pieces), hide)
 
     def _on_model_swap_reset(self):
-        """Snake reprend son propre corps."""
-        if self.live.connected and self.live.sane and self._model_applied[0] is not None:
-            self._apply_model(None, [], None, False)
+        """Snake neutre : combinaison OctoCamo, sans FaceCamo, tenue et
+        visage automatiques, son vrai corps et son vrai visage."""
+        if not (self.live.connected and self.live.sane):
+            return
+        if self.live.reset_snake_appearance():
+            self._appearance_wanted = (None, None)
+            for combo in (self.model_body_combo, self.model_face_combo):
+                combo.blockSignals(True)
+                combo.setCurrentIndex(0)  # Automatique
+                combo.blockSignals(False)
+            self._model_waiting = ((None, (), (), False), 0)
+            self.model_swap_apply_btn.setEnabled(False)
+            QTimer.singleShot(300, self._check_model_applied)
 
     def _on_model_apply(self):
-        if self.live.connected and self.live.sane:
-            self.live.set_model_variants(self.model_body_combo.currentData(), self.model_face_combo.currentData())
+        if not (self.live.connected and self.live.sane):
+            return
+        body, face = self.model_body_combo.currentData(), self.model_face_combo.currentData()
+        self._appearance_wanted = (body, face)
+        if self._model_applied[0] is None:
+            self.live.set_model_variants(body, face)
+            return
+        # un modele est applique : il est retire au profit de l'apparence
+        if self.live.apply_appearance(body, face):
+            self._model_waiting = ((None, (), (), False), 0)
+            self.model_swap_apply_btn.setEnabled(False)
+            QTimer.singleShot(300, self._check_model_applied)
+
+    def _reassert_appearance(self) -> None:
+        """Corps / visage imposes perdus (changement de zone) : reimposes,
+        hors cinematique, sans modele applique, sans equipement en cours."""
+        body, face = self._appearance_wanted
+        if (body is None and face is None) or self._model_applied[0] is not None:
+            return
+        if not (self.live.connected and self.live.sane) or self.live._equip_lock.locked():
+            return
+        try:
+            if not self.live._octocamo_controller():
+                return
+            lost = (body is not None and self.live._model_forced_variant("body") != body) or (
+                face is not None and face not in self.live.MODEL_FACECAMO_INDEX
+                and self.live._model_forced_variant("face") != face)
+        except OSError:
+            return
+        if lost:
+            self.live.set_model_variants(body, face)
 
     def _on_spawn_soldier(self):
         if self.live.connected and self.live.sane:

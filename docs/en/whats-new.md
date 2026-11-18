@@ -21,8 +21,11 @@ Details of the latest versions. The full history is also in the trainer's **Help
   the chosen model: a wound, hair, an accessory. It arrives unchecked.
 - **Head** section: Snake's head, the model's own head only, or a
   **separate head** (Old Snake's faces, Naomi's head).
-- **Give Snake his body back** restores the real body of the worn outfit,
-  even after a load.
+- **Restore Snake**: OctoCamo suit, no FaceCamo, automatic outfit and
+  face, real body and face, even after a load.
+- A model and an imposed appearance exclude each other: applying one
+  removes the other. The model also holds through outfit changes, and the
+  imposed body comes back on its own after an area change.
 - The number of textures to load shows before applying; **Free memory**
   reloads the last checkpoint to clear added textures (a counter tracks
   them).
@@ -55,6 +58,11 @@ Details of the latest versions. The full history is also in the trainer's **Help
 - Launched from a console, the trainer closes properly.
 - Known limit: a separate head (Old Snake's face) can show holes at the
   mouth and eyes up close, when the game animates the face.
+
+> ⚠️ **Experimental features**: another character's model and the imposed
+> appearance change how the game loads Snake. Some combinations (model,
+> outfit, FaceCamo, area changes) can still give inconsistent results or
+> **crash the game**. Save before trying.
 
 ## What's new in V2.9.2
 

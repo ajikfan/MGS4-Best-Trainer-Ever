@@ -56,6 +56,32 @@ CROSS_ZONE_LAYERS = {
 NOT_LAYERS = {0x51A499, 0xCBA575, 0x63C031, 0xCE9BCD}
 
 
+HEADED_VERTICES = 200
+HEAD_REGION = 150
+
+
+def head_vertices(data: bytes) -> int:
+    """Sommets a plus de HEAD_REGION au-dessus du cou (0 sans cou)."""
+    neck = dict(mdn._bone_worlds(data)).get(NECK_BONE)
+    if neck is None:
+        return 0
+    header = mdn.MdnHeader(data)
+    count = 0
+    for m in range(header.mesh_count):
+        base = header.mesh_offset + m * mdn.MESH_SIZE
+        vdef, = struct.unpack_from(">I", data, base + mdn.MESH_VERTEX_DEF)
+        vertices, = struct.unpack_from(">I", data, base + mdn.MESH_VERTEX_COUNT)
+        at_def = header.vertex_def_offset + vdef * mdn.VERTEX_DEF_SIZE
+        _pad, fields, stride, start = struct.unpack_from(">4I", data, at_def)
+        at = dict(zip([k & 15 for k in data[at_def + 16:at_def + 16 + fields]], data[at_def + 32:at_def + 32 + fields]))
+        if mdn.VERTEX_POSITION not in at:
+            continue
+        for v in range(vertices):
+            y, = struct.unpack_from(">f", data, header.vertex_buffer_offset + start + v * stride + at[mdn.VERTEX_POSITION] + 4)
+            count += y > neck[1] + HEAD_REGION
+    return count
+
+
 def texture_ids(data: bytes) -> list[int]:
     header = mdn.MdnHeader(data)
     return [struct.unpack_from(">I", data, header.texture_offset + i * TEXTURE_SIZE)[0]
@@ -322,6 +348,13 @@ def main(root: str) -> None:
             ids = mdn.bone_ids(files.read(path))
             if len(ids) >= 30 and ids[0][0] == NECK_BONE and HEAD_BONE in {b for b, _p in ids}:
                 heads.add(model)
+    # tete dans la geometrie : 200 sommets ou plus a 150 au-dessus du cou (le FROG,
+    # les formes Bete de Raven et de Mantis n'ont pas l'os de la tete mais une tete)
+    headed = set()
+    for model, (zone, _b, _t, _p, _l) in catalog.items():
+        path = dict(files.zone_resources(zone)).get(0x0D000000 | model)
+        if path and head_vertices(files.read(path)) >= HEADED_VERTICES:
+            headed.add(model)
     textures = {}
     for model, (zone, _b, _t, _p, _l) in catalog.items():
         path = dict(files.zone_resources(zone)).get(0x0D000000 | model)
@@ -401,6 +434,10 @@ def main(root: str) -> None:
         handle.write("}\n")
         handle.write("\n# Tetes a part (visage complet sur le cou) : choix exclusif dans l'onglet Apparence.\nHEADS = {\n")
         for model in sorted(heads):
+            handle.write(f"    {model:#08x}," + "\n")
+        handle.write("}\n")
+        handle.write("\n# Modeles qui ont une tete dans leur geometrie (choix par defaut : tete du modele seule).\nHEADED = {\n")
+        for model in sorted(headed):
             handle.write(f"    {model:#08x}," + "\n")
         handle.write("}\n")
     print(len(catalog), "modeles,", len(names), "noms d'origine,", len(with_head & set(catalog)), "avec tete")

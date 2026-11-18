@@ -698,8 +698,38 @@ class EquipMixin:
         modeles a part, sur le meme squelette, lies par aucun fichier :
         2026-11-16)."""
         # pieces : pieces liees gardees (None = toutes celles du catalogue)
-        return self._start_equip(self._set_body_model_live, source, hide_head, tuple(layers),
+        return self._start_equip(self._apply_model_live, source, hide_head, tuple(layers),
                                  None if pieces is None else tuple(pieces))
+
+    # Modele et apparence s'excluent (2026-11-18) : un modele rend d'abord au
+    # jeu le corps et le visage imposes ; une apparence retire le modele.
+    def _apply_model_live(self, source, hide_head, layers, pieces) -> bool:
+        if source is not None and self._octocamo_controller() and (
+                self._model_forced_variant("body") is not None or self._model_forced_variant("face") is not None):
+            if not self._set_model_variants_live(None, None):
+                return self._model_fail("apparence")
+            time.sleep(self.MODEL_SWAP_SETTLE)
+        # tete de Snake masquee sous un FaceCamo : FaceCamo retire d'abord. Ses
+        # modeles (paquet commun, residents) ne passent pas par le detour et
+        # revenaient au changement de zone (visage d'une Beauty sur Vamp) ;
+        # le visage normal, lui, reste masque.
+        facecamo = self.proc.read_bytes(self.linkvarbuf + self.FACECAMO_EQUIP_OFFSET, 1)[0]
+        if source is not None and hide_head and facecamo and self._octocamo_controller():
+            if not self._equip_model_live(None, 0):
+                return self._model_fail("facecamo")
+            time.sleep(self.MODEL_SWAP_SETTLE)
+        return self._set_body_model_live(source, hide_head, layers, pieces)
+
+    def apply_appearance(self, body: int | None, face: int | None) -> bool:
+        """Corps et visage imposes (None = automatique), modele applique retire."""
+        return self._start_equip(self._apply_appearance_live, body, face)
+
+    def _apply_appearance_live(self, body, face) -> bool:
+        if not self._set_model_variants_live(body, face):
+            return self._model_fail("apparence")
+        time.sleep(self.MODEL_SWAP_SETTLE)
+        # vrai corps et vrai visage de la variante chargee, detour coupe
+        return self._set_body_model_live(None, False, ())
 
     def _set_body_model_live(self, source: int | None, hide_head: bool = False, layers=(), pieces=None) -> bool:
         from mgs4trainer.core import mdn
@@ -769,8 +799,17 @@ class EquipMixin:
                 return self._model_fail("etape 5")
             redirects.append((target, self._model_alias(source ^ body_id ^ self.MODEL_SWAP_XOR), hybrid, zone,
                               0x0D000000 | body_id))
-            persist.append((0x0D000000 | body_id, len(skeleton_data), hybrid,
-                            [(key, txn, txn_zone) for key, (txn, txn_zone) in load_txns.items()]))
+            # taille 0 = toute taille : la tenue chargee peut changer d'une
+            # zone a l'autre (corps torse nu impose perdu au chargement : corps
+            # normal de 389456 octets, 359792 attendus, Snake sans tete)
+            txn_list = [(key, txn, txn_zone) for key, (txn, txn_zone) in load_txns.items()]
+            # 1) toute taille, chargements non residents seulement (tenue
+            #    chargee) ; 2) taille exacte, derniere (c'est elle que
+            #    l'enregistrement ci-dessous convertit) : cinematiques, cle a
+            #    bit 31. La version residente du paquet commun (128 os, autre
+            #    taille) n'est jamais remplacee (plantage 75FFDD).
+            persist.append((0x0D000000 | body_id, 0, hybrid, txn_list))
+            persist.append((0x0D000000 | body_id, len(skeleton_data), hybrid, txn_list))
         else:
             # Corps rendu (2026-11-18) : apres un chargement, le detour a mis
             # notre modele a la place du corps dans le dictionnaire ; Snake s'y
@@ -780,10 +819,25 @@ class EquipMixin:
             redirects.append((target, self._model_alias(body_id ^ self.MODEL_REAL_XOR), skeleton_data, location[0],
                               0x0D000000 | body_id))
             persist.append((0x0D000000 | body_id, len(skeleton_data), skeleton_data, []))
+            # meme chose pour le visage (masque par le detour aux chargements :
+            # Snake restait sans tete, 2026-11-18)
+            if not hide_head:
+                for face_id, face_data in self._model_face_files():
+                    node = self._model_node(nodes, face_id)
+                    if node:
+                        redirects.append((node, self._model_alias(face_id ^ self.MODEL_REAL_XOR), face_data,
+                                          location[0], 0x0D000000 | face_id))
+                        if not self._model_resident(nodes, face_id):
+                            persist.append((0x0D000000 | face_id, len(face_data), face_data, []))
         if hide_head:
             for face_id, face_data in self._model_face_files():
                 hidden = mdn.hidden(face_data)
-                persist.append((0x0D000000 | face_id, len(face_data), hidden, []))
+                # tete residente (FaceCamo pris dans le paquet commun : cle a bit
+                # 31, gardee d'une zone a l'autre) : pas confiee au detour, qui
+                # recopiait son tampon encore en service au chargement suivant
+                # (cheveux figes puis plantage 75FFDD, 2026-11-18)
+                if not self._model_resident(nodes, face_id):
+                    persist.append((0x0D000000 | face_id, len(face_data), hidden, []))
                 node = self._model_node(nodes, face_id)
                 if node:
                     redirects.append((node, self._model_alias(face_id ^ self.MODEL_HIDE_XOR), hidden, location[0],
@@ -802,6 +856,11 @@ class EquipMixin:
             if entries and not self._spawn_register_entries(spawn_funcs, zone, entries):
                 return self._model_fail("etape 8")
         for _node, alias, data, zone, load_key in redirects:
+            if load_key not in load:
+                # pas dans le detour (tete residente) : enregistrement simple
+                if not self._spawn_register_entries(spawn_funcs, zone, [(alias, data)]):
+                    return self._model_fail("etape 9")
+                continue
             work, entry = load[load_key]
             self._spawn_blobs[alias] = work
             if not self._spawn_register_entries(spawn_funcs, zone, [(alias, data)], self.MODEL_LOAD_FLAGS):
@@ -1008,23 +1067,42 @@ class EquipMixin:
     MODEL_LOAD_SITE_ORIG = bytes.fromhex("48895c2418")  # mov [rsp+0x18], rbx
     MODEL_LOAD_CODE = bytes.fromhex(
         "5356574154415541564157555152415041514883ec2848bd8877665544332211"
-        "837d3c00746f8b44243825ffffff7f488d5d408b4d3885c9745b3b0375098b54"
-        "24283b530474084883c340ffc9ebe7f644243010751fe85b00000085c0743648"
-        "8b7b10488b73188b4b08f3a4c7430c01000000eb0f837b0c00741ae836000000"
-        "85c07411488b431048894424408b43084889442428488b45104883c428415941"
-        "585a595d415f415e415d415c5f5e5b48895c2418ffe04883ec28448b632c4585"
-        "e40f84bd0000004c8b452031c0b90100000081f921140000731b486bd1704983"
-        "7c100800750b6641837c1034ff7502ffc0ffc1ebdd4439e00f8290000000488b"
-        "4518488b00488b483448894d28488b484448894d304c8b6b20448b73284585f6"
-        "744b418b4d00ff55084885c07536498b7d08498b7510418b4d04f3a4488b4518"
-        "488b00498b4d184889483448894844498b4d08418b550041b801000000458b4d"
-        "04ff55004983c52041ffceebb0488b4518488b00488b4d2848894834488b4d30"
-        "48894844b8010000004883c428c331c04883c428c3"
+        "837d3c00747e8b44243825ffffff7f488d5d408b4d3885c9746a3b0375188b54"
+        "2428837b040074073b53047411eb07f644243b8074084883c340ffc9ebd8f644"
+        "243010751fe85b00000085c07436488b7b10488b73188b4b08f3a4c7430c0100"
+        "0000eb0f837b0c00741ae83600000085c07411488b431048894424408b430848"
+        "89442428488b45104883c428415941585a595d415f415e415d415c5f5e5b4889"
+        "5c2418ffe04883ec28448b632c4585e40f84bd0000004c8b452031c0b9010000"
+        "0081f921140000731b486bd17049837c100800750b6641837c1034ff7502ffc0"
+        "ffc1ebdd4439e00f8290000000488b4518488b00488b483448894d28488b4844"
+        "48894d304c8b6b20448b73284585f6744b418b4d00ff55084885c07536498b7d"
+        "08498b7510418b4d04f3a4488b4518488b00498b4d184889483448894844498b"
+        "4d08418b550041b801000000458b4d04ff55004983c52041ffceebb0488b4518"
+        "488b00488b4d2848894834488b4d3048894844b8010000004883c428c331c048"
+        "83c428c3"
     )
     MODEL_LOAD_BASE_AT = 0x18   # imm64 de "movabs rbp, page" dans le code
     MODEL_LOAD_CODE_AT = 0x800
     MODEL_LOAD_TXN_AT = 0x400
     MODEL_LOAD_MAX_ENTRIES, MODEL_LOAD_MAX_TXNS = 8, 32
+
+    @staticmethod
+    def _model_resident(nodes, model: int) -> bool:
+        """Modele charge en resident (cle a bit 31 seulement)."""
+        key = 0x0D000000 | model
+        return (key | 0x80000000) in nodes and key not in nodes
+
+    def _model_hook_page(self, site: int) -> int:
+        """Page du detour en place, quelle que soit sa version (0 sinon)."""
+        head = self.proc.read_bytes(site, 5)
+        if head[0] != 0xE9:
+            return 0
+        page = site + 5 + struct.unpack_from("<i", head, 1)[0] - self.MODEL_LOAD_CODE_AT
+        try:
+            resume = struct.unpack("<Q", self.proc.read_bytes(page + 0x10, 8))[0]
+        except OSError:
+            return 0
+        return page if resume == site + 5 else 0
 
     def _model_load_page(self, funcs: dict[str, int]) -> int:
         """Page du detour, installe au besoin (repris s'il est deja la)."""
@@ -1035,8 +1113,15 @@ class EquipMixin:
             code = self.proc.read_bytes(page + self.MODEL_LOAD_CODE_AT, len(self.MODEL_LOAD_CODE))
             mine = bytearray(self.MODEL_LOAD_CODE)
             mine[self.MODEL_LOAD_BASE_AT:self.MODEL_LOAD_BASE_AT + 8] = struct.pack("<Q", page)
-            return page if code == bytes(mine) else 0
-        if head != self.MODEL_LOAD_SITE_ORIG:
+            if code == bytes(mine):
+                return page
+            # detour d'une version precedente du trainer (meme reprise) :
+            # coupe, puis remplace par une page neuve (2026-11-18)
+            resume = struct.unpack("<Q", self.proc.read_bytes(page + 0x10, 8))[0]
+            if resume != site + 5:
+                return 0
+            self.proc.write_bytes(page + 0x3C, bytes(4))
+        elif head != self.MODEL_LOAD_SITE_ORIG:
             return 0
         page = self.proc.alloc_near(site)
         if not page:
@@ -1066,10 +1151,9 @@ class EquipMixin:
             return None if entries else {}
         funcs["core"] = site
         if not entries:
-            if self.proc.read_bytes(funcs["core"], 1) == b"\xE9":
-                page = self._model_load_page(funcs)
-                if page:
-                    self.proc.write_bytes(page + 0x3C, bytes(4))
+            page = self._model_hook_page(site)
+            if page:
+                self.proc.write_bytes(page + 0x3C, bytes(4))
             return {}
         if "lookup" not in funcs or len(entries) > self.MODEL_LOAD_MAX_ENTRIES:
             return None
@@ -1123,11 +1207,10 @@ class EquipMixin:
             return
         try:
             site = self.base + self.MODEL_LOAD_FUNCS["core"][0]
-            if self.proc.read_bytes(site, 1) == b"\xE9":
-                page = self._model_load_page({"core": site})
-                if page:
-                    self.proc.write_bytes(page + 0x3C, bytes(4))
-                    self.proc.write_bytes(site, self.MODEL_LOAD_SITE_ORIG)
+            page = self._model_hook_page(site)
+            if page:
+                self.proc.write_bytes(page + 0x3C, bytes(4))
+                self.proc.write_bytes(site, self.MODEL_LOAD_SITE_ORIG)
         except OSError:
             pass
 
@@ -1141,9 +1224,31 @@ class EquipMixin:
         if pack is None:
             return []
         files = self._model_files()
+        # Modeles de tete de Snake : ceux des paquets de visage (0x03A157,
+        # 0x58B84A, 0x79B16E...), pris la ou le jeu les a charges. Certains
+        # visages (Otacon, variante 22) viennent du paquet commun 00000001
+        # (~600 modeles : echec a l'etape 7), et 0x58B84A y est une piece de
+        # 11 os sur le crane, pas sur le cou (2026-11-18).
+        if getattr(self, "_model_face_ids", None) is None:
+            ids = set()
+            for _variant, face_pack in self.model_variants("face"):
+                marker = f"/slot/{face_pack:08x}/cache/"
+                found = {int(p.rsplit("/", 1)[1][:8], 16) for p in files.entries if marker in p and p.endswith(".mdn")}
+                if len(found) <= self.MODEL_FACE_FILES_MAX:
+                    ids |= found
+            self._model_face_ids = ids
+        loaded = {key & 0xFFFFFF for key in self._spawn_resource_nodes() if (key >> 24) & 0x7F == 0x0D}
         marker = f"/slot/{pack:08x}/cache/"
-        return [(int(p.rsplit("/", 1)[1][:8], 16), files.read(p))
-                for p in files.entries if marker in p and p.endswith(".mdn")]
+        out = []
+        for path in files.entries:
+            if marker not in path or not path.endswith(".mdn"):
+                continue
+            ident = int(path.rsplit("/", 1)[1][:8], 16)
+            if ident in loaded and ident in self._model_face_ids:
+                out.append((ident, files.read(path)))
+        return out[:self.MODEL_FACE_FILES_MAX]
+
+    MODEL_FACE_FILES_MAX = 4
 
     def model_variants_release(self) -> None:
         """Fermeture du trainer : les fonctions du jeu reprennent le choix des
@@ -1280,6 +1385,44 @@ class EquipMixin:
         finally:
             if pause:
                 self._model_pause_clear(funcs)
+
+    def reset_snake_appearance(self) -> bool:
+        """Snake neutre (2026-11-18) : tenue et visage rendus au jeu,
+        combinaison OctoCamo sans FaceCamo, vrai corps et vrai visage."""
+        return self._start_equip(self._reset_appearance_live)
+
+    def _reset_appearance_live(self) -> bool:
+        funcs = self._live_funcs(self.MODEL_LIVE_FUNCS)
+        manager = struct.unpack("<Q", self.proc.read_bytes(self.base + self.MODEL_MANAGER_PTR_RVA, 8))[0]
+        # en cinematique (pas de controleur) recharger Snake fait planter le
+        # jeu : seulement le corps et le visage
+        if funcs is not None and manager and self._octocamo_controller():
+            self.model_variants_release()  # choix du corps et du visage rendus au jeu
+            call = self.speed.game_call
+            state = call(funcs["state"])
+            if state is None:
+                return self._model_fail("neutre")
+            pause = not (state & 6)
+            if pause:
+                call(funcs["pause_set"], self.MODEL_PAUSE_FLAG)
+            try:
+                # combinaison OctoCamo (0), sans FaceCamo (0) ; rechargement
+                # meme si deja portes (variantes imposees rendues)
+                if (call(funcs["equip"], 0, 0) or 0) & 0xFFFFFFFF != 0:
+                    return self._model_fail("neutre")
+                deadline = time.monotonic() + 3.0
+                while time.monotonic() < deadline:
+                    countdown = struct.unpack("<i", self.proc.read_bytes(manager + self.MODEL_RELOAD_COUNTDOWN, 4))[0]
+                    loading = self.proc.read_bytes(manager + self.MODEL_RELOAD_LOADING, 1)[0] & 3
+                    if countdown <= 0 and not loading:
+                        break
+                    time.sleep(0.02)
+                time.sleep(0.1)
+            finally:
+                if pause:
+                    self._model_pause_clear(funcs)
+            time.sleep(self.MODEL_SWAP_SETTLE)
+        return self._set_body_model_live(None, False, ())
 
     def _model_pause_clear(self, funcs: dict[str, int]) -> None:
         """Leve la pause du modele ; si l'appel echoue (delai), le drapeau

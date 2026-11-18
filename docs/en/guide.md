@@ -230,21 +230,28 @@ What acts on the area and the story:
     head applies **right away**. For another model, set the boxes then
     click **Apply changes** (or double-click the model). **In game**
     reminds the worn model.
-  - **Give Snake his body back** restores the real body of the worn
-    outfit.
+  - **Restore Snake**: OctoCamo suit, no FaceCamo, automatic outfit and
+    face, with his real body and face (during a cutscene: only body and
+    face).
+  - A model and an imposed appearance (body and face above) exclude each
+    other: applying one removes the other. A model that hides Snake's
+    head also removes the worn FaceCamo. The imposed body is applied
+    again on its own after an area change.
   - The number of textures to load shows under the parts. Textures of
     applied models add up until the next load: **Free memory** reloads the
     last checkpoint (pause menu closed) and the model comes back on its
     own.
-  - The model holds through loads and cutscenes, and can be changed during
-    a cutscene. Small models (children, Little Gray) are brought to
+  - The model holds through loads, cutscenes and outfit changes, and can
+    be changed during a cutscene. Small models (children, Little Gray) are brought to
     Snake's size, big ones (Psycho Mantis) scaled down.
   - Beast forms: Octopus's tentacles, Raven's wings and missiles, Mantis's
     arms and dolls are frozen in a pose from the fight.
-  - Limits: an outfit change gives Snake his body back; an area full of
-    textures refuses a model (a message says so); a separate head can show
-    holes at the mouth and eyes up close; held items stay placed for
-    Snake's hands; some models give strange results. Save before trying.
+  - Limits: an area full of textures refuses a model (a message says so);
+    a separate head can show holes at the mouth and eyes up close; held
+    items stay placed for Snake's hands.
+  - ⚠️ **Experimental**: some combinations (model, outfit, FaceCamo, area
+    changes) can give inconsistent results or **crash the game**. Save
+    before trying.
 
 ### Weapons
 

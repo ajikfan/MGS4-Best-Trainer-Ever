@@ -23,8 +23,12 @@ Le détail des dernières versions. L'historique complet est aussi dans le bouto
   un accessoire. Elle arrive décochée.
 - Section **Tête** : la tête de Snake, la tête du modèle seule, ou une
   **tête à part** (visages de Old Snake, tête de Naomi).
-- **Rendre son corps à Snake** remet le vrai corps de la tenue portée,
-  même après un chargement.
+- **Remettre Snake d'origine** : combinaison OctoCamo, sans FaceCamo,
+  tenue et visage automatiques, vrai corps et vrai visage, même après un
+  chargement.
+- Un modèle et une apparence imposée s'excluent : appliquer l'une retire
+  l'autre. Le modèle tient aussi aux changements de tenue, et le corps
+  imposé revient tout seul après un changement de zone.
 - Le nombre de textures à charger s'affiche avant d'appliquer ;
   **Libérer la mémoire** recharge le dernier point de passage pour vider
   les textures ajoutées (un compteur les suit).
@@ -57,6 +61,12 @@ Le détail des dernières versions. L'historique complet est aussi dans le bouto
 - Lancé depuis une console, le trainer se ferme bien.
 - Limite connue : une tête à part (visage de Old Snake) peut montrer des
   trous à la bouche et aux yeux de près, quand le jeu anime le visage.
+
+> ⚠️ **Fonctions expérimentales** : le modèle d'un autre personnage et
+> l'apparence imposée modifient la façon dont le jeu charge Snake.
+> Certaines combinaisons (modèle, tenue, FaceCamo, changements de zone)
+> peuvent encore donner des résultats incohérents ou **faire planter le
+> jeu**. Sauvegarde avant d'essayer.
 
 ## Nouveautés de la V2.9.2
 

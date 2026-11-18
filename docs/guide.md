@@ -239,22 +239,30 @@ Ce qui agit sur la zone et le scénario :
     tête s'applique **tout de suite**. Pour un autre modèle, prépare les
     cases puis clique sur **Appliquer les changements** (ou double-clic
     sur le modèle). **En jeu** rappelle le modèle porté.
-  - **Rendre son corps à Snake** remet le vrai corps de la tenue portée.
+  - **Remettre Snake d'origine** : combinaison OctoCamo, sans FaceCamo,
+    tenue et visage automatiques, avec son vrai corps et son vrai visage
+    (en cinématique : seulement le corps et le visage).
+  - Un modèle et une apparence imposée (corps et visage ci-dessus)
+    s'excluent : appliquer l'une retire l'autre. Un modèle qui masque la
+    tête de Snake retire aussi le FaceCamo porté. Le corps imposé est
+    réappliqué tout seul après un changement de zone.
   - Le nombre de textures à charger s'affiche sous les pièces. Les
     textures des modèles appliqués s'additionnent jusqu'au prochain
     chargement : **Libérer la mémoire** recharge le dernier point de
     passage (menu pause fermé) et le modèle revient seul.
-  - Le modèle tient aux chargements et aux cinématiques, et se change
-    aussi pendant une cinématique. Les petits modèles (enfants, Little
+  - Le modèle tient aux chargements, aux cinématiques et aux changements
+    de tenue, et se change aussi pendant une cinématique. Les petits modèles (enfants, Little
     Gray) sont mis à la taille de Snake, les grands (Psycho Mantis)
     réduits.
   - Formes Bête : les pieuvres d'Octopus, les ailes et missiles de Raven,
     les bras et poupées de Mantis sont figés dans une pose du combat.
-  - Limites : un changement de tenue rend son corps à Snake ; une zone
-    pleine de textures refuse un modèle (un message le dit) ; une tête à
-    part peut montrer des trous à la bouche et aux yeux de près ; les
-    objets tenus restent placés pour les mains de Snake ; certains
-    modèles donnent des résultats étranges. Sauvegarde avant d'essayer.
+  - Limites : une zone pleine de textures refuse un modèle (un message
+    le dit) ; une tête à part peut montrer des trous à la bouche et aux
+    yeux de près ; les objets tenus restent placés pour les mains de
+    Snake.
+  - ⚠️ **Expérimental** : certaines combinaisons (modèle, tenue,
+    FaceCamo, changements de zone) peuvent donner des résultats
+    incohérents ou **faire planter le jeu**. Sauvegarde avant d'essayer.
 
 ### Armes
 
