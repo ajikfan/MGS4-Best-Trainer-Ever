@@ -1857,6 +1857,12 @@ class SpawnMixin:
         base des decalages 32 bits du jeu (voir SPAWN_OFFSET_BASE_RVA) : plus
         loin, l'animation pointerait a cote (plantage dans DCB8B0)."""
         size = (size + 0x10F) & ~0xF
+        if size > self.SPAWN_ARENA_SIZE:
+            # plus grand que la reserve (txn d'une zone entiere : 41 Mo pour
+            # Laughing Octopus, 2026-11-17) : bloc a part, meme portee
+            base = self._spawn_q(self.base + self.SPAWN_OFFSET_BASE_RVA)
+            block = self.proc.alloc_near(base, size, self.SPAWN_OFFSET_REACH)
+            return block if base < block < base + self.SPAWN_OFFSET_REACH - size else 0
         if size > self._spawn_arena_left:
             base = self._spawn_q(self.base + self.SPAWN_OFFSET_BASE_RVA)
             arena = self.proc.alloc_near(base, self.SPAWN_ARENA_SIZE, self.SPAWN_OFFSET_REACH) if size <= self.SPAWN_ARENA_SIZE else 0

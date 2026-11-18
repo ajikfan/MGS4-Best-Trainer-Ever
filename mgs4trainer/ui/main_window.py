@@ -739,7 +739,20 @@ class TrainerWindow(QMainWindow):
         self.register_profile_hotkeys()
         self._update_profile_label()
 
+    # Fermeture qui ne finissait pas (2026-11-17 : fenetre fermee, process
+    # toujours la, l'invite de cmd ne revenait pas) : au-dela de ce delai, la
+    # pile de chaque fil est ecrite dans %TEMP%\mgs4trainer_exit.log et le
+    # process se termine.
+    CLOSE_TIMEOUT = 15
+
     def closeEvent(self, event):
+        import faulthandler
+        import os
+        try:
+            self._exit_log = open(os.path.join(os.environ.get("TEMP", "."), "mgs4trainer_exit.log"), "w")
+            faulthandler.dump_traceback_later(self.CLOSE_TIMEOUT, exit=True, file=self._exit_log)
+        except OSError:
+            pass
         if self.vitals_tab.photo_check.isChecked():
             self.vitals_tab.photo_check.setChecked(False)
         if self.vitals_tab.pause_check.isChecked():  # sinon le jeu resterait en pause
@@ -760,6 +773,18 @@ class TrainerWindow(QMainWindow):
         self.overlay.close()
         self.live.detach()
         super().closeEvent(event)
+        # Une autre fenetre de premier niveau restee ouverte (cachee) gardait
+        # la boucle de Qt en marche apres la fermeture (2026-11-17) : notee
+        # dans le journal de sortie, puis arret demande.
+        try:
+            others = [f"{type(w).__name__} visible={w.isVisible()}" for w in QApplication.topLevelWidgets()
+                      if w is not self and not w.isHidden()]
+            if others and getattr(self, "_exit_log", None):
+                self._exit_log.write("fenetres encore ouvertes : " + ", ".join(others) + chr(10))
+                self._exit_log.flush()
+        except RuntimeError:
+            pass
+        QApplication.instance().quit()
 
 
 def main():

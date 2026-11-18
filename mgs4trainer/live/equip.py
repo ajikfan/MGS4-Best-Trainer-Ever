@@ -280,15 +280,46 @@ class EquipMixin:
         threading.Thread(target=self._equip_worker, args=(action, *args), daemon=True).start()
         return True
 
-    def _equip_worker(self, action, *args) -> None:
+    def _model_fail(self, reason: str) -> bool:
+        """Echec d'un changement de modele, note dans le journal (l'action
+        tourne dans un fil, rien ne remonte a l'interface)."""
+        self._equip_log(f"modele : echec ({reason})")
+        self.equip_error = reason
+        return False
+
+    @staticmethod
+    def _equip_log(text: str) -> None:
+        import os
         try:
-            action(*args)
+            with open(os.path.join(os.environ.get("TEMP", "."), "mgs4trainer_equip.log"), "a", encoding="utf-8") as log:
+                log.write(time.strftime("%H:%M:%S ") + text + "\n")
         except OSError:
             pass
+
+    # Raison du dernier echec d'un equipement en direct (None = reussi),
+    # lue par l'interface une fois le fil termine.
+    equip_error = None
+
+    def _equip_worker(self, action, *args) -> None:
+        self.equip_error = None
+        try:
+            result = action(*args)
+            if result is False:
+                self._equip_log(f"{getattr(action, '__name__', action)} : False")
+        except OSError as error:
+            self.equip_error = repr(error)
+            self._equip_log(f"{getattr(action, '__name__', action)} : {error!r}")
         except AttributeError:
             # jeu ferme pendant l'operation : detach() a vide self.proc
             if self.proc is not None:
+                import traceback
+                self._equip_log(traceback.format_exc())
                 raise
+        except Exception as error:
+            import traceback
+            self.equip_error = repr(error)
+            self._equip_log(traceback.format_exc())
+            raise
         finally:
             self._equip_lock.release()
 
@@ -497,6 +528,25 @@ class EquipMixin:
                      for key, path in found[2] if key not in present)
         return needed, self._model_texture_free()
 
+    # Memoire des textures ajoutees (2026-11-17) : un txn enregistre pese ses
+    # pixels HD ; certains modeles n'ont leurs textures que dans le txn de
+    # toute leur zone d'origine (0x341738f : 177 Mo). Rien n'est libere avant
+    # le prochain chargement : 1 Go ajoute en s01a57l, menu pause degrade.
+    MODEL_TEXTURE_BUDGET = 300 * 2 ** 20
+
+    def model_added_textures(self) -> int:
+        """Octets de textures (txn) presents dans la zone sans faire partie de
+        sa liste : ceux des modeles appliques."""
+        location = self.read_location()
+        if location is None:
+            return 0
+        here = {key & 0x7FFFFFFF for key, _path in self._model_files().zone_resources(location[0])}
+        total = 0
+        for key, node in self._spawn_resource_nodes().items():
+            if (key >> 24) & 0x7F == 0x03 and (key & 0x7FFFFFFF) not in here:
+                total += struct.unpack("<I", self.proc.read_bytes(node + 0x14, 4))[0]
+        return total
+
     def _model_texture_free(self) -> int:
         table = self.base + self.MODEL_TEXTURE_TABLE_RVA
         data = self.proc.read_bytes(table, self.MODEL_TEXTURE_SLOTS * self.MODEL_TEXTURE_ENTRY)
@@ -570,7 +620,11 @@ class EquipMixin:
             here = dict(resources)
             return zone, path, [(t, here[t]) for t in (entry[2] if entry else ()) if t in here]
         if entry is None:
-            return None
+            # couche d'une autre zone hors catalogue (couteaux de Mantis)
+            from mgs4trainer.core.model_catalog import LAYER_SOURCES
+            if source not in LAYER_SOURCES:
+                return None
+            entry = (LAYER_SOURCES[source][0], 0, LAYER_SOURCES[source][1])
         other, txns = entry[0], entry[2]
         resources = files.zone_resources(other)
         paths = dict(resources)
@@ -646,7 +700,7 @@ class EquipMixin:
         location = self.read_location()
         skeleton = self._model_body_skeleton()
         if None in (funcs, spawn_funcs, location, skeleton) or not manager:
-            return False
+            return self._model_fail("etape 1")
         # modele sans tete dont la tete est un visage de Snake (FaceCamo) :
         # visage impose AVANT le corps (ce rechargement reconstruit Snake
         # d'apres le dictionnaire, ou le corps d'origine est remis apres le
@@ -659,7 +713,7 @@ class EquipMixin:
         nodes = self._spawn_resource_nodes()
         target = self._model_node(nodes, body_id)
         if not target:
-            return False
+            return self._model_fail("etape 2")
         files = self._model_files()
         present = {key & 0x7FFFFFFF for key in nodes}
         redirects = []  # (noeud, cle de rechange, contenu, zone)
@@ -675,13 +729,13 @@ class EquipMixin:
                 if found is None and model != source:
                     found = self._model_layer_source(model, source)
                 if found is None:
-                    return False
+                    return self._model_fail("etape 3")
                 model_zone, path, txns = found
                 zone = zone or model_zone
                 try:
                     datas.append(self._model_source_data(model, path, model_zone))
                 except (ValueError, struct.error, IndexError):
-                    return False
+                    return self._model_fail("etape 4")
                 waiting = {key for key, _data in missing.get(model_zone, [])}
                 missing.setdefault(model_zone, []).extend(
                     (key, files.read(p)) for key, p in txns if key not in present and key not in waiting)
@@ -703,7 +757,7 @@ class EquipMixin:
                     data = mdn.merge(data, layer, cnp)
                 hybrid = mdn.build_hybrid(data, skeleton_data)
             except (ValueError, struct.error, IndexError):
-                return False
+                return self._model_fail("etape 5")
             redirects.append((target, self._model_alias(source ^ body_id ^ self.MODEL_SWAP_XOR), hybrid, zone,
                               0x0D000000 | body_id))
             persist.append((0x0D000000 | body_id, len(skeleton_data), hybrid,
@@ -719,25 +773,25 @@ class EquipMixin:
         textures = sum(struct.unpack_from(">I", data, 8)[0]
                        for entries in missing.values() for key, data in entries if key >> 24 == 0x03)
         if textures and textures > self._model_texture_free():
-            return False
+            return self._model_fail("textures")
         # tampons du detour des chargements : le modele de rechange y est
         # converti par le jeu (drapeaux du chargeur de paquets), puis repris
         # tel quel au chargement d'une cinematique
         load = self._model_load_set(persist)
         if load is None:
-            return False
+            return self._model_fail("etape 7")
         for zone, entries in missing.items():
             if entries and not self._spawn_register_entries(spawn_funcs, zone, entries):
-                return False
+                return self._model_fail("etape 8")
         for _node, alias, data, zone, load_key in redirects:
             work, entry = load[load_key]
             self._spawn_blobs[alias] = work
             if not self._spawn_register_entries(spawn_funcs, zone, [(alias, data)], self.MODEL_LOAD_FLAGS):
-                return False
+                return self._model_fail("etape 9")
             self.proc.write_bytes(entry + 0xC, struct.pack("<I", 1))  # converti
         nodes = self._spawn_resource_nodes()
         if any(alias not in nodes for _n, alias, _d, _z, _k in redirects):
-            return False
+            return self._model_fail("etape 10")
         # (noeud, taille et donnees d'origine, taille et donnees de rechange)
         writes = [(node, self.proc.read_bytes(node + 0x14, 4), self.proc.read_bytes(node + 0x20, 8),
                    self.proc.read_bytes(nodes[alias] + 0x14, 4), self.proc.read_bytes(nodes[alias] + 0x20, 8))
@@ -752,7 +806,7 @@ class EquipMixin:
         call = self.speed.game_call
         state = call(funcs["state"])
         if state is None:
-            return False
+            return self._model_fail("etape 11")
         pause = not (state & 6)
         if pause:
             call(funcs["pause_set"], self.MODEL_PAUSE_FLAG)

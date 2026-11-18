@@ -81,6 +81,17 @@ class GameStateMixin:
             return False
         return self.speed.game_call(funcs["title"], 1) is not None
 
+    def reload_checkpoint(self) -> bool:
+        """Recharge le dernier point de passage (5BCB0(0), le « Continuer »
+        du menu Charger, valide menu pause ferme) : vide tout ce qui a ete
+        ajoute a la zone (textures des modeles appliques, 2026-11-17)."""
+        if not self.in_game() or not (self.pid and self.speed.ensure_injected(self.pid)):
+            return False
+        funcs = self._live_funcs({"title": self.RETURN_TO_TITLE})
+        if funcs is None:
+            return False
+        return self.speed.game_call(funcs["title"], 0) is not None
+
     def read_difficulty(self) -> int:
         return struct.unpack("<h", self.proc.read_bytes(self.linkvarbuf + self.DIFFICULTY_OFFSET, 2))[0]
 

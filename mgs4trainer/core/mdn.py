@@ -185,7 +185,9 @@ def build_hybrid(source: bytes, skeleton: bytes) -> bytes:
     """Geometrie de source sur la table d'os de skeleton (palettes renumerotees),
     agrandie si ses jambes sont nettement plus courtes (enfants, singe)."""
     factor = leg_scale(source, skeleton)
-    if SCALE_MIN <= factor <= SCALE_MAX:
+    # agrandi (enfants, singe) ou reduit (Psycho Mantis 0x6D31AE : squelette
+    # deux fois plus grand, il s'enfoncait dans le sol), meme bornes inversees
+    if SCALE_MIN <= factor <= SCALE_MAX or 1 / SCALE_MAX <= factor <= 1 / SCALE_MIN:
         source = scaled(source, factor)
     remap = skeleton_mapping(source, skeleton)
     if remap is None:
@@ -325,6 +327,50 @@ def _shift_vertices(piece: bytes, offsets) -> bytes:
     return bytes(out)
 
 
+def _pose_vertices(piece: bytes, poses) -> bytes:
+    """Sommets de la piece figes dans une pose relevee en jeu : par os, une
+    matrice (R 3x3 en lignes, t), v' = v * R + t, ponderee par les poids
+    du sommet (pieuvres de Laughing Octopus, core/piece_poses.py)."""
+    header = MdnHeader(piece)
+    out = bytearray(piece)
+    done = set()
+    for m in range(header.mesh_count):
+        base = header.mesh_offset + m * MESH_SIZE
+        definition, = struct.unpack_from(">I", out, base + MESH_VERTEX_DEF)
+        skin_index, = struct.unpack_from(">I", out, base + 0x14)
+        vertices, = struct.unpack_from(">I", out, base + MESH_VERTEX_COUNT)
+        palette = [0]
+        if header.skin_count:
+            skin = header.skin_offset + skin_index * SKIN_SIZE
+            count, = struct.unpack_from(">H", piece, skin + 4)
+            palette = list(piece[skin + SKIN_PALETTE:skin + SKIN_PALETTE + min(count, 32)]) or [0]
+        vdef = header.vertex_def_offset + definition * VERTEX_DEF_SIZE
+        _pad, fields, stride, start = struct.unpack_from(">4I", out, vdef)
+        at = dict(zip([k & 0x0F for k in out[vdef + 0x10:vdef + 0x10 + fields]], out[vdef + 0x20:vdef + 0x20 + fields]))
+        if VERTEX_POSITION not in at:
+            continue
+        for v in range(vertices):
+            vertex = header.vertex_buffer_offset + start + v * stride
+            position = vertex + at[VERTEX_POSITION]
+            if position in done:
+                continue
+            done.add(position)
+            slots = list(out[vertex + at[VERTEX_BONES]:vertex + at[VERTEX_BONES] + 4]) if VERTEX_BONES in at else [0]
+            weights = [w / 255 for w in out[vertex + at[VERTEX_WEIGHT]:vertex + at[VERTEX_WEIGHT] + 4]]                 if VERTEX_WEIGHT in at else [1.0]
+            total = sum(weights[:len(slots)]) or 1.0
+            x, y, z = struct.unpack_from(">3f", out, position)
+            moved = [0.0, 0.0, 0.0]
+            for slot, weight in zip(slots, weights):
+                if not weight:
+                    continue
+                bone = palette[slot] if slot < len(palette) else palette[0]
+                pose = poses[bone] if bone < len(poses) else poses[0]
+                for k in range(3):
+                    moved[k] += weight / total * (x * pose[k] + y * pose[3 + k] + z * pose[6 + k] + pose[9 + k])
+            struct.pack_into(">3f", out, position, *moved)
+    return bytes(out)
+
+
 # Points d'attache du .cnp (2026-11-16) : nombre en +8, entrees de 0x40 en
 # +0x10 : point, os du corps, os racine d'une piece (ou 1), drapeaux (0 si
 # piece) ; decalage (x, y, z, w) en +0x10, rotation (quaternion x, y, z, w)
@@ -332,6 +378,33 @@ def _shift_vertices(piece: bytes, offsets) -> bytes:
 # cheval 0xC0D252 : racine 0xDFDCA5 sur la tete, 148 plus haut et 142 en
 # arriere ; cables de la tete, des bras, des jambes) y sont accrochees.
 CNP_ENTRY = 0x40
+
+
+# Points d'attache que le code du jeu pose lui-meme (aucun fichier) :
+# os racine d'une piece -> (os du corps, decalage, rotation). Lus en jeu sur
+# les matrices des os (instance +0x1E0, 0x40 par os) : la racine de chaque
+# bras de Screaming Mantis (Bete, 0x273008) est sur un os du corps, sans
+# decalage ni rotation (2026-11-17).
+# Une chaine d'os du corps (4e element) : chaque os de la piece suit le plus
+# proche d'entre eux au lieu de l'os d'attache, pour que la piece reprenne
+# les mouvements de ce membre (bras mecaniques de Mantis sur les bras de
+# Snake : epaule, bras, avant-bras, main ; Snake n'a pas leurs os a eux).
+ARM_LEFT = (0x19543, 0x27A4C, 0xFAFA8B, 0xFBFA42)
+ARM_RIGHT = (0x619D43, 0x62824C, 0x5B028C, 0x5C0243)
+MANUAL_ATTACHMENTS = {
+    0x1C35C4: (0x2236C4, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0), ARM_LEFT),   # bras 0xE4B650
+    0xDC35C4: (0xE246C4, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0), ARM_RIGHT),  # bras 0xE4B656
+    # pieuvres de Laughing Octopus (Bete, 0x203008) : racine de 0x205BD6 sur
+    # l'os 0x14B512 du corps (pose de repos : meme position, 2026-11-17)
+    0xF842DA: (0x14B512, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)),
+    # cheveux de Crying Wolf (Beauty, 0x673113) 0x4525E8 : racine absente de son .cnp
+    # (au bassin sinon) ; sommet du crane, comme ses autres pieces de tete (2026-11-18)
+    0x392452: (0xF5D387, (0.0, 110.0, 0.0), (0.0, 0.0, 0.0, 1.0)),
+    # ailes de Raging Raven (Bete, 0x263008) 0xEAD962 et ses 6 missiles 0xE56F84 :
+    # sur l'os 0x7011C4 du dos (poses relevees en combat, 2026-11-17)
+    0xCFE4DD: (0x7011C4, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)),
+    0x1D370E: (0x7011C4, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)),
+}
 
 
 def cnp_attachments(cnp: bytes) -> dict[int, tuple[int, tuple, tuple]]:
@@ -379,10 +452,32 @@ def _place_piece(piece: bytes, rotation, translation) -> bytes:
     return bytes(out)
 
 
-def merge(body: bytes, piece: bytes, cnp: bytes | None = None) -> bytes:
+def piece_key(data: bytes) -> tuple[int, int, int]:
+    """Empreinte d'un mdn : (os racine, nombre d'os, taille des sommets).
+    Pas l'identifiant d'en-tete : il change d'une copie a l'autre du meme
+    fichier (pieuvres 0x205BD6 : 0x51778F en s02a50l, 0x205BD6 ailleurs)."""
+    header = MdnHeader(data)
+    root = struct.unpack_from(">I", data, header.bone_offset)[0] if header.bone_count else 0
+    return root, header.bone_count, header.vertex_buffer_size
+
+
+def merge(body: bytes, piece: bytes, cnp: bytes | None = None, _pose=None, _anchor=None) -> bytes:
     """Corps + piece liee ou couche, sur les os du corps (piece ramenee dans
     le repere du corps si ses os communs sont ailleurs ; sans os commun,
-    placee au point d'attache du .cnp du corps qui cite son os racine)."""
+    placee au point d'attache du .cnp du corps qui cite son os racine).
+    Pieces relevees en jeu (piece_poses, par empreinte du mdn, mdn.piece_key)
+    : figees sur leur os
+    d'attache ; en plusieurs exemplaires (COPIES : 6 missiles sous les ailes
+    de Raging Raven), une fois par pose."""
+    from mgs4trainer.core.piece_poses import ANCHORS, COPIES, COPY_ANCHORS, POSES
+    ident = piece_key(piece)
+    if _pose is None and ident in COPIES:
+        anchors = COPY_ANCHORS.get(ident, (ANCHORS.get(ident),) * len(COPIES[ident]))
+        for pose, anchor_bone in zip(COPIES[ident], anchors):
+            body = merge(body, piece, cnp, pose, anchor_bone)
+        return body
+    if _anchor is None:
+        _anchor = ANCHORS.get(ident)
     body_bones = _bone_worlds(body)
     by_id = {bone: i for i, (bone, _w) in enumerate(body_bones)}
 
@@ -391,12 +486,32 @@ def merge(body: bytes, piece: bytes, cnp: bytes | None = None) -> bytes:
                    key=lambda i: sum((a - b) ** 2 for a, b in zip(body_bones[i][1], position)))
 
     piece_bones = _bone_worlds(piece)
-    attach = cnp_attachments(cnp).get(piece_bones[0][0]) if cnp and piece_bones else None
-    if attach and attach[0] in by_id and not any(bone in by_id for bone, _w in piece_bones):
-        bone, offset, rotation = attach
+    attachments = dict(MANUAL_ATTACHMENTS)
+    if cnp:
+        attachments.update(cnp_attachments(cnp))
+    attach = attachments.get(piece_bones[0][0]) if piece_bones else None
+    if _anchor is not None:
+        attach = (_anchor, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0))  # piece relevee : son os d'attache
+    # piece relevee : posee sur son os meme si elle partage des os avec le corps
+    if attach and attach[0] in by_id and (_anchor is not None or not any(bone in by_id for bone, _w in piece_bones)):
+        bone, offset, rotation = attach[:3]
         anchor = body_bones[by_id[bone]][1]
-        piece = _place_piece(piece, rotation, tuple(a + o for a, o in zip(anchor, offset)))
-        bone_map = [by_id[bone]] * len(piece_bones)
+        shift = tuple(a + o for a, o in zip(anchor, offset))
+        # pose relevee en combat : sommets deja dans le repere de l'os d'attache
+        # (figee : plus de chaine d'os, la piece suit l'os d'attache)
+        pose = _pose or POSES.get(ident)
+        posed = pose is not None
+        if posed:
+            piece = _pose_vertices(piece, pose)
+            rotation, shift = (0.0, 0.0, 0.0, 1.0), anchor
+        piece = _place_piece(piece, rotation, shift)
+        chain = [by_id[b] for b in (attach[3] if len(attach) > 3 and not posed else ()) if b in by_id]
+        if chain:
+            placed = [tuple(p + t for p, t in zip(_rotate(rotation, world), shift)) for _b, world in piece_bones]
+            bone_map = [min(chain, key=lambda i: sum((a - b) ** 2 for a, b in zip(body_bones[i][1], position)))
+                        for position in placed]
+        else:
+            bone_map = [by_id[bone]] * len(piece_bones)
     else:
         offsets = _piece_offsets(body, piece)
         if any(any(abs(c) > 0.01 for c in o) for o in offsets):

@@ -258,10 +258,16 @@ class VitalsTab(QWidget):
         self.model_layer_remove_btn.setToolTip(tr("vitals.model_layers_tooltip"))
         self.model_layer_remove_btn.clicked.connect(self._on_model_layer_remove)
         self._model_applied = (None, [])  # (modele, couches)
+        # memoire des textures ajoutees par les modeles, liberee en
+        # rechargeant le point de passage (le modele applique revient seul)
+        self.model_memory_label = QLabel("")
+        self.model_free_btn = QPushButton(tr("vitals.model_free_memory"))
+        self.model_free_btn.setToolTip(tr("vitals.model_free_memory_tooltip"))
+        self.model_free_btn.clicked.connect(self._on_model_free_memory)
         self._show_model_layers()
         self.zone_buttons += [self.model_swap_combo, self.model_swap_find_btn, self.model_hide_head_cb,
                               self.model_swap_apply_btn, self.model_layer_btn, self.model_layers_combo,
-                              self.model_layer_remove_btn]
+                              self.model_layer_remove_btn, self.model_free_btn]
 
         weapons_group = QGroupBox(tr("vitals.weapons_group"))
         weapons_layout = QVBoxLayout(weapons_group)
@@ -385,6 +391,8 @@ class VitalsTab(QWidget):
         layers_row.addWidget(self.model_layers_combo)
         layers_row.addWidget(self.model_layer_remove_btn)
         layers_row.addStretch(1)
+        layers_row.addWidget(self.model_memory_label)
+        layers_row.addWidget(self.model_free_btn)
         model_layout.addLayout(layers_row)
         page_layout.addWidget(model_group)
 
@@ -1047,39 +1055,138 @@ class VitalsTab(QWidget):
                         0xBFD820: "vitals.model_swap_rebel_smp",
                         0xE969C8: "vitals.model_swap_rebel_smp",
                         0x25DDE5: "vitals.model_swap_big_mama",
-                        0xB531B9: "vitals.model_swap_old_snake"}
-    # Groupes de la liste : pas de critere sur (le singe de Drebin a 126 os,
-    # un squelette presque humain) ; moins de MODEL_SWAP_HUMAN_BONES os =
-    # animal ou autre (poule : 28), plus les animaux reconnus en jeu.
+                        0xB531B9: "vitals.model_swap_old_snake",
+                        0xE46845: "vitals.model_swap_rebel_act1",
+                        0x8F84DB: "vitals.model_swap_rebel_act1",
+                        0x8F8808: "vitals.model_swap_rebel_act1",
+                        0x648648: "vitals.model_swap_rebel_act1_short",
+                        0x9F84DB: "vitals.model_swap_rebel_act1_short",
+                        0x9F8808: "vitals.model_swap_rebel_act1_short",
+                        0xE46847: "vitals.model_swap_rebel_act1_long",
+                        0xAF84DB: "vitals.model_swap_rebel_act1_long",
+                        0xAF8808: "vitals.model_swap_rebel_act1_long",
+                        0x513624: "vitals.model_swap_seagull", 0xF7A914: "vitals.model_swap_sunny_dress",
+                        0xFD3205: "vitals.model_swap_raiden_hospital", 0x273008: "vitals.model_swap_mantis_beast",
+                        0xE4B650: "vitals.model_swap_mantis_arms_left", 0xE4B656: "vitals.model_swap_mantis_arms_right",
+                        0x043175: "vitals.model_swap_heli_pilot", 0x315D95: "vitals.model_swap_pmc_me",
+                        0xF3A334: "vitals.model_swap_otacon_hair", 0x213917: "vitals.model_swap_rebel_act1",
+                        0xBA1C58: "vitals.model_swap_old_snake", 0x33CBC5: "vitals.model_swap_otacon_low",
+                        0x7137F2: "vitals.model_swap_frog", 0xF1379E: "vitals.model_swap_jonathan",
+                        0x2A9FA2: "vitals.model_swap_old_snake_head", 0x51A499: "vitals.model_swap_old_snake_leg",
+                        0x63F843: "vitals.model_swap_ghost", 0x43F843: "vitals.model_swap_ghost",
+                        0xE3F5F9: "vitals.model_swap_ghost", 0x6EB366: "vitals.model_swap_ghost",
+                        0x43FAC3: "vitals.model_swap_ghost",
+                        0x205BD6: "vitals.model_swap_octopus_tentacles",
+                        0x88811D: "vitals.model_swap_big_mama_wound",
+                        0xEAD962: "vitals.model_swap_raven_wings", 0xE56F84: "vitals.model_swap_raven_missile",
+                        0x213A57: "vitals.model_code_reb", 0xD84BA9: "vitals.model_swap_octopus_wet",
+                        0x0AEFAB: "vitals.model_swap_octopus_cable",
+                        0x673113: "vitals.model_swap_wolf_beauty", 0x4525E8: "vitals.model_swap_wolf_hair",
+                        0xCE9BCD: "vitals.model_swap_red_water",
+                        0x613932: "vitals.model_swap_admiral",
+                        0xE74EB9: "vitals.model_swap_admiral",
+                        0x846B09: "vitals.model_swap_ocelot_act5",
+                        0x665346: "vitals.model_swap_ocelot_wound_belly",
+                        0xFE1BB1: "vitals.model_swap_ocelot_wound_chest",
+                        0x261C34: "vitals.model_swap_ocelot_wound_face_left",
+                        0x258979: "vitals.model_swap_ocelot_wound_face_right",
+                        0x4AA4CE: "vitals.model_swap_ocelot_hair_part",
+                        0x013B33: "vitals.model_swap_soldier_act5",
+                        0x4C1AB8: "vitals.model_swap_sunny_wedding",
+                        0xEB9E27: "vitals.model_swap_sunny_wedding_hair",
+                        0xC1451A: "vitals.model_swap_sunny_wedding_hat",
+                        0x54095A: "vitals.model_swap_jonathan_wedding",
+                        0xB77AB4: "vitals.model_swap_ed_wedding",
+                        0xD34AB6: "vitals.model_swap_meryl_wedding",
+                        0x637A6F: "vitals.model_swap_raiden_one_arm", 0xB9DCFD: "vitals.model_swap_raiden_shoulders",
+                        0x63C031: "vitals.model_swap_naomi_head", 0x2A9F63: "vitals.model_swap_fx_bigboss_corpse",
+                        0x2F2970: "vitals.model_swap_fx_snake_mgs1",
+                        0x434ADE: "vitals.model_swap_act4_intro_face",
+                        0x837F6C: "vitals.model_swap_act4_intro_face",
+                        0x991CDC: "vitals.model_swap_act4_intro_face",
+                        0xCAEB87: "vitals.model_swap_act4_intro_face",
+                        0xF9569B: "vitals.model_swap_act4_intro_face",
+                        0xF982D9: "vitals.model_swap_act4_intro_face",
+                        0x0BEE33: "vitals.model_swap_act4_intro_body",
+                        0x0BF86B: "vitals.model_swap_act4_intro_body",
+                        0x86CE35: "vitals.model_swap_act4_intro_body"}
+    # Groupes de la liste (2026-11-17) : Humains, Animaux, Pieces et
+    # accessoires. Pieces = couches ou pieces d'un autre modele (cheveux,
+    # foulard, torse) et petits modeles avec l'os de la tete (tetes, cheveux) ;
+    # animaux = ANIMALS du catalogue (sans tete, peu d'os communs avec Snake :
+    # poule, pigeon, corbeau) et ceux reconnus (le singe de Drebin a 126 os) ;
+    # humains = le reste. Un modele nomme comme personnage reste humain
+    # (rebelle 0xAFD4F3, couche d'un autre rebelle).
     MODEL_SWAP_ANIMALS = {0x1137D7, 0xC13923}
+    # fantomes : silhouettes lumineuses (tout le squelette, une matiere, une
+    # texture), plus des couches depuis le 2026-11-17
+    MODEL_SWAP_PARTS = {0xD8B3EE, 0x575F27, 0x6C29C2, 0xF7A914, 0x2A9FA2, 0x51A499,
+                        0x63F843, 0x43F843, 0xE3F5F9, 0x6EB366, 0x43FAC3, 0x205BD6,
+                        0x88811D, 0xEAD962, 0xE56F84,
+                        0x073440, 0x773388, 0xE4B650, 0xE4B656, 0xD84BA9, 0x0AEFAB,
+                        0x4525E8, 0xCE9BCD, 0xB9DCFD, 0x63C031, 0x2A9F63, 0x2F2970, 0x434ADE, 0x837F6C, 0x991CDC, 0xCAEB87, 0xF9569B, 0xF982D9,
+                        0x665346, 0xFE1BB1, 0x261C34, 0x258979, 0x4AA4CE, 0xEB9E27, 0xC1451A}
+    MODEL_SWAP_EMPTY = {0x83EEAF, 0xF8521D, 0x186F53, 0x18B5F8, 0x1C6614}  # rien a l'ecran (2026-11-18)
+    MODEL_ANIMAL_CODES = ("hen", "pgn", "rvn", "mky")
     MODEL_SWAP_HUMAN_BONES = 60
+
+    def _model_group(self, model: int, catalog) -> str:
+        """"human", "animal" ou "part"."""
+        from mgs4trainer.core.model_catalog import ANIMALS, GHOSTS, LIGHT, NAMES, WITH_HEAD
+        original = NAMES.get(model, "")
+        # pieces reconnues d'abord (robe de Sunny 0xF7A914 : sans tete, peu
+        # d'os communs avec Snake, prise pour un animal)
+        if model in self.MODEL_SWAP_PARTS or model in GHOSTS:
+            return "part"
+        if (model in self.MODEL_SWAP_ANIMALS or model in ANIMALS
+                or original.split("_")[0] in self.MODEL_ANIMAL_CODES):
+            return "animal"
+        if model in self.MODEL_SWAP_NAMES:
+            return "human"
+        if model in self._model_attached(catalog) or model in LIGHT:
+            return "part"
+        # petit modele avec la tete : tete ou cheveux ; sans tete et hors des
+        # animaux du catalogue : humain simplifie (civils de s02a90l, 32 os)
+        entry = catalog.get(model)
+        if entry is not None and entry[1] < self.MODEL_SWAP_HUMAN_BONES and model in WITH_HEAD:
+            return "part"
+        return "human"
+
+    @staticmethod
+    def _model_attached(catalog) -> set:
+        """Modeles qui servent de piece ou de couche a un autre."""
+        return {x for entry in catalog.values() for x in entry[3] + entry[4]}
 
     def _on_model_swap_find(self):
         if not (self.live.connected and self.live.sane):
             return
+        self._show_model_memory()
         try:
             candidates = self.live.model_swap_candidates()
             catalog = self.live.model_swap_catalog()
         except OSError:
             return
+        # modeles vides (rien a l'ecran, valide en jeu) : hors de la liste
+        candidates = [m for m in candidates if m not in self.MODEL_SWAP_EMPTY]
+        catalog = {m: e for m, e in catalog.items() if m not in self.MODEL_SWAP_EMPTY}
         combo = self.model_swap_combo
         combo.clear()
         combo.addItem(tr("vitals.model_swap_none"), None)
 
-        def animal(model: int) -> bool:
-            entry = catalog.get(model)
-            return model in self.MODEL_SWAP_ANIMALS or (entry is not None and entry[1] < self.MODEL_SWAP_HUMAN_BONES)
+        groups = {m: self._model_group(m, catalog) for m in set(catalog) | set(candidates)}
+
+        names = self._model_names(set(catalog) | set(candidates))
 
         def label(model: int, here: bool) -> str:
-            key = self.MODEL_SWAP_NAMES.get(model)
-            name = tr(key) if key else tr("vitals.model_swap_model" if here else "vitals.model_swap_other")
+            name = names.get(model) or tr("vitals.model_swap_model" if here else "vitals.model_swap_other")
             return f"{name} ({model:#08x})" if here else f"{catalog[model][0]} : {name} ({model:#08x})"
 
         # zone courante d'abord, puis le catalogue par zone d'origine
         others = sorted((m for m in catalog if m not in candidates), key=lambda m: (catalog[m][0], m))
         entries = [(m, True) for m in candidates] + [(m, False) for m in others]
-        for group, wanted in (("vitals.model_swap_humans", False), ("vitals.model_swap_animals", True)):
-            chosen = [(m, here) for m, here in entries if animal(m) == wanted]
+        for group, wanted in (("vitals.model_swap_humans", "human"), ("vitals.model_swap_animals", "animal"),
+                              ("vitals.model_swap_parts", "part")):
+            chosen = [(m, here) for m, here in entries if groups.get(m, "human") == wanted]
             if not chosen:
                 continue
             combo.insertSeparator(combo.count())
@@ -1108,8 +1215,97 @@ class VitalsTab(QWidget):
         return True
 
     def _model_label(self, model: int) -> str:
-        key = self.MODEL_SWAP_NAMES.get(model)
-        return f"{tr(key)} ({model:#08x})" if key else f"{model:#08x}"
+        name = getattr(self, "_model_name_cache", {}).get(model) or self._model_base_name(model)
+        return f"{name} ({model:#08x})" if name else f"{model:#08x}"
+
+    def _model_base_name(self, model: int, _depth: int = 0) -> str | None:
+        """Nom d'origine d'abord (plus sur que les noms releves en jeu)."""
+        from mgs4trainer.core.model_catalog import GHOSTS, KIN
+        key = self.MODEL_SWAP_NAMES.get(model) or ("vitals.model_swap_ghost" if model in GHOSTS else None)
+        name = self._model_original_label(model) or (tr(key) if key else None)
+        if name or _depth > 1:
+            return name
+        # sans nom : celui du modele du catalogue qui a le plus de ses textures
+        for other in KIN.get(model, ()):
+            name = self._model_base_name(other, _depth=2)
+            if name:
+                return name
+        return None if _depth else self._model_guessed_name(model)
+
+    def _model_guessed_name(self, model: int) -> str | None:
+        """Nom deduit, avec un point d'interrogation (2026-11-18) : piece ou
+        couche ajoutee d'office a un modele nomme -> « Piece de X » ; petite
+        tete (moins de 60 os, os de la tete) qui partage des textures avec X
+        -> « Tete de X » ; autre modele qui en partage au moins 30 % -> X."""
+        from mgs4trainer.core.model_catalog import ALSO, MODELS, WITH_HEAD
+        for owner, entry in MODELS.items():
+            if model in entry[3] + entry[4]:
+                name = self._model_base_name(owner, _depth=1)
+                if name:
+                    return tr("vitals.model_guess_piece").format(name=name)
+        entry = MODELS.get(model)
+        for other, share in ALSO.get(model, ()):
+            name = self._model_base_name(other, _depth=1)
+            if not name:
+                continue
+            if entry is not None and entry[1] < self.MODEL_SWAP_HUMAN_BONES and model in WITH_HEAD:
+                return tr("vitals.model_guess_head").format(name=name)
+            if share >= 30:
+                return tr("vitals.model_guess_same").format(name=name)
+            return None
+        return None
+
+    # Noms de la liste (2026-11-17) : noms d'origine decodes (niveau de
+    # detail compris : _low, _mid) ; deux modeles encore au meme nom
+    # (fantomes, civils de l'acte 3) sont numerotes dans l'ordre des
+    # identifiants. La taille de la geometrie ne classe pas les versions
+    # (civil sac_def_a, le plus fin, est plus leger que sac_def_a_low).
+    @staticmethod
+    def _model_name_with(name: str, extra: str) -> str:
+        return f"{name[:-1]}, {extra})" if name.endswith(")") else f"{name} ({extra})"
+
+    def _model_names(self, models) -> dict:
+        names = {m: self._model_base_name(m) for m in models}
+        same = {}
+        for model, name in names.items():
+            if name:
+                same.setdefault(name, []).append(model)
+        for name, group in same.items():
+            if len(group) > 1:
+                for n, model in enumerate(sorted(group), 1):
+                    names[model] = self._model_name_with(name, tr("vitals.model_number").format(n=n))
+        self._model_name_cache = names
+        return names
+
+    # Nom d'origine du modele (catalogue, NAMES : sna_def, otc_def_dmo...)
+    # rendu lisible : code du personnage traduit, puis tenue / variante.
+    MODEL_NAME_PARTS = {"dmo": "vitals.model_part_cutscene", "coat": "vitals.model_part_coat",
+                        "low": "vitals.model_part_low", "armr": "vitals.model_part_arm_right", "arml": "vitals.model_part_arm_left",
+                        "psy": "vitals.model_part_psycho_doll", "sor": "vitals.model_part_sorrow_doll",
+                        "bst": "vitals.model_part_beast", "bty": "vitals.model_part_beauty",
+                        "face": "vitals.model_part_face", "suit": "vitals.model_part_suit",
+                        "mid": "vitals.model_part_mid"}
+
+    @staticmethod
+    def _model_original_name(model: int) -> str | None:
+        from mgs4trainer.core.model_catalog import NAMES
+        return NAMES.get(model)
+
+    def _model_original_label(self, model: int) -> str | None:
+        original = self._model_original_name(model)
+        if not original:
+            return None
+        code, *parts = original.split("_")
+        name = tr(f"vitals.model_code_{code}")
+        extras = []
+        for part in parts:
+            if part in self.MODEL_NAME_PARTS:
+                extras.append(tr(self.MODEL_NAME_PARTS[part]))
+            elif len(part) == 1:
+                extras.append(tr("vitals.model_part_variant").format(letter=part.upper()))
+        for extra in extras:
+            name = self._model_name_with(name, extra)
+        return name
 
     def _show_model_layers(self):
         _source, layers = self._model_applied
@@ -1124,8 +1320,50 @@ class VitalsTab(QWidget):
 
     def _apply_model(self, source, layers) -> None:
         if self.live.set_body_model(source, self.model_hide_head_cb.isChecked(), layers):
-            self._model_applied = (source, list(layers))
+            self._model_waiting = (source, list(layers), 0)
+            QTimer.singleShot(300, self._check_model_applied)
+
+    MODEL_WAIT_TICKS = 300  # x 0,3 s : 90 s au plus (balayage de la memoire en cinematique)
+
+    def _check_model_applied(self) -> None:
+        """Le changement tourne dans un fil : resultat lu a sa fin (avant le
+        2026-11-17, un echec ne disait rien)."""
+        source, layers, ticks = self._model_waiting
+        if self.live._equip_lock.locked() and ticks < self.MODEL_WAIT_TICKS:
+            self._model_waiting = (source, layers, ticks + 1)
+            QTimer.singleShot(300, self._check_model_applied)
+            return
+        error = self.live.equip_error
+        if error is None:
+            self._model_applied = (source, layers)
             self._show_model_layers()
+            QTimer.singleShot(4000, self._show_model_memory)
+            return
+        import os
+        log = os.path.join(os.environ.get("TEMP", "."), "mgs4trainer_equip.log")
+        key = "vitals.model_swap_failed_textures" if error == "textures" else "vitals.model_swap_failed"
+        QMessageBox.warning(self, tr("vitals.model_swap"), tr(key).format(reason=error, log=log))
+
+    def _show_model_memory(self) -> None:
+        """Memoire des textures ajoutees ; au-dela du budget, en rouge."""
+        if not (self.live.connected and self.live.sane):
+            return
+        try:
+            added = self.live.model_added_textures()
+        except OSError:
+            return
+        over = added > self.live.MODEL_TEXTURE_BUDGET
+        self.model_memory_label.setText(tr("vitals.model_memory").format(mb=added // 2 ** 20))
+        self.model_memory_label.setStyleSheet("color: #d04040; font-weight: bold;" if over else "")
+        self.model_memory_label.setToolTip(tr("vitals.model_memory_over") if over else tr("vitals.model_free_memory_tooltip"))
+
+    def _on_model_free_memory(self) -> None:
+        if not (self.live.connected and self.live.sane):
+            return
+        if not self.live.reload_checkpoint():
+            QMessageBox.warning(self, tr("vitals.model_free_memory"), tr("vitals.model_free_memory_failed"))
+            return
+        QTimer.singleShot(15000, self._show_model_memory)
 
     def _on_model_swap_apply(self):
         if not (self.live.connected and self.live.sane):
