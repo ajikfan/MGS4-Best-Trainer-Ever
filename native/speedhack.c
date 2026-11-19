@@ -246,6 +246,24 @@ typedef struct {
     UINT64 photo_zoom;    /* [464] adresse du zoom (float) */
     /* [472] Appuis sur croix (A) : le trainer teleporte Snake a la camera. */
     UINT32 photo_teleports;
+    /* [476] Recherche en memoire (2026-11-19) : le trainer pose jusqu'a 64
+     * valeurs de 8 octets (pointeurs de donnees de modeles), la DLL parcourt
+     * la memoire privee inscriptible du jeu (fil a elle, pas celui du jeu)
+     * et rend les adresses alignees sur 8 qui les contiennent. Lecture par
+     * ReadProcessMemory sur le process courant : une page liberee entre-temps
+     * donne une erreur, pas un plantage. Depuis Python, le meme parcours
+     * prenait 10 a 30 s (pause du jeu en cinematique). */
+    UINT8 scan_version;        /* [476] 1 = la DLL sait chercher */
+    UINT8 scan_pending;        /* [477] le trainer met 1 */
+    UINT8 scan_done;           /* [478] la DLL met 1 a la fin */
+    UINT8 scan_overflow;       /* [479] plus de SCAN_MAX_RESULTS trouvees */
+    UINT32 scan_needle_count;  /* [480] */
+    UINT32 scan_result_count;  /* [484] */
+    UINT64 scan_region_max;    /* [488] taille max d'une region parcourue */
+    UINT64 scan_needles[64];   /* [496] */
+    UINT64 scan_results[1024]; /* [1008] adresses trouvees */
+    UINT8 scan_result_needle[1024]; /* [9200] numero de la valeur trouvee */
+    UINT32 scan_ms;            /* [10224] duree du parcours */
 } SharedState;
 #pragma pack(pop)
 _Static_assert(offsetof(SharedState, rpc_result) == 384 && offsetof(SharedState, machine_kill) == 392,
@@ -259,6 +277,16 @@ _Static_assert(offsetof(SharedState, photo_toggles) == 448 && offsetof(SharedSta
                    offsetof(SharedState, photo_mouse) == 456 && offsetof(SharedState, photo_zoom_rate) == 460 &&
                    offsetof(SharedState, photo_zoom) == 464 && offsetof(SharedState, photo_teleports) == 472,
                "offsets lus par mgs4trainer/core/speedhack.py (temps du mode photo)");
+
+_Static_assert(offsetof(SharedState, scan_version) == 476 && offsetof(SharedState, scan_needle_count) == 480 &&
+                   offsetof(SharedState, scan_region_max) == 488 && offsetof(SharedState, scan_needles) == 496 &&
+                   offsetof(SharedState, scan_results) == 1008 && offsetof(SharedState, scan_result_needle) == 9200 &&
+                   offsetof(SharedState, scan_ms) == 10224,
+               "offsets lus par mgs4trainer/core/speedhack.py (recherche en memoire)");
+
+#define SCAN_MAX_NEEDLES 64
+#define SCAN_MAX_RESULTS 1024
+#define SCAN_CHUNK (4u << 20)
 
 #define HOOK_QPC 0x1
 #define HOOK_TIMEGETTIME 0x2
@@ -1768,6 +1796,94 @@ static BOOL install_alert_dispatch_hook(void) {
     return TRUE;
 }
 
+/* Recherche en memoire (voir scan_version dans SharedState). */
+static BYTE *g_scan_buf = NULL;
+
+static void scan_memory(void) {
+    UINT32 count = g_shared->scan_needle_count;
+    if (count > SCAN_MAX_NEEDLES) {
+        count = SCAN_MAX_NEEDLES;
+    }
+    UINT64 needles[SCAN_MAX_NEEDLES];
+    UINT64 lo = ~(UINT64)0, hi = 0;
+    for (UINT32 i = 0; i < count; i++) {
+        needles[i] = g_shared->scan_needles[i];
+        if (needles[i] < lo) lo = needles[i];
+        if (needles[i] > hi) hi = needles[i];
+    }
+    UINT64 region_max = g_shared->scan_region_max ? g_shared->scan_region_max : 0x40000000ull;
+    UINT32 found = 0;
+    UINT8 overflow = 0;
+    DWORD start = GetTickCount();
+    if (!g_scan_buf) {
+        g_scan_buf = (BYTE *)VirtualAlloc(NULL, SCAN_CHUNK, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    }
+    if (g_scan_buf && count) {
+        HANDLE self = GetCurrentProcess();
+        BYTE *addr = (BYTE *)0x10000;
+        MEMORY_BASIC_INFORMATION mbi;
+        while ((UINT64)addr < 0x7FFFFFFF0000ull && VirtualQuery(addr, &mbi, sizeof(mbi)) == sizeof(mbi)) {
+            BYTE *region = (BYTE *)mbi.BaseAddress;
+            SIZE_T size = mbi.RegionSize;
+            DWORD prot = mbi.Protect & 0xFF;
+            BOOL writable = prot == PAGE_READWRITE || prot == PAGE_WRITECOPY || prot == PAGE_EXECUTE_READWRITE ||
+                            prot == PAGE_EXECUTE_WRITECOPY;
+            /* privee seulement (ni l'image ni la memoire partagee, ou sont
+             * les valeurs cherchees) ; pas notre propre tampon de lecture */
+            if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && writable && !(mbi.Protect & PAGE_GUARD) &&
+                size <= region_max && region != (BYTE *)g_scan_buf) {
+                for (SIZE_T off = 0; off < size && !overflow; off += SCAN_CHUNK) {
+                    SIZE_T len = size - off < SCAN_CHUNK ? size - off : SCAN_CHUNK;
+                    SIZE_T got = 0;
+                    if (!ReadProcessMemory(self, region + off, g_scan_buf, len, &got) || got < 8) {
+                        continue;
+                    }
+                    const UINT64 *q = (const UINT64 *)g_scan_buf;
+                    SIZE_T n = got / 8;
+                    for (SIZE_T i = 0; i < n; i++) {
+                        UINT64 v = q[i];
+                        if (v < lo || v > hi) {
+                            continue;
+                        }
+                        for (UINT32 k = 0; k < count; k++) {
+                            if (v == needles[k]) {
+                                if (found >= SCAN_MAX_RESULTS) {
+                                    overflow = 1;
+                                    break;
+                                }
+                                g_shared->scan_results[found] = (UINT64)(region + off + i * 8);
+                                g_shared->scan_result_needle[found] = (UINT8)k;
+                                found++;
+                                break;
+                            }
+                        }
+                        if (overflow) {
+                            break;
+                        }
+                    }
+                }
+            }
+            addr = region + size;
+        }
+    }
+    g_shared->scan_result_count = found;
+    g_shared->scan_overflow = overflow;
+    g_shared->scan_ms = GetTickCount() - start;
+}
+
+static DWORD WINAPI ScanThread(LPVOID param) {
+    (void)param;
+    for (;;) {
+        if (g_shared && g_shared->scan_pending) {
+            scan_memory();
+            g_shared->scan_pending = 0;
+            g_shared->scan_done = 1;
+        }
+        Sleep(2);
+    }
+    return 0;
+}
+
 static DWORD WINAPI InitThread(LPVOID param) {
     (void)param;
     InitializeCriticalSection(&g_lock);
@@ -1777,6 +1893,9 @@ static DWORD WINAPI InitThread(LPVOID param) {
         g_shared = (SharedState *)MapViewOfFile(g_map, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(SharedState));
         if (g_shared) {
             g_shared->speed = 1.0;
+            g_shared->scan_version = 1;
+            g_shared->scan_pending = 0;
+            CreateThread(NULL, 0, ScanThread, NULL, 0, NULL);
             g_shared->photo_version = 9; /* 2 : HUD ; 3 : commandes ; 4 : Shift ; 5 : triangle ; 6-7 : clavier/souris en cinematique ; 8 : zoom ; 9 : teleportation */
             g_shared->patched_mask = 0;
             g_shared->qpc_hit_count = 0;

@@ -406,6 +406,48 @@ class SpeedController:
                 time.sleep(0.005)
             return ctypes.cast(base + 384, ctypes.POINTER(ctypes.c_uint64))[0]
 
+    # Recherche en memoire par la DLL (2026-11-19, native/speedhack.c,
+    # scan_memory) : jusqu'a 64 valeurs de 8 octets, adresses alignees qui
+    # les contiennent dans la memoire privee inscriptible du jeu.
+    SCAN_VERSION, SCAN_PENDING, SCAN_DONE, SCAN_OVERFLOW = 476, 477, 478, 479
+    SCAN_COUNT, SCAN_FOUND, SCAN_REGION_MAX = 480, 484, 488
+    SCAN_NEEDLES, SCAN_RESULTS, SCAN_RESULT_NEEDLE, SCAN_MS = 496, 1008, 9200, 10224
+    SCAN_MAX_NEEDLES, SCAN_MAX_RESULTS = 64, 1024
+
+    def can_scan(self) -> bool:
+        return bool(self._read_u8_at(self.SCAN_VERSION))
+
+    def scan_qwords(self, values, region_max: int = 0x40000000, timeout: float = 30.0) -> dict | None:
+        """{valeur: [adresses]} ; None si la DLL ne sait pas chercher (DLL
+        plus ancienne encore injectee) ou si elle ne repond pas."""
+        values = list(dict.fromkeys(values))[:self.SCAN_MAX_NEEDLES]
+        if not values or not self.shm_view or not self.can_scan():
+            return None
+        base = ctypes.cast(self.shm_view, ctypes.c_void_p).value
+        u64 = lambda off: ctypes.cast(base + off, ctypes.POINTER(ctypes.c_uint64))  # noqa: E731
+        u32 = lambda off: ctypes.cast(base + off, ctypes.POINTER(ctypes.c_uint32))  # noqa: E731
+        with self._game_call_lock:
+            for i, value in enumerate(values):
+                u64(self.SCAN_NEEDLES + 8 * i)[0] = value & 0xFFFFFFFFFFFFFFFF
+            u32(self.SCAN_COUNT)[0] = len(values)
+            u64(self.SCAN_REGION_MAX)[0] = region_max
+            self._write_u8_at(self.SCAN_DONE, 0)
+            self._write_u8_at(self.SCAN_PENDING, 1)
+            deadline = time.monotonic() + timeout
+            while not self._read_u8_at(self.SCAN_DONE):
+                if time.monotonic() > deadline:
+                    self._write_u8_at(self.SCAN_PENDING, 0)
+                    return None
+                time.sleep(0.005)
+            found = min(u32(self.SCAN_FOUND)[0], self.SCAN_MAX_RESULTS)
+            out = {value: [] for value in values}
+            for i in range(found):
+                index = self._read_u8_at(self.SCAN_RESULT_NEEDLE + i)
+                if index < len(values):
+                    out[values[index]].append(u64(self.SCAN_RESULTS + 8 * i)[0])
+            self.last_scan_ms = u32(self.SCAN_MS)[0]
+            return out
+
     def main_loop_hook_installed(self) -> bool | None:
         val = self._read_u8_at(340)
         return None if val is None else bool(val)

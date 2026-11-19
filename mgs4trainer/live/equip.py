@@ -999,8 +999,21 @@ class EquipMixin:
 
     def _model_scan_instances(self, wanted: dict[int, int]) -> dict[int, list[int]]:
         """wanted : {donnees: identifiant} -> {donnees: [instances]}."""
-        needles = {struct.pack("<Q", data): (data, model) for data, model in wanted.items()}
         found = {data: [] for data in wanted}
+        # par la DLL (une fraction de seconde au lieu de 10 a 30), sinon ici
+        hits = self.speed.scan_qwords(list(wanted), self.MODEL_SCAN_REGION_MAX)
+        if hits is not None:
+            for data, addresses in hits.items():
+                for at in addresses:
+                    instance = at - self.MODEL_INSTANCE_DATA
+                    try:
+                        ident = struct.unpack("<I", self.proc.read_bytes(instance + self.MODEL_INSTANCE_ID, 4))[0]
+                    except OSError:
+                        continue
+                    if ident == wanted[data]:
+                        found[data].append(instance)
+            return found
+        needles = {struct.pack("<Q", data): (data, model) for data, model in wanted.items()}
         for region, size in self.proc._writable_regions():
             if size > self.MODEL_SCAN_REGION_MAX:
                 continue
