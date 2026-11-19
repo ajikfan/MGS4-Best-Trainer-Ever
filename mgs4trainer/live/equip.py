@@ -919,11 +919,18 @@ class EquipMixin:
             time.sleep(self.MODEL_SWAP_SETTLE)
         finally:
             ours = getattr(self, "_model_work_buffers", set())
-            for node, size, data, _size, _data in writes:
+            for (node, size, data, _size, _data), (_n, _a, _d, _z, load_key) in zip(writes, redirects):
                 # corps rendu : un noeud qui pointait sur notre modele (mis par
                 # le detour au dernier chargement) garde le vrai corps (notre
                 # tampon aussi, qui dure) jusqu'au prochain chargement
                 if source is None and struct.unpack("<Q", data)[0] in ours:
+                    continue
+                # Modele converti dans un tampon du detour (qui dure, hors de
+                # la memoire de la zone) : le noeud le garde. Rendu, il gardait
+                # l'ancien modele, que la cinematique suivante reprenait sans
+                # rechargement (noeud resident deja la : Big Boss revenu apres
+                # Big Mama, 2026-11-19)
+                if load_key in load:
                     continue
                 self.proc.write_bytes(node + 0x20, data)
                 self.proc.write_bytes(node + 0x14, size)

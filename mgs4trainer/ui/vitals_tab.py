@@ -2,7 +2,7 @@
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QFrame, QGridLayout, QGroupBox, QHBoxLayout,
-    QDialog, QDialogButtonBox, QHeaderView, QRadioButton, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu,
+    QDialog, QDialogButtonBox, QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu,
     QMessageBox, QPushButton, QScrollArea, QSlider, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout,
     QWidget,
 )
@@ -281,15 +281,6 @@ class VitalsTab(QWidget):
         self.model_piece_drop_btn = QPushButton(tr("vitals.model_piece_drop"))
         self.model_piece_drop_btn.setToolTip(tr("vitals.model_piece_drop_tooltip"))
         self.model_piece_drop_btn.clicked.connect(self._on_model_piece_drop)
-        # Tete (2026-11-18) : choix exclusif. Tete de Snake, tete du modele
-        # seule (celle de Snake masquee), ou une tete a part (visages de Old
-        # Snake, tete de Naomi) qui remplace celle de Snake.
-        self.model_head_group = QGroupBox(tr("vitals.model_heads"))
-        self.model_head_layout = QVBoxLayout(self.model_head_group)
-        self.model_head_buttons = QButtonGroup(self)
-        self.model_head_buttons.setExclusive(True)
-        self.model_head_buttons.buttonToggled.connect(
-            lambda _button, on: on and self._on_model_piece_toggled())
         self.model_swap_apply_btn = QPushButton(tr("vitals.model_apply"))
         self.model_swap_apply_btn.setToolTip(tr("vitals.model_apply_pending_tooltip"))
         self.model_swap_apply_btn.clicked.connect(self._on_model_swap_apply)
@@ -311,7 +302,7 @@ class VitalsTab(QWidget):
         self.model_free_btn.clicked.connect(self._on_model_free_memory)
         self.zone_buttons += [self.model_search, self.model_filter, self.model_swap_find_btn, self.model_list,
                               self.model_pieces_list, self.model_piece_add_btn, self.model_piece_drop_btn,
-                              self.model_head_group, self.model_swap_apply_btn,
+                              self.model_swap_apply_btn,
                               self.model_reset_btn,
                               self.model_free_btn]
 
@@ -429,7 +420,6 @@ class VitalsTab(QWidget):
         pieces_row.addWidget(self.model_piece_drop_btn)
         pieces_row.addStretch(1)
         pieces_layout.addLayout(pieces_row)
-        pieces_layout.addWidget(self.model_head_group)
         pieces_layout.addWidget(self.model_cost_label)
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(self.model_list)
@@ -1310,16 +1300,18 @@ class VitalsTab(QWidget):
             # pieces ajoutees a la main : decochees tant qu'on ne les coche pas
             rows += [(m, self.PIECE_EXTRA, (m in a_layers) if same else (m in self._model_extra_checked))
                      for m in extras]
-        from mgs4trainer.core.model_catalog import HEADED, HEADS
-        heads = [(m, checked) for m, kind, checked in rows if m in HEADS]
-        rows = [row for row in rows if row[0] not in HEADS]
-        self._build_model_heads(source, heads, same=source is not None and source == applied,
-                                applied_hide=a_hide, applied_layers=a_layers,
-                                own_head=source in HEADED)
+        # tetes a part (visages de Old Snake du costume) : une seule cochee
+        # par defaut, la preferee sinon la premiere (2026-11-19)
+        from mgs4trainer.core.model_catalog import HEADS
+        if source is not None and source != applied:
+            heads = [m for m, _kind, _checked in rows if m in HEADS]
+            keep = self.MODEL_DEFAULT_HEAD.get(source) if self.MODEL_DEFAULT_HEAD.get(source) in heads else (
+                heads[0] if heads else None)
+            rows = [(m, kind, checked if m not in HEADS else m == keep) for m, kind, checked in rows]
         self.model_pieces_list.blockSignals(True)
         self.model_pieces_list.clear()
         for model, kind, checked in rows:
-            item = QListWidgetItem(f"{self._model_label(model)} — {tr('vitals.model_piece_kind_' + kind)}")
+            item = QListWidgetItem(f"{self._model_piece_label(model, source)} — {tr('vitals.model_piece_kind_' + kind)}")
             item.setData(Qt.UserRole, (model, kind))
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
@@ -1355,40 +1347,9 @@ class VitalsTab(QWidget):
         if pending[0] is not None and pending[0] == self._model_applied[0] and pending != self._model_applied:
             self._on_model_swap_apply()
 
-    HEAD_SNAKE, HEAD_MODEL = -1, -2  # choix de tete hors pieces
     # tete par defaut quand le modele en a plusieurs (costume de Snake : le
     # visage de Old Snake plutot que sa version brulee)
     MODEL_DEFAULT_HEAD = {0xF40F6C: 0x78DCCA}
-
-    def _build_model_heads(self, source, heads, same, applied_hide, applied_layers, own_head) -> None:
-        """Boutons de la section Tete ; choix par defaut : la premiere tete a
-        part du modele, sinon la tete du modele s'il en a une, sinon Snake."""
-        for button in self.model_head_buttons.buttons():
-            self.model_head_buttons.removeButton(button)
-            button.deleteLater()
-        options = [(self.HEAD_SNAKE, tr("vitals.model_head_snake")),
-                   (self.HEAD_MODEL, tr("vitals.model_head_model"))]
-        options += [(m, self._model_label(m)) for m, _checked in heads]
-        if same:
-            chosen = next((m for m, _c in heads if m in applied_layers), None)
-            chosen = chosen if chosen is not None else (self.HEAD_MODEL if applied_hide else self.HEAD_SNAKE)
-        else:
-            preferred = self.MODEL_DEFAULT_HEAD.get(source)
-            chosen = preferred if preferred in [m for m, _c in heads] else (
-                heads[0][0] if heads else (self.HEAD_MODEL if own_head else self.HEAD_SNAKE))
-        self.model_head_buttons.blockSignals(True)
-        for value, label in options:
-            button = QRadioButton(label)
-            button.setProperty("head", value)
-            button.setChecked(value == chosen)
-            self.model_head_buttons.addButton(button)
-            self.model_head_layout.addWidget(button)
-        self.model_head_buttons.blockSignals(False)
-        self.model_head_group.setEnabled(source is not None)
-
-    def _model_head_choice(self):
-        button = self.model_head_buttons.checkedButton()
-        return button.property("head") if button is not None else self.HEAD_SNAKE
 
     def _model_pending(self):
         """(corps, pieces liees, couches dans l'ordre, tete masquee) des cases."""
@@ -1400,10 +1361,12 @@ class VitalsTab(QWidget):
                 continue
             model, kind = data
             (pieces if kind == self.PIECE_LINKED else layers).append(model)
-        head = self._model_head_choice()
-        if head not in (self.HEAD_SNAKE, self.HEAD_MODEL):
-            layers.append(head)
-        return self._model_selected(), tuple(pieces), tuple(layers), head != self.HEAD_SNAKE
+        # tete de Snake toujours masquee (comme l'ancienne case « Masquer sa
+        # tete » toujours cochee), sauf pour un modele dont la tete est un
+        # visage de Snake (camouflage lave de Raven : MODEL_SWAP_FACES)
+        source = self._model_selected()
+        hide = source is not None and source not in self.live.MODEL_SWAP_FACES
+        return source, tuple(pieces), tuple(layers), hide
 
     def _update_model_pending(self) -> None:
         """Appliquer en gras quand les cases different de ce qui est en jeu."""
@@ -1520,6 +1483,16 @@ class VitalsTab(QWidget):
             if name:
                 return name
         return None if _depth else self._model_guessed_name(model)
+
+    def _model_piece_label(self, piece: int, owner: int) -> str:
+        """Piece sans vrai nom : nommee d'apres le modele choisi, pas d'apres
+        le premier modele du catalogue qui la porte (une piece de Meryl
+        s'appelait « Piece de FROG ? », 2026-11-19)."""
+        if self._model_base_name(piece, _depth=1) is None:
+            owner_name = self._model_base_name(owner)
+            if owner_name:
+                return f"{tr('vitals.model_guess_piece').format(name=owner_name)} ({piece:#08x})"
+        return self._model_label(piece)
 
     def _model_guessed_name(self, model: int) -> str | None:
         """Nom deduit, avec un point d'interrogation (2026-11-18) : piece ou

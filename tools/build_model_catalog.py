@@ -23,6 +23,7 @@ SNAKE_BODY = "00413aa8.mdn"  # corps de Snake (paquet de tenue), squelette de re
 ZONE = re.compile(r"s\d\d[a-z]\d\d[a-z]$")
 TEXTURE_SIZE = 0x20
 HEAD_BONE = 0x29A56C   # os de la tete (identifiant commun aux squelettes humains)
+WEAPON_ROOT = 0x5EBE85  # racine des armes tenues (un seul os)
 NECK_BONE = 0xF8D3CC   # cou : racine des tetes a part (visages de Old Snake, tete de Naomi)
 LIGHT_GEOMETRY = 100000  # octets de sommets sous lesquels un modele n'est pas un personnage (blessure de Big Mama 0x88811d : 16 Ko)
 ALSO_SHARED = 0.15      # parente faible : nom deduit avec un point d'interrogation
@@ -88,7 +89,24 @@ def texture_ids(data: bytes) -> list[int]:
             for i in range(header.texture_count)]
 
 
-def linked_pieces(files, resources, model: int, cache: dict) -> list[tuple[int, str]]:
+def mdn_lines(files, zone: str, cache: dict) -> dict[int, int]:
+    """Identifiant d'un mdn -> sa ligne parmi les mdn du data.cnf de la zone."""
+    key = ("lignes", zone)
+    if key not in cache:
+        config = next(p for p in files.entries if p.endswith(f"/{zone}/data.cnf"))
+        found = {}
+        for line in files.read(config).decode("latin-1").splitlines():
+            line = line.strip()
+            if line.endswith(".mdn"):
+                try:
+                    found.setdefault(int(line.rsplit("/", 1)[-1][:8], 16), len(found))
+                except ValueError:
+                    continue
+        cache[key] = found
+    return cache[key]
+
+
+def linked_pieces(files, resources, model: int, cache: dict, zone: str = "") -> list[tuple[int, str]]:
     """[(identifiant, chemin)] des mdn de la zone cites avec model par un
     .eqpp de la zone (Naomi : 0xA8BA98 cite 0xE28B85 et 0x44911B)."""
     mdns = {key & 0xFFFFFF: path for key, path in resources if key >> 24 == 0x0D}
@@ -115,8 +133,14 @@ def linked_pieces(files, resources, model: int, cache: dict) -> list[tuple[int, 
         attachments = mdn.cnp_attachments(cache[cnp_path])
         body_bones = {bone for bone, _p in mdn.bone_ids(files.read(mdns[model]))} if model in mdns else set()
         roots = set()
+        # piece listee pres du modele seulement : le point d'accroche des
+        # cheveux (0x9A57D) est commun a tous les humains, ceux de Snake
+        # 0x862651 allaient a Campbell (58 lignes plus loin, 2026-11-19)
+        lines = mdn_lines(files, zone, cache) if zone else {}
         for other, other_path in mdns.items():
             if other == model or other in pieces:
+                continue
+            if model in lines and other in lines and abs(lines[other] - lines[model]) > LAYER_WINDOW:
                 continue
             key = ("os", other_path)
             if key not in cache:
@@ -128,6 +152,15 @@ def linked_pieces(files, resources, model: int, cache: dict) -> list[tuple[int, 
             if bones and bones[0] in attachments and bones[0] not in roots and not body_bones & set(bones):
                 roots.add(bones[0])
                 pieces[other] = other_path
+    # armes tenues (un os, racine 0x5EBE85 : arme de Meryl et du FROG
+    # 0xC46091, couteaux de Mantis) : pas des pieces du corps (2026-11-19)
+    for other, other_path in list(pieces.items()):
+        try:
+            ids = mdn.bone_ids(files.read(other_path))
+        except (ValueError, struct.error, IndexError):
+            continue
+        if len(ids) == 1 and ids[0][0] == WEAPON_ROOT:
+            del pieces[other]
     return sorted(pieces.items())
 
 
@@ -269,7 +302,7 @@ def main(root: str) -> None:
                 if (model, False) in checked:
                     continue
                 wanted = set(texture_ids(data))
-                pieces = linked_pieces(files, resources, model, eqpp_cache)
+                pieces = linked_pieces(files, resources, model, eqpp_cache, zone)
                 layers = model_layers(files, zone, resources, model, {piece for piece, _p in pieces}, layer_cache)
                 for _piece, piece_path in pieces + layers:
                     wanted |= set(texture_ids(files.read(piece_path)))

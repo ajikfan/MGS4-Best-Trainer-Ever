@@ -264,6 +264,21 @@ typedef struct {
     UINT64 scan_results[1024]; /* [1008] adresses trouvees */
     UINT8 scan_result_needle[1024]; /* [9200] numero de la valeur trouvee */
     UINT32 scan_ms;            /* [10224] duree du parcours */
+    /* [10228] Detour des modeles de Snake en C (2026-11-19) : remplace
+     * l'ancien code machine colle par le trainer (MODEL_LOAD_CODE). Meme
+     * page de donnees, preparee par le trainer (voir model_hook_decide) ;
+     * la DLL pose le saut elle-meme sur l'enregistrement des ressources
+     * (1.4.2 532220) et tient un journal des passages. */
+    UINT8 model_hook_version;  /* [10228] 1 = la DLL sait le faire */
+    UINT8 model_hook_request;  /* [10229] le trainer : 1 poser, 2 retirer */
+    UINT8 model_hook_state;    /* [10230] 1 = saut pose */
+    UINT8 model_hook_error;    /* [10231] 1 octets inattendus, 2 allocation */
+    UINT64 model_hook_page;    /* [10232] page de donnees (trainer) */
+    UINT64 model_hook_site;    /* [10240] adresse du point d'accroche */
+    UINT32 model_hook_matches; /* [10248] passages sur une cle de la table */
+    UINT32 model_hook_swaps;   /* [10252] remplacements faits */
+    UINT32 model_hook_log_seq; /* [10256] numero du dernier passage note */
+    UINT32 model_hook_log[16][4]; /* [10260] cle, taille, drapeaux, decision */
 } SharedState;
 #pragma pack(pop)
 _Static_assert(offsetof(SharedState, rpc_result) == 384 && offsetof(SharedState, machine_kill) == 392,
@@ -283,6 +298,11 @@ _Static_assert(offsetof(SharedState, scan_version) == 476 && offsetof(SharedStat
                    offsetof(SharedState, scan_results) == 1008 && offsetof(SharedState, scan_result_needle) == 9200 &&
                    offsetof(SharedState, scan_ms) == 10224,
                "offsets lus par mgs4trainer/core/speedhack.py (recherche en memoire)");
+
+_Static_assert(offsetof(SharedState, model_hook_version) == 10228 && offsetof(SharedState, model_hook_page) == 10232 &&
+                   offsetof(SharedState, model_hook_site) == 10240 && offsetof(SharedState, model_hook_matches) == 10248 &&
+                   offsetof(SharedState, model_hook_log_seq) == 10256 && offsetof(SharedState, model_hook_log) == 10260,
+               "offsets lus par mgs4trainer/core/speedhack.py (detour des modeles)");
 
 #define SCAN_MAX_NEEDLES 64
 #define SCAN_MAX_RESULTS 1024
@@ -1871,6 +1891,244 @@ static void scan_memory(void) {
     g_shared->scan_ms = GetTickCount() - start;
 }
 
+/* ---------------------------------------------------------------------
+ * Detour des modeles de Snake (2026-11-19). Page de donnees preparee par
+ * le trainer (inchangee depuis la version en code machine) :
+ *   +0x00 enregistrement (534600)   +0x08 recherche (534210)
+ *   +0x10 reprise (inutilisee ici)  +0x18 adresse du pointeur linkvarbuf
+ *   +0x20 table des textures        +0x28 nom de zone sauve (16 octets)
+ *   +0x38 nombre d'entrees          +0x3C actif
+ *   +0x40 entrees de 0x40 : +0 cle (sans bit 31), +4 taille d'origine (0 =
+ *         toute taille, cle sans bit 31 seulement), +8 taille du
+ *         remplacement, +0xC converti, +0x10 tampon, +0x18 copie intacte,
+ *         +0x20 liste des txn, +0x28 nombre de txn, +0x2C textures
+ *   txn de 0x20 : +0 cle, +4 taille, +8 tampon, +0x10 copie intacte,
+ *         +0x18 nom de sa zone (8 octets)
+ * Point d'accroche : debut de l'enregistrement d'une ressource (rcx
+ * donnees, edx cle, r8d drapeaux, r9d taille). Drapeaux sans 0x10
+ * (chargement de zone, le jeu convertit sur place) : copie neuve du
+ * modele dans son tampon ; avec 0x10 (cinematique, tampon deja converti) :
+ * le meme tampon s'il a deja ete converti. Avant, les txn absents sont
+ * enregistres sous leur zone, s'il y a assez de places de textures ;
+ * sinon le jeu garde son modele. */
+#define TEXTURE_SLOTS 0x1421
+#define TEXTURE_ENTRY 0x70
+#define ZONE_FIRST 0x34
+#define ZONE_SECOND 0x44
+
+typedef UINT64 (*RegisterFn)(void *data, UINT32 key, UINT32 flags, UINT32 size);
+typedef UINT64 (*LookupFn)(UINT32 key);
+
+static BYTE *g_model_site = NULL;
+static BYTE *g_model_thunk = NULL;
+static UINT64 g_model_original = 0; /* 8 premiers octets d'origine du site */
+void *g_model_resume = NULL;        /* lu par model_hook_stub */
+
+static void model_log(UINT32 key, UINT32 size, UINT32 flags, UINT32 decision) {
+    UINT32 n = g_shared->model_hook_log_seq + 1;
+    UINT32 *row = (UINT32 *)g_shared->model_hook_log[n % 16];
+    row[0] = key;
+    row[1] = size;
+    row[2] = flags;
+    row[3] = decision;
+    g_shared->model_hook_log_seq = n;
+}
+
+/* Places libres de la table, puis txn absents enregistres sous leur zone. */
+static BOOL model_textures(BYTE *page, BYTE *entry) {
+    UINT32 needed = *(UINT32 *)(entry + 0x2C);
+    if (!needed) {
+        return TRUE;
+    }
+    BYTE *table = *(BYTE **)(page + 0x20);
+    UINT32 free_slots = 0;
+    for (UINT32 i = 1; i < TEXTURE_SLOTS; i++) {
+        BYTE *slot = table + (SIZE_T)i * TEXTURE_ENTRY;
+        if (*(UINT64 *)(slot + 8) == 0 && *(UINT16 *)(slot + 0x34) == 0xFFFF) {
+            free_slots++;
+        }
+    }
+    if (free_slots < needed) {
+        return FALSE;
+    }
+    BYTE *lvb = **(BYTE ***)(page + 0x18);
+    UINT64 first = *(UINT64 *)(lvb + ZONE_FIRST), second = *(UINT64 *)(lvb + ZONE_SECOND);
+    RegisterFn reg = *(RegisterFn *)(page + 0x00);
+    LookupFn lookup = *(LookupFn *)(page + 0x08);
+    BYTE *txn = *(BYTE **)(entry + 0x20);
+    UINT32 count = *(UINT32 *)(entry + 0x28);
+    for (UINT32 i = 0; i < count; i++, txn += 0x20) {
+        UINT32 key = *(UINT32 *)txn;
+        if (lookup(key)) {
+            continue;
+        }
+        UINT32 size = *(UINT32 *)(txn + 4);
+        memcpy(*(void **)(txn + 8), *(void **)(txn + 0x10), size);
+        UINT64 zone = *(UINT64 *)(txn + 0x18);
+        *(UINT64 *)(lvb + ZONE_FIRST) = zone;
+        *(UINT64 *)(lvb + ZONE_SECOND) = zone;
+        reg(*(void **)(txn + 8), key, 1, size);
+    }
+    *(UINT64 *)(lvb + ZONE_FIRST) = first;
+    *(UINT64 *)(lvb + ZONE_SECOND) = second;
+    return TRUE;
+}
+
+/* regs : r9 (taille), r8 (drapeaux), rdx (cle), rcx (donnees), sauves par
+ * model_hook_stub ; rcx et r9 sont modifies pour un remplacement. */
+void model_hook_decide(UINT64 *regs) {
+    if (!g_shared) {
+        return;
+    }
+    BYTE *page = (BYTE *)g_shared->model_hook_page;
+    if (!page || !*(UINT32 *)(page + 0x3C)) {
+        return;
+    }
+    UINT32 size = (UINT32)regs[0], flags = (UINT32)regs[1], key = (UINT32)regs[2];
+    UINT32 bare = key & 0x7FFFFFFF;
+    UINT32 count = *(UINT32 *)(page + 0x38);
+    BYTE *entry = page + 0x40;
+    BYTE *match = NULL;
+    for (UINT32 i = 0; i < count; i++, entry += 0x40) {
+        if (*(UINT32 *)entry != bare) {
+            continue;
+        }
+        UINT32 expected = *(UINT32 *)(entry + 4);
+        /* 0 = toute taille, jamais une cle residente (bit 31) : la version
+         * residente du corps (paquet commun, 128 os) faisait planter */
+        if (expected ? expected == size : !(key & 0x80000000)) {
+            match = entry;
+            break;
+        }
+    }
+    if (!match) {
+        return;
+    }
+    g_shared->model_hook_matches++;
+    UINT32 decision;
+    if (flags & 0x10) {
+        /* cinematique : tampon deja converti, repris tel quel */
+        if (!*(UINT32 *)(match + 0xC)) {
+            model_log(key, size, flags, 2); /* pas encore converti */
+            return;
+        }
+        if (!model_textures(page, match)) {
+            model_log(key, size, flags, 3); /* pas assez de places */
+            return;
+        }
+        decision = 1;
+    } else {
+        /* resident (bit 31) a convertir : jamais de copie, son tampon peut
+         * etre encore en service (FaceCamo du paquet commun : cheveux figes
+         * puis plantage 75FFDD, 2026-11-18). Les residents ne passent que
+         * par la reprise d'un tampon deja converti, ci-dessus. */
+        if (key & 0x80000000) {
+            model_log(key, size, flags, 5);
+            return;
+        }
+        if (!model_textures(page, match)) {
+            model_log(key, size, flags, 3);
+            return;
+        }
+        memcpy(*(void **)(match + 0x10), *(void **)(match + 0x18), *(UINT32 *)(match + 8));
+        *(UINT32 *)(match + 0xC) = 1;
+        decision = 4; /* copie neuve, convertie par le jeu */
+    }
+    regs[3] = *(UINT64 *)(match + 0x10);
+    regs[0] = *(UINT32 *)(match + 8);
+    g_shared->model_hook_swaps++;
+    model_log(key, size, flags, decision);
+}
+
+/* Entree du detour : arguments sauves, decision en C, instruction
+ * ecrasee rejouee (mov [rsp+0x18], rbx), reprise a site+5. */
+__asm__(
+    ".globl model_hook_stub\n"
+    "model_hook_stub:\n"
+    "    push %rcx\n"
+    "    push %rdx\n"
+    "    push %r8\n"
+    "    push %r9\n"
+    "    push %rax\n"
+    "    push %r10\n"
+    "    push %r11\n"
+    "    sub $0x20, %rsp\n"
+    "    lea 0x38(%rsp), %rcx\n"
+    "    call model_hook_decide\n"
+    "    add $0x20, %rsp\n"
+    "    pop %r11\n"
+    "    pop %r10\n"
+    "    pop %rax\n"
+    "    pop %r9\n"
+    "    pop %r8\n"
+    "    pop %rdx\n"
+    "    pop %rcx\n"
+    "    mov %rbx, 0x18(%rsp)\n"
+    "    jmp *g_model_resume(%rip)\n");
+void model_hook_stub(void);
+
+static void model_hook_install(void) {
+    static const BYTE original[5] = {0x48, 0x89, 0x5C, 0x24, 0x18};
+    BYTE *site = (BYTE *)g_shared->model_hook_site;
+    if (!site) {
+        g_shared->model_hook_error = 1;
+        return;
+    }
+    if (g_model_site == site && g_shared->model_hook_state) {
+        return;
+    }
+    /* octets d'origine, ou saut de l'ancien detour en code machine (son
+     * code finit par la meme instruction et la meme reprise) */
+    if (memcmp(site, original, 5) != 0 && site[0] != 0xE9) {
+        g_shared->model_hook_error = 1;
+        return;
+    }
+    if (!g_model_thunk) {
+        g_model_thunk = alloc_near(site, 0x1000);
+        if (!g_model_thunk) {
+            g_shared->model_hook_error = 2;
+            return;
+        }
+        /* jmp [rip+0] ; adresse du stub */
+        BYTE thunk[14] = {0xFF, 0x25, 0, 0, 0, 0};
+        *(UINT64 *)(thunk + 6) = (UINT64)(void *)model_hook_stub;
+        memcpy(g_model_thunk, thunk, sizeof(thunk));
+    }
+    g_model_site = site;
+    g_model_resume = site + 5;
+    UINT64 current = *(volatile UINT64 *)site;
+    if (memcmp(site, original, 5) == 0) {
+        g_model_original = current;
+    } else {
+        g_model_original = (current & 0xFFFFFF0000000000ull) | 0x18245C8948ull;
+    }
+    INT32 rel = (INT32)(g_model_thunk - (site + 5));
+    UINT64 patched = (current & 0xFFFFFF0000000000ull) | 0xE9ull | ((UINT64)(UINT32)rel << 8);
+    DWORD old;
+    if (VirtualProtect(site, 8, PAGE_EXECUTE_READWRITE, &old)) {
+        InterlockedExchange64((volatile LONG64 *)site, (LONG64)patched); /* 8 octets d'un coup */
+        VirtualProtect(site, 8, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), site, 8);
+        g_shared->model_hook_state = 1;
+        g_shared->model_hook_error = 0;
+    }
+}
+
+static void model_hook_remove(void) {
+    if (!g_model_site || !g_shared->model_hook_state) {
+        return;
+    }
+    DWORD old;
+    if (VirtualProtect(g_model_site, 8, PAGE_EXECUTE_READWRITE, &old)) {
+        UINT64 current = *(volatile UINT64 *)g_model_site;
+        UINT64 restored = (current & 0xFFFFFF0000000000ull) | (g_model_original & 0xFFFFFFFFFFull);
+        InterlockedExchange64((volatile LONG64 *)g_model_site, (LONG64)restored);
+        VirtualProtect(g_model_site, 8, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), g_model_site, 8);
+        g_shared->model_hook_state = 0;
+    }
+}
+
 static DWORD WINAPI ScanThread(LPVOID param) {
     (void)param;
     for (;;) {
@@ -1878,6 +2136,14 @@ static DWORD WINAPI ScanThread(LPVOID param) {
             scan_memory();
             g_shared->scan_pending = 0;
             g_shared->scan_done = 1;
+        }
+        if (g_shared && g_shared->model_hook_request) {
+            if (g_shared->model_hook_request == 1) {
+                model_hook_install();
+            } else {
+                model_hook_remove();
+            }
+            g_shared->model_hook_request = 0;
         }
         Sleep(2);
     }
@@ -1894,6 +2160,7 @@ static DWORD WINAPI InitThread(LPVOID param) {
         if (g_shared) {
             g_shared->speed = 1.0;
             g_shared->scan_version = 1;
+            g_shared->model_hook_version = 2; /* 2 : residents jamais copies */
             g_shared->scan_pending = 0;
             CreateThread(NULL, 0, ScanThread, NULL, 0, NULL);
             g_shared->photo_version = 9; /* 2 : HUD ; 3 : commandes ; 4 : Shift ; 5 : triangle ; 6-7 : clavier/souris en cinematique ; 8 : zoom ; 9 : teleportation */
