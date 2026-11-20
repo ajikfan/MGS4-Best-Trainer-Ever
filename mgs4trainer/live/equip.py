@@ -827,17 +827,16 @@ class EquipMixin:
                     if node:
                         redirects.append((node, self._model_alias(face_id ^ self.MODEL_REAL_XOR), face_data,
                                           location[0], 0x0D000000 | face_id))
-                        if not self._model_resident(nodes, face_id):
-                            persist.append((0x0D000000 | face_id, len(face_data), face_data, []))
+                        persist.append((0x0D000000 | face_id, len(face_data), face_data, []))
         if hide_head:
             for face_id, face_data in self._model_face_files():
                 hidden = mdn.hidden(face_data)
-                # tete residente (FaceCamo pris dans le paquet commun : cle a bit
-                # 31, gardee d'une zone a l'autre) : pas confiee au detour, qui
-                # recopiait son tampon encore en service au chargement suivant
-                # (cheveux figes puis plantage 75FFDD, 2026-11-18)
-                if not self._model_resident(nodes, face_id):
-                    persist.append((0x0D000000 | face_id, len(face_data), hidden, []))
+                # tete residente (cle a bit 31, gardee d'une zone a l'autre)
+                # confiee au detour aussi : il ne recopie jamais un resident
+                # (cheveux figes puis plantage 75FFDD quand il le faisait,
+                # 2026-11-18), il reprend seulement le tampon deja converti
+                # (tete de Snake revenue apres un changement de zone, 2026-11-20)
+                persist.append((0x0D000000 | face_id, len(face_data), hidden, []))
                 node = self._model_node(nodes, face_id)
                 if node:
                     redirects.append((node, self._model_alias(face_id ^ self.MODEL_HIDE_XOR), hidden, location[0],
@@ -849,6 +848,17 @@ class EquipMixin:
         # tampons du detour des chargements : le modele de rechange y est
         # converti par le jeu (drapeaux du chargeur de paquets), puis repris
         # tel quel au chargement d'une cinematique
+        if not self._model_wait_loader_idle():
+            return self._model_fail("chargement en cours")
+        # journal des enregistrements (plantage au deuxieme changement en
+        # cinematique : objet du premier modele libere, 2026-11-20)
+        try:
+            self._equip_log(
+                f"modele {source if source is None else hex(source)} cinematique {not self._octocamo_controller()} : "
+                f"rechanges {[(hex(alias), zone, hex(load_key)) for _n, alias, _d, zone, load_key in redirects]} ; "
+                f"txn {({zone: [hex(key) for key, _d in entries] for zone, entries in missing.items()})}")
+        except OSError:
+            pass
         load = self._model_load_set(persist)
         if load is None:
             return self._model_fail("etape 7")
@@ -919,19 +929,18 @@ class EquipMixin:
             time.sleep(self.MODEL_SWAP_SETTLE)
         finally:
             ours = getattr(self, "_model_work_buffers", set())
-            for (node, size, data, _size, _data), (_n, _a, _d, _z, load_key) in zip(writes, redirects):
+            for node, size, data, _size, _data in writes:
                 # corps rendu : un noeud qui pointait sur notre modele (mis par
                 # le detour au dernier chargement) garde le vrai corps (notre
                 # tampon aussi, qui dure) jusqu'au prochain chargement
                 if source is None and struct.unpack("<Q", data)[0] in ours:
                     continue
-                # Modele converti dans un tampon du detour (qui dure, hors de
-                # la memoire de la zone) : le noeud le garde. Rendu, il gardait
-                # l'ancien modele, que la cinematique suivante reprenait sans
-                # rechargement (noeud resident deja la : Big Boss revenu apres
-                # Big Mama, 2026-11-19)
-                if load_key in load:
-                    continue
+                # Noeud toujours rendu : le jeu retrouve ce qu'il libere d'apres
+                # les donnees du noeud. Garder notre modele laissait l'entree
+                # d'origine orpheline dans sa table d'objets (18852D0), objet
+                # deja libere : plantage 4E0C36 / 10E697 au retour au menu, a
+                # la fin d'un acte ou au chargement d'une sauvegarde
+                # (2026-11-20, essai du 2026-11-19 annule).
                 self.proc.write_bytes(node + 0x20, data)
                 self.proc.write_bytes(node + 0x14, size)
         if source is None:
@@ -1049,14 +1058,55 @@ class EquipMixin:
         for model, _old, new in changes:
             for instance in instances.get(model, ()):
                 head = self.proc.read_bytes(instance + self.MODEL_INSTANCE_ID, 4)
-                if struct.unpack("<I", head)[0] != model:
+                # copie perimee (deja liberee, memoire reutilisee) laissee :
+                # la reconstruire ecrivait dans un objet libre (tache du jeu
+                # ecrasee, plantage 52B07B au retour au menu apres deux
+                # changements en cinematique, 2026-11-20)
+                if struct.unpack("<I", head)[0] != model or not self._model_instance_alive(instance):
                     continue
                 if struct.unpack("<Q", self.proc.read_bytes(instance + self.MODEL_INSTANCE_DATA, 8))[0] == new:
                     continue
                 if self.speed.game_call(funcs["rebuild"], instance, new) == instance:
                     done += 1
+            if getattr(self, "_model_shown_pid", None) != self.pid:
+                self._model_shown_pid, self._model_shown = self.pid, {}
             self._model_shown.setdefault(model, set()).add(new)
         return done
+
+    # Table des objets de ressources du jeu (compteur ; entrees de 0x20 juste
+    # apres : cle, donnees, objet). Elle se remplit pendant un chargement.
+    MODEL_OBJECT_COUNT_RVA = 0x1F35AC0  # 1.4.2 18852C0
+    MODEL_LOADER_QUIET, MODEL_LOADER_MAX_WAIT = 1.5, 15.0
+
+    def _model_wait_loader_idle(self) -> bool:
+        """Attend que le jeu ait fini de charger (table des objets stable
+        MODEL_LOADER_QUIET s). Enregistrer pendant que le chargeur du jeu
+        enregistre lui aussi (debut d'une cinematique) ecrasait des objets
+        en service : plantage au changement suivant (A4E85, AFEC7, B96D9 ;
+        cinq essais du 2026-11-20, plantage seulement quand le premier
+        changement suivait de 3-4 s le debut de la cinematique)."""
+        counter = self.base + self.MODEL_OBJECT_COUNT_RVA
+        deadline = time.monotonic() + self.MODEL_LOADER_MAX_WAIT
+        last, since = None, time.monotonic()
+        while time.monotonic() < deadline:
+            count = struct.unpack("<i", self.proc.read_bytes(counter, 4))[0]
+            if count != last:
+                last, since = count, time.monotonic()
+            elif time.monotonic() - since >= self.MODEL_LOADER_QUIET:
+                return True
+            time.sleep(0.1)
+        self._equip_log("modele : le jeu charge encore, changement annule")
+        return False
+
+    def _model_instance_alive(self, instance: int) -> bool:
+        """Instance trouvee en memoire plausible : premiere matrice d'os =
+        rotation (une copie perimee, deja liberee, peut garder l'identifiant
+        et les donnees, 2026-11-19)."""
+        try:
+            m = struct.unpack("<12f", self.proc.read_bytes(instance + 0x1E0, 48))
+        except OSError:
+            return False
+        return all(abs(sum(m[r * 4 + i] ** 2 for i in range(3)) - 1.0) < 0.05 for r in range(3))
 
     def _model_alias(self, seed: int) -> int:
         """Cle de rechange neuve a chaque application (un tampon neuf est
@@ -1087,19 +1137,19 @@ class EquipMixin:
     MODEL_LOAD_SITE_ORIG = bytes.fromhex("48895c2418")  # mov [rsp+0x18], rbx
     MODEL_LOAD_CODE = bytes.fromhex(
         "5356574154415541564157555152415041514883ec2848bd8877665544332211"
-        "837d3c00747e8b44243825ffffff7f488d5d408b4d3885c9746a3b0375188b54"
-        "2428837b040074073b53047411eb07f644243b8074084883c340ffc9ebd8f644"
-        "243010751fe85b00000085c07436488b7b10488b73188b4b08f3a4c7430c0100"
-        "0000eb0f837b0c00741ae83600000085c07411488b431048894424408b430848"
-        "89442428488b45104883c428415941585a595d415f415e415d415c5f5e5b4889"
-        "5c2418ffe04883ec28448b632c4585e40f84bd0000004c8b452031c0b9010000"
-        "0081f921140000731b486bd17049837c100800750b6641837c1034ff7502ffc0"
-        "ffc1ebdd4439e00f8290000000488b4518488b00488b483448894d28488b4844"
-        "48894d304c8b6b20448b73284585f6744b418b4d00ff55084885c07536498b7d"
-        "08498b7510418b4d04f3a4488b4518488b00498b4d184889483448894844498b"
-        "4d08418b550041b801000000458b4d04ff55004983c52041ffceebb0488b4518"
-        "488b00488b4d2848894834488b4d3048894844b8010000004883c428c331c048"
-        "83c428c3"
+        "837d3c000f84850000008b44243825ffffff7f488d5d408b4d3885c974713b03"
+        "75188b542428837b040074073b53047411eb07f644243b8074084883c340ffc9"
+        "ebd8f6442430107526f644243b80753fe85b00000085c07436488b7b10488b73"
+        "188b4b08f3a4c7430c01000000eb0f837b0c00741ae83600000085c07411488b"
+        "431048894424408b43084889442428488b45104883c428415941585a595d415f"
+        "415e415d415c5f5e5b48895c2418ffe04883ec28448b632c4585e40f84bd0000"
+        "004c8b452031c0b90100000081f921140000731b486bd17049837c100800750b"
+        "6641837c1034ff7502ffc0ffc1ebdd4439e00f8290000000488b4518488b0048"
+        "8b483448894d28488b484448894d304c8b6b20448b73284585f6744b418b4d00"
+        "ff55084885c07536498b7d08498b7510418b4d04f3a4488b4518488b00498b4d"
+        "184889483448894844498b4d08418b550041b801000000458b4d04ff55004983"
+        "c52041ffceebb0488b4518488b00488b4d2848894834488b4d3048894844b801"
+        "0000004883c428c331c04883c428c3"
     )
     MODEL_LOAD_BASE_AT = 0x18   # imm64 de "movabs rbp, page" dans le code
     MODEL_LOAD_CODE_AT = 0x800

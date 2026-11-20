@@ -174,6 +174,14 @@ class CodePatchesMixin:
     #    Letal -> "jmp" vers la vie (mort), Non letal -> NOP vers le sommeil
     #    (endormi, Z). Valide en jeu (balles, flechettes, deux modes).
     #    Remplace le hook DLL repris du script "aob Damage" de MGS4.CT.
+    #    Allies epargnes (2026-11-20) : C5223E teste d'abord le camp de la
+    #    cible ("cmp qword [rbx+0x43D0],0", signe = camp >= 0x80, Rat Patrol,
+    #    Meryl), comme la fonction le fait juste avant (C52218) : allie ->
+    #    suite normale du coup (C52263, sans la mise a mort du jeu sur cible a
+    #    terre), sinon "mov ebp,r9d ; jmp C523B9". Sans ce test, Meryl mourait
+    #    au debut du combat contre Screaming Mantis (coup avec degats de la
+    #    prise en marionnette ; tests du jeu sur degat nul, bit 20 de
+    #    +0x45AC et 812D60 essayes : aucun ne la protege).
     CODE_PATCHES = {
         # Site C5223E commun aux deux (jamais poses ensemble, voir
         # VitalsTab._apply_instant_kill_mode).
@@ -207,11 +215,11 @@ class CodePatchesMixin:
             (0x1048362, bytes.fromhex("6603ca66898b3c03"), bytes.fromhex("31c990")),
         ],
         "soldier_one_shot_kill": [
-            (0xC5223E, bytes.fromhex("85ed7e218b83ac45"), bytes.fromhex("4489cde973010000")),
+            (0xC5223E, bytes.fromhex("85ed7e218b83ac450000c1e814a8017514488bcf"), bytes.fromhex("4883bbd0430000007d02eb194489cde967010000")),
             (0xC523C3, bytes.fromhex("740f8bd5488bcfe8"), bytes.fromhex("eb0f")),
         ],
         "soldier_non_lethal_kill": [
-            (0xC5223E, bytes.fromhex("85ed7e218b83ac45"), bytes.fromhex("4489cde973010000")),
+            (0xC5223E, bytes.fromhex("85ed7e218b83ac450000c1e814a8017514488bcf"), bytes.fromhex("4883bbd0430000007d02eb194489cde967010000")),
             (0xC523C3, bytes.fromhex("740f8bd5488bcfe8"), bytes.fromhex("9090")),
         ],
         "minigekko_lethal": [
@@ -505,6 +513,16 @@ class CodePatchesMixin:
         # chrono affiche par 14D4E30 puis "jmp 116CDDB" en 116CDC8) est
         # devie vers 116CE35, qui relit le compteur sans le decompter
         # (2026-10-23) ; l'arene continue de decompter.
+        # FROG tues sans cendres (2026-11-20) : le cadavre d'un soldat de
+        # Haven (CORP_HAVEN_SOLDIER) recoit comme action 1 HSDCORP_TLA_
+        # CoalVanish (vtable 12FC7E0 en 1.4.2, posee en 90BB0F). Son entree
+        # (C71420, 90C050 en 1.4.2) teste les bits 0x18 du cadavre (+0x4404) :
+        # poses, disparition ordinaire du soldat (entree de base, delai
+        # 0x2EE0) ; sinon combustion en cendres. Le "je" (7408) en NOP : tout
+        # FROG tue prend le chemin ordinaire (valide en jeu).
+        "haven_no_ash": [
+            (0xC71420, bytes.fromhex("33c0f68204440000187408894154"), bytes.fromhex("33c0f68204440000189090")),
+        ],
         "timer_freeze": [
             (0x14D4596, bytes.fromhex("890d44b1ad2239b3ac00"), bytes.fromhex("909090909090")),
             (0x116CDC8, bytes.fromhex("eb114533c033d2"), bytes.fromhex("eb6b")),

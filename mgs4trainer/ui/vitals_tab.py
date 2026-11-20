@@ -341,6 +341,10 @@ class VitalsTab(QWidget):
         self.railgun_charge_check.setToolTip(tr("vitals.railgun_charge_tooltip"))
         self.railgun_charge_check.toggled.connect(self._on_railgun_charge_toggled)
         weapons_layout.addWidget(self.railgun_charge_check)
+        self.haven_no_ash_check = QCheckBox(tr("vitals.haven_no_ash"))
+        self.haven_no_ash_check.setToolTip(tr("vitals.haven_no_ash_tooltip"))
+        self.haven_no_ash_check.toggled.connect(self._on_haven_no_ash_toggled)
+        weapons_layout.addWidget(self.haven_no_ash_check)
         layout.addWidget(weapons_group)
 
         snake_group = QGroupBox(tr("vitals.snake_group"))
@@ -882,6 +886,12 @@ class VitalsTab(QWidget):
             return
         self.live.set_paused(checked)
 
+    def _on_haven_no_ash_toggled(self, checked: bool):
+        try:
+            self.live.set_code_patch("haven_no_ash", checked)
+        except OSError:
+            pass
+
     def _on_timer_freeze_toggled(self, checked: bool):
         try:
             self.live.set_code_patch("timer_freeze", checked)
@@ -932,6 +942,7 @@ class VitalsTab(QWidget):
         self._on_speed_changed(self.speed_slider.value())
         self._on_pause_toggled(self.pause_check.isChecked())
         self._on_timer_freeze_toggled(self.timer_freeze_check.isChecked())
+        self._on_haven_no_ash_toggled(self.haven_no_ash_check.isChecked())
         self._on_no_reload_toggled(self.no_reload_check.isChecked())
         self._on_infinite_ammo_toggled(self.infinite_ammo_check.isChecked())
         self._on_infinite_silencer_toggled(self.infinite_silencer_check.isChecked())
@@ -1797,7 +1808,7 @@ class VitalsTab(QWidget):
     PROFILE_CHECKS = (
         "no_alerts", "infinite_ammo", "no_reload", "infinite_silencer", "instant_kill",
         "railgun_charge", "untouchable", "invisible", "no_back_pain", "rebels",
-        "timer_freeze",
+        "timer_freeze", "haven_no_ash",
     )
 
     def profile_settings(self) -> dict:
@@ -1926,6 +1937,7 @@ class VitalsTab(QWidget):
             self.speed_slider.setEnabled(False)
             self.pause_check.setEnabled(False)
             self.timer_freeze_check.setEnabled(False)
+            self.haven_no_ash_check.setEnabled(False)
             self.title_btn.setEnabled(False)
             self.photo_check.setEnabled(False)
             self.infinite_ammo_check.setEnabled(False)
@@ -1955,6 +1967,7 @@ class VitalsTab(QWidget):
         self.speed_slider.setEnabled(True)
         self.pause_check.setEnabled(True)
         self.timer_freeze_check.setEnabled(True)
+        self.haven_no_ash_check.setEnabled(True)
         self.title_btn.setEnabled(True)
         self.photo_check.setEnabled(True)
         self.infinite_ammo_check.setEnabled(True)

@@ -556,6 +556,7 @@
    "0xb9c2c": "0xa06dc",
    "0xc5223e": "0x8f1d6e",
    "0xc523c3": "0x8f1ef3",
+   "0xc71420": "0x90c050",
    "0xf00f0d": "0xafa7cd",
    "0xf08fc2": "0xb01ed2",
    "0xf08ff0": "0xb01f00",
@@ -981,6 +982,9 @@
   },
   "MODEL_MANAGER_PTR_RVA": {
    "0x23eb5f58": "0x238020d8"
+  },
+  "MODEL_OBJECT_COUNT_RVA": {
+   "0x1f35ac0": "0x18852c0"
   },
   "MODEL_TEXTURE_TABLE_RVA": {
    "0x23be75f0": "0x235360d0"

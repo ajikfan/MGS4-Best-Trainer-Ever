@@ -7,7 +7,11 @@ rcx donnees, edx cle, r8d drapeaux, r9d taille). Pour une cle et une taille
 de la table : drapeaux sans 0x10 (chargement de zone, le jeu convertit le
 fichier sur place) -> copie neuve du modele de remplacement dans son tampon ;
 avec 0x10 (cinematique : tampon deja converti, bit 31 sur la cle) -> le
-meme tampon s'il a deja ete converti. Avant, les txn du modele absents sont
+meme tampon s'il a deja ete converti. Cle residente (bit 31) au chargement
+d'une zone : jamais de copie, le jeu garde la sienne (son tampon peut etre
+encore en service : tete residente, cheveux figes puis plantage 75FFDD) ;
+les residents ne passent que par la reprise (regle du detour en C de la DLL,
+2026-11-20). Avant, les txn du modele absents sont
 enregistres (copie neuve, nom de zone echange) s'il y a assez de places de
 textures, sinon le jeu garde son modele.
 
@@ -78,6 +82,8 @@ next_entry:
 match:
     test byte ptr [rsp + 0x30], 0x10
     jnz reuse
+    test byte ptr [rsp + 0x3b], 0x80
+    jnz done
     call textures
     test eax, eax
     jz done

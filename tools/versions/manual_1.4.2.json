@@ -250,5 +250,13 @@
  "0x1f83410": [
   26029072,
   "manuel : tableau global des instances de modele, lea r8 en EE5B2 (C6E52 en 1.4.2)"
+ ],
+ "0xc71420": [
+  9486416,
+  "manuel : entree de HSDCORP_TLA_CoalVanish (RTTI), octets identiques"
+ ],
+ "0x1f35ac0": [
+  25711296,
+  "manuel : compteur de la table des objets de ressources (fonction DF9B0 / BE810 identique)"
  ]
 }
