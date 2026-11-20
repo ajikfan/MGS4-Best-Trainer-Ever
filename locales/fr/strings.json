@@ -641,6 +641,7 @@
   "status.check_failed": "Vérification échouée : item[{item_id}] = {raw} (attendu 0 sur toutes les saves connues) - chaîne de pointeurs probablement invalide pour cette build, écriture désactivée",
   "status.check_error": "Vérification impossible : {error}",
   "status.connected": "Connecté (varbuf={varbuf}), vérification OK — jeu {game}",
+  "status.stage": " — niveau {stage} (progression {progress})",
   "status.game_reference": "1.4.1 (référence)",
   "status.process_lost": "{process} fermé ou inaccessible - reconnecte-toi",
   "window.title": "MGS4 - Trainer de recherche (mémoire live) - {version}",

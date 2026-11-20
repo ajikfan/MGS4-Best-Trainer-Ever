@@ -319,7 +319,7 @@ class TrainerWindow(QMainWindow):
         (V2.1, demande utilisateur) : on peut parcourir l'interface et lire
         les infobulles sans etre accroche au jeu. Pas de risque : chaque
         ecriture reverifie elle-meme connected/sane avant d'agir."""
-        self.status_label.setText(self.live.status)
+        self._update_status_text()
         ok = self.live.connected and self.live.sane
         self.drebin_container.setEnabled(ok)
         for i in range(self.tabs.count()):
@@ -355,6 +355,21 @@ class TrainerWindow(QMainWindow):
     def _on_advanced_toggled(self, checked: bool):
         for tab in self.item_tabs:
             tab.set_advanced(checked)
+        self._update_status_text()
+
+    def _update_status_text(self) -> None:
+        """Statut ; en mode avance, suivi du code du niveau en cours et de la
+        progression (2026-11-20, pour reperer une zone sans chercher)."""
+        text = self.live.status
+        if self.advanced_check.isChecked() and self.live.connected and self.live.sane:
+            try:
+                location = self.live.read_location()
+            except OSError:
+                location = None
+            if location is not None:
+                text += tr("status.stage", stage=location[0], progress=location[1])
+        if self.status_label.text() != text:
+            self.status_label.setText(text)
 
     def _on_language_changed(self, index: int):
         code = self._language_codes[index]
@@ -383,6 +398,8 @@ class TrainerWindow(QMainWindow):
             return
         if self.live.connected and not self.live.check_alive():
             self._apply_connection_state()
+        elif self.advanced_check.isChecked():
+            self._update_status_text()
         for tab in self.item_tabs:
             tab.refresh()
         if not (self.live.connected and self.live.sane):

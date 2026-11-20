@@ -263,6 +263,33 @@ class SpawnMixin:
             # 000014d1/00001637/000019ee/00007f1d/00008d4d. Pas une question de
             # fichiers : reglage de zone a trouver (voir memoire).
         },
+        # FROG (Haven Trooper, 2026-11-20, valide en s01a40l) : commandes
+        # relevees au combat de s01a40l (sondes 4EC50/4ECE0, 56 creations) :
+        # escouade normale 0x076979 (groupe 0x971E5A, groupe de routes de
+        # reference 0x221E90 remplace par celui de la zone), soldat 0xD0B817
+        # (ENEMY_HAVEN_SOLDIER). Avec les options relevees (parametres
+        # remplaces), le FROG ne voyait pas Snake et ne reagissait qu'au
+        # contact (options d'evenement) : il prend les options du PMC, seul
+        # l'identifiant change. Vtable relevee en 1.4.2 seulement.
+        "frog": {
+            "zone": "s01a40l",
+            "vtable": 0x12F1608,
+            "game": "1.4.2",
+            "group": SPAWN_GROUP_PMC,
+            "distance": 2000.0,
+            "unit": bytes.fromhex(
+                "0679690709000000005873e5303b065a1e975d0d62efca9e065e2cea09901e22"
+                "00597465f23b0904000000000000"),
+            "actor": bytes.fromhex(
+                "0617b8d00900000000586585a301190002c0586892a035190002c45868a3a54a"
+                "190002c8586ec5ca38190002cc5c6c25b1371900030c19000310587317a16719"
+                "0003145d18690d5d3608540102640855010264085601026408570102645976cc"
+                "309909000000005977424f820930910000556596618ac45565b5362fe1556d91"
+                "2c3ec15565498b83915d0e72ec625909e2cfcc0009000000005d0e63d7cb8b09"
+                "2ecdec0009000000005d0e67aa12ac09567d48000970170000586813ee2d1200"
+                "02bd586edf26ed1200033a0000"),
+            "setup": None,
+        },
         # Laughing Octopus, forme bete (ESSAI 2026-11-07) : commande de
         # creation relevee a l'entree du combat (s02a50l, chara nomme 4EC50
         # en 1.4.2), sans parametre de procedure ; nom d'origine 06 04A663

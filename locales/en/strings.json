@@ -641,6 +641,7 @@
   "status.check_failed": "Check failed: item[{item_id}] = {raw} (expected 0 on all known saves) - pointer chain probably invalid for this build, writing disabled",
   "status.check_error": "Check failed: {error}",
   "status.connected": "Connected (varbuf={varbuf}), check OK — game {game}",
+  "status.stage": " — stage {stage} (progress {progress})",
   "status.game_reference": "1.4.1 (reference)",
   "status.process_lost": "{process} closed or unreachable - reconnect",
   "window.title": "MGS4 - Live Memory Research Trainer - {version}",
