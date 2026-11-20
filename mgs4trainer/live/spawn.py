@@ -290,6 +290,66 @@ class SpawnMixin:
                 "02bd586edf26ed1200033a0000"),
             "setup": None,
         },
+        # Gekko nain (ENEMY_KGEK, 2026-11-20) : commande 0xA15DE8 relevee en
+        # s04a40l (sondes 4EC50/4ECE0, 10 creations, sans parametre de
+        # procedure). Retirees : points de route (0x8BCBD763, 0xDAB3C066,
+        # 0x695A2E66) et groupe de routes (0x9ECAEF62) propres a la zone,
+        # chaine du script (0x84E412) ; nom 06 a58bbe -> 09 + nom.
+        # Sans route, la fabrique D19580 ne cree rien si le mode (option
+        # 0x3BF265) n'est pas 2 ou 3 : variante relevee en mode 3 (c3).
+        # Escouade des PMC. Vtable relevee en 1.4.2 seulement.
+        "gekko_dwarf": {
+            "zone": "s04a40l",
+            # Jouees par le script de s04a40l avant les Gekko nains : module
+            # du joueur PL_PLG_KGEK (0xF68E0B), puis le reglage 0xBD13BC
+            # (D193E0) qui remplit leurs globales (modele en 238BA964...).
+            # Sans le reglage : modele 0, plantage A162D1 a leur montage.
+            "before": (bytes.fromhex("060b8ef6586d2fb32b0653dd2a00"),
+                       bytes.fromhex("06bc13bd586d131d090644685f586d55d36106083877586d28d06106db3477"
+                                     "5863cacb0206963ba9586d2fb32b060b29375863051b8a06f3fa105c7a25ca3e"
+                                     "0605462e067f453558764ce60106e7be3600"),
+                       # 0x69E6CA (reglages : 1000, 300, 4000, 12000...), joue
+                       # ensuite par le script
+                       bytes.fromhex("06cae6695b682364d101e803012c01d55768d5b27401a00f57687a8e1101e02e00")),
+            "vtable": 0x1326D08,
+            "game": "1.4.2",
+            "group": SPAWN_GROUP_PMC,
+            "distance": 2000.0,
+            # route 0x5962EC obligatoire meme en mode 3 (D19CF1 -> 75D90 :
+            # route 0 = plantage F8BB0) : celle d'origine, remplacee par la
+            # route chargee la plus proche de Snake
+            "local_routes": True,
+            "no_warp": True,
+            "unit": bytes.fromhex(
+                "0679690709000000005873e5303b065a1e975d0d62efca9e065e2cea09901e22"
+                "00597465f23b0904000000000000"),
+            "actor": bytes.fromhex(
+                "06e85da10900000000586585a301190003245865173b5b19000330586892a035"
+                "190003285868a3a54a1900032c5577424f82c8557465f23bc3556e38cf88d055"
+                "6e88dd85c155677627dcc25972ec62590619aeb2c1556cc1dce6c655640bd9b0"
+                "df5564f86087ee00"),
+            "setup": None,
+        },
+        # Poules (Animal, ESSAI 2026-11-20) : la commande 0x4B11A3 cree un
+        # troupeau (AnimalManager, vtable 13091C0 en 1.4.2) ; sa fabrique
+        # A8B790 prend une route (0x5962EC) ou une position (0x01CE53 : X, Y,
+        # Z, angle), comme en s02a90l. Options reprises de s01a20l (14
+        # creations relevees, modele 0x1137D7 hen_def) : indicateurs
+        # 0x34BC87 = 0x1100, rayon 0x43B3FD = 750, 0x2D1153 = 0x13B ; la
+        # reference de zone 0x39D650 est retiree.
+        "animal": {
+            # modele de la poule 0x1137D7 dans les fichiers de s02a90l (avec
+            # ceux de s01a20l, plantage A98EC : modele absent)
+            "zone": "s02a90l",
+            "vtable": 0x13091C0,
+            "game": "1.4.2",
+            "boss": True,
+            "position_option": bytes.fromhex("7053ce01"),
+            "distance": 2000.0,
+            "actor": bytes.fromhex(
+                "06a3114b09000000005d147053ce010900000000010000090000000001000059"
+                "6687bc3409001100005972fdb34309ee020000576453112d083b0100"),
+        },
         # Laughing Octopus, forme bete (ESSAI 2026-11-07) : commande de
         # creation relevee a l'entree du combat (s02a50l, chara nomme 4EC50
         # en 1.4.2), sans parametre de procedure ; nom d'origine 06 04A663
@@ -361,7 +421,10 @@ class SpawnMixin:
     # son arene, elle tire sur Snake en boucle et s'evapore une fois vaincue
     # (_spawn_boss : effet visuel, arene fabriquee, plus de teleportation ni
     # de procedures de script, action 15 relancee, action 30 a la defaite).
-    SPAWN_BROKEN = frozenset({"rebel_ee"})
+    # Gekko nain (2026-11-20) : cree sans plantage, mais invisible et inerte
+    # sur son point de route (mode 3 = cache, attend sans doute le signal de
+    # l'evenement qui les fait sortir a Shadow Moses) : grise en attendant.
+    SPAWN_BROKEN = frozenset({"rebel_ee", "gekko_dwarf"})
     SPAWN_ROSTER = (
         "pmc", "pmc_sa", "pmc_ee", "rebel", "rebel_sa", "rebel_ee",
         "gekko", "gekko_dwarf", "frog", "zombie", "laughing", "raging",
@@ -1046,7 +1109,7 @@ class SpawnMixin:
         """Echec d'une apparition : etape et zone dans %TEMP%/mgs4trainer_spawn.log."""
         try:
             location = self.read_location()
-        except OSError:
+        except (OSError, AttributeError):  # jeu ferme pendant l'apparition
             location = None
         name = next((k for k, v in self.SPAWN_TYPES.items() if v is kind), "?")
         line = (f"{time.strftime('%Y-%m-%d %H:%M:%S')} {name} zone={location[0] if location else '?'} "
@@ -1082,6 +1145,20 @@ class SpawnMixin:
         if not self._spawn_register(funcs, kind["zone"], kind.get("extra_resources", ())):
             return False
         self.move_loop_guard()
+        # Commandes prealables (2026-11-20, Gekko nain : module du joueur
+        # PL_PLG_KGEK que son script cree avant eux), une fois par zone.
+        if kind.get("before"):
+            self._spawn_step = "commandes prealables"
+            here = self.read_location()
+            done = getattr(self, "_spawn_before_done", set())
+            for args in kind["before"]:
+                key = (self.pid, here[0] if here else None, args)
+                if key in done:
+                    continue
+                if self._spawn_command(args, funcs["chara"], positional=4) is None:
+                    return False
+                done.add(key)
+            self._spawn_before_done = done
         # Une fois les groupes crees par le trainer dans une zone, toutes les
         # apparitions suivantes de cette zone recoivent des routes locales.
         location = self.read_location()
@@ -1101,6 +1178,8 @@ class SpawnMixin:
         actor_template = kind["actor"]
         if route_fallback:
             unit_template = self._spawn_local_routes(unit_template, position)
+            actor_template = self._spawn_local_routes(actor_template, position)
+        elif kind.get("local_routes"):
             actor_template = self._spawn_local_routes(actor_template, position)
         self._spawn_step = "place dans la liste des ennemis"
         if not self._spawn_enemy_slot(funcs):
@@ -1130,6 +1209,12 @@ class SpawnMixin:
             args = args[:name_offset] + struct.pack("<I", actor_name) + args[name_offset + 4:]
             if self._spawn_command(args, funcs["chara"], positional=positional) is None:
                 return False
+        # Gekko nain : place par sa route, pas de suite de soldat. La
+        # teleportation des soldats marque son composant de modele, et sa mise
+        # a jour suivante voulait le recaler au sol avec +0x238 (vide chez lui,
+        # plantage 99A8F5, 2026-11-20).
+        if kind.get("no_warp"):
+            return True
         # Tout de suite : ne au point (0, 0, 0), il tomberait sous la carte.
         target = self._spawn_alloc(0x100, PAGE_READWRITE)
         x, y, z = position

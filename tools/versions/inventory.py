@@ -16,7 +16,7 @@ NOT_ADDRESSES = {"SPAWN_UNIT_GROUP", "SNAKE_MOTIONS", "ALERT_SECOND_TIMER", "OCT
 # identifiants de personnage (+0xC08) ranges a cote des classes
 # constantes de spawn.py deja en adresses 1.4.2 (boss hors arene, 2026-11-11) : pas a porter
 NOT_ADDRESS_PREFIXES = ("BOSS_", "(BOSS_")
-NOT_ADDRESS_VALUES = {("SPAWN_TYPES", 0x1331950), ("ALLIES", 0x86A795), ("ALLIES", 0xC13869), ("ALLIES", 0xF1379E), ("ALLIES", 0xF13930), ("ALLIES", 0x213715)}
+NOT_ADDRESS_VALUES = {("SPAWN_TYPES", 0x1331950), ("SPAWN_TYPES", 0x12F1608), ("SPAWN_TYPES", 0x1326D08), ("SPAWN_TYPES", 0x13091C0), ("ALLIES", 0x86A795), ("ALLIES", 0xC13869), ("ALLIES", 0xF1379E), ("ALLIES", 0xF13930), ("ALLIES", 0x213715)}
 # adresses que les indices ne reconnaissent pas
 FORCE_ADDRESSES = {"ZONE_SLIDER_HOOK_RVA", "ZOOM_HOOK_RVA", "(CSM_CONTINUE, CSM_SKIP, CSM_NOOP)",
                    "(CSM_ENTRY, CSM_CONFIRM, CSM_COUNT, CSM_TABLE_LEA)",
