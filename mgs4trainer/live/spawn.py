@@ -381,6 +381,24 @@ class SpawnMixin:
             return False
         return recipe.get("game") in (None, versions.name())
 
+    def spawn_blocked(self) -> str | None:
+        """Raison de refuser une apparition, None si possible (2026-11-20,
+        promis sur Nexus le 2026-11-12 ; un essai en pause n'a pas plante,
+        refus garde par prudence).
+        "pause" : jeu en pause (menu, touche Pause, mode photo : drapeaux
+        de pause 2 et 4, comme EquipMixin) ; "cutscene" : pas de controleur
+        du joueur."""
+        funcs = self._live_funcs(self.MODEL_LIVE_FUNCS)
+        if funcs is None:
+            return None
+        code = self.proc.read_bytes(funcs["state"], 6)  # mov eax, [rip + disp] ; ret
+        flags = funcs["state"] + 6 + struct.unpack_from("<i", code, 2)[0]
+        if struct.unpack("<I", self.proc.read_bytes(flags, 4))[0] & 6:
+            return "pause"
+        if not self._octocamo_controller():
+            return "cutscene"
+        return None
+
     def spawn_enemy(self, kind: str) -> bool:
         """Lance l'apparition dans un fil separe (les appels au jeu se font
         une image a la fois). Une seule a la fois."""

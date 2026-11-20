@@ -1696,8 +1696,20 @@ class VitalsTab(QWidget):
             self.live.set_model_variants(body, face)
 
     def _on_spawn_soldier(self):
-        if self.live.connected and self.live.sane:
-            self.live.spawn_enemy(self.spawn_type_combo.currentData())
+        if not (self.live.connected and self.live.sane):
+            return
+        # jamais en pause ni en cinematique (promis sur Nexus, 2026-11-12)
+        if self.pause_check.isChecked() or self.photo_check.isChecked():
+            reason = "pause"
+        else:
+            try:
+                reason = self.live.spawn_blocked()
+            except OSError:
+                reason = None
+        if reason is not None:
+            warn_dialog(self, tr("vitals.spawn_soldier"), tr(f"vitals.spawn_blocked_{reason}"))
+            return
+        self.live.spawn_enemy(self.spawn_type_combo.currentData())
 
     def _on_no_alerts_toggled(self, checked: bool):
         if not (self.live.connected and self.live.sane):
