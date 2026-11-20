@@ -12,7 +12,8 @@ Ce que fait chaque onglet et chaque réglage, et comment utiliser les profils F1
 - **Mode avancé (valeurs brutes)** : affiche les colonnes "Valeur brute"
   et "Définir (brut)" dans les tableaux, et les objets internes masqués
   par défaut (certains font planter le jeu : à n'utiliser qu'en
-  connaissance de cause).
+  connaissance de cause). La barre de statut affiche aussi le niveau en
+  cours (code de zone et progression).
 - **Rafraîchir maintenant** / **(Re)connecter** : relit tout tout de
   suite / se raccroche au jeu (après un redémarrage du jeu par exemple).
 - **Mise à jour** : cherche une nouvelle version du trainer sur GitHub
@@ -87,9 +88,12 @@ L'onglet des réglages en direct, en plusieurs groupes :
     les boss mis K.O. (endurance vidée, vie intacte). Les autres machines
     (tanks, hélicoptères, véhicules, Metal Gear RAY, objets destructibles)
     sont détruites dans les deux modes, les Gekko nains détruits en Létal
-    et paralysés en Non létal. Boss : voir [la page des boss](boss.md) ;
+    et paralysés en Non létal. Les alliés (Meryl, Rat Patrol) sont
+    épargnés. Boss : voir [la page des boss](boss.md) ;
   - **Rail Gun / Solar Gun toujours chargés** : tir chargé à fond dès
-    l'appui sur la gâchette (et laser de Metal Gear REX au niveau 5).
+    l'appui sur la gâchette (et laser de Metal Gear REX au niveau 5) ;
+  - **FROG sans cendres** : un FROG tué reste au sol, puis disparaît plus
+    tard comme un soldat ordinaire, au lieu de partir en cendres.
 - **Snake** :
   - **Intouchable** : aucun impact n'a d'effet sur Snake (ni dégâts, ni
     projection, ni assommage) ; aux commandes de Metal Gear REX, REX
@@ -184,10 +188,11 @@ Ce qui agit sur la zone et le scénario :
   - **Faire apparaître (expérimental)** : fait apparaître le personnage
     choisi dans la liste à côté de Snake, même dans une zone sans soldats
     (soldat PMC des trois régions, rebelle du Moyen-Orient ou d'Amérique
-    du Sud, Gekko, Meryl, et Laughing Octopus en 1.4.2 seulement ; les
-    personnages grisés ne sont pas encore disponibles ou pas pour la
-    version du jeu détectée). L'apparition ne met plus les ennemis en
-    alerte. Le Gekko apparaît dans toutes les zones et tire sur Snake et
+    du Sud, Gekko, Meryl, et en 1.4.2 seulement Laughing Octopus, FROG
+    et Poules ; les personnages grisés ne sont pas encore disponibles ou
+    pas pour la version du jeu détectée). L'apparition ne met plus les
+    ennemis en alerte. Elle est refusée en pause (menu du jeu, touche
+    Pause, mode photo) et en cinématique. Le Gekko apparaît dans toutes les zones et tire sur Snake et
     sur les rebelles ; PMC et Gekko apparaissent aussi dans l'arène de
     Screaming Mantis. Limites : patrouille pas toujours suivie ; laser du
     Gekko en damier hors des zones à Gekko, roquettes des rebelles sans
@@ -233,25 +238,28 @@ Ce qui agit sur la zone et le scénario :
   - **Ajouter une pièce…** (ou clic droit sur un modèle de la liste) pose
     n'importe quel modèle sur le modèle choisi ; elle arrive décochée.
     **Enlever de la liste** retire une pièce ajoutée.
-  - **Tête** : la tête de Snake, la tête du modèle seule (celle de Snake
-    masquée), ou une tête à part (visages de Old Snake, tête de Naomi).
-  - Pour le modèle en jeu, cocher ou décocher une pièce ou changer de
-    tête s'applique **tout de suite**. Pour un autre modèle, prépare les
+  - Le modèle garde sa propre tête ; celle de Snake est toujours masquée.
+    Quand un modèle a plusieurs têtes à part (costume de Snake), une
+    seule est cochée.
+  - Pour le modèle en jeu, cocher ou décocher une pièce s'applique **tout
+    de suite**. Pour un autre modèle, prépare les
     cases puis clique sur **Appliquer les changements** (ou double-clic
     sur le modèle). **En jeu** rappelle le modèle porté.
   - **Remettre Snake d'origine** : combinaison OctoCamo, sans FaceCamo,
     tenue et visage automatiques, avec son vrai corps et son vrai visage
     (en cinématique : seulement le corps et le visage).
   - Un modèle et une apparence imposée (corps et visage ci-dessus)
-    s'excluent : appliquer l'une retire l'autre. Un modèle qui masque la
-    tête de Snake retire aussi le FaceCamo porté. Le corps imposé est
+    s'excluent : appliquer l'une retire l'autre. Appliquer un modèle
+    retire aussi le FaceCamo porté. Le corps imposé est
     réappliqué tout seul après un changement de zone.
   - Le nombre de textures à charger s'affiche sous les pièces. Les
     textures des modèles appliqués s'additionnent jusqu'au prochain
     chargement : **Libérer la mémoire** recharge le dernier point de
     passage (menu pause fermé) et le modèle revient seul.
   - Le modèle tient aux chargements, aux cinématiques et aux changements
-    de tenue, et se change aussi pendant une cinématique. Les petits modèles (enfants, Little
+    de tenue, et se change aussi pendant une cinématique (en changer
+    plusieurs fois dans une même cinématique peut faire planter le
+    jeu). Les petits modèles (enfants, Little
     Gray) sont mis à la taille de Snake, les grands (Psycho Mantis)
     réduits.
   - Formes Bête : les pieuvres d'Octopus, les ailes et missiles de Raven,

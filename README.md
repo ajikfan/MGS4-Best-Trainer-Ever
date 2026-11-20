@@ -51,20 +51,22 @@ des versions.
 - [Comment ça marche](docs/fonctionnement.md)
 - [Maintenance](docs/maintenance.md) (compatibilité, build, organisation du code)
 
-## Dernière version : V2.9.3
+## Dernière version : V2.9.4
 
-- Nouvel onglet **Apparence** : liste des modèles avec recherche et
-  filtres, **pièces à cocher** (une pièce retirée reste dans la liste,
-  le modèle en jeu change tout de suite), section **Tête**.
-- Formes Bête complètes : pieuvres d'Octopus, ailes et missiles de Raven,
-  bras et poupées de Mantis.
-- Bien plus de modèles nommés ; **Libérer la mémoire** ; **Remettre
-  Snake d'origine** ; modèle et apparence imposée s'excluent.
-- ⚠️ Fonctions **expérimentales** : risque d'incohérences ou de plantage
-  du jeu, sauvegarde avant d'essayer.
-- Livrée par la **mise à jour intégrée** ; DLL inchangée.
+- **FROG sans cendres** : un FROG tué reste au sol comme un soldat.
+- **Un coup, un mort** épargne les alliés (Meryl contre Screaming Mantis).
+- **Faire apparaître** : FROG et Poules (1.4.2) ; refusé en pause et en
+  cinématique.
+- **Apparence** : tête du modèle, tête de Snake toujours masquée (même
+  après un changement de zone) ; plus de plantage au retour au menu, en
+  fin d'acte ou au chargement d'une sauvegarde.
+- **Mode avancé** : niveau en cours dans la barre de statut.
+- ⚠️ Changer plusieurs fois de modèle dans une même cinématique peut
+  encore faire planter le jeu.
+- Livrée par la **mise à jour intégrée** ; la DLL a changé : relance le
+  jeu après la mise à jour.
 
-Avec la **V2.9.2** : personnages complets (pièces et couches).
+Avec la **V2.9.3** : onglet Apparence, formes Bête complètes.
 
 Détail dans [Nouveautés par version](docs/nouveautes.md).
 

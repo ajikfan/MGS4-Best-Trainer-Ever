@@ -4,6 +4,43 @@
 
 Details of the latest versions. The full history is also in the trainer's **Help** button and on the [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases) page.
 
+## What's new in V2.9.4
+
+### Combat
+
+- New **No FROG Ashes** box (Weapons and combat): a killed FROG stays on
+  the ground and disappears later like a regular soldier, instead of
+  turning to ashes. Nothing changes for a FROG put to sleep or knocked
+  out.
+- **One Shot, One Kill** spares allies (Meryl, Rat Patrol): Meryl no
+  longer dies at the start of the Screaming Mantis fight.
+
+### Spawn
+
+- New characters, on 1.4.2: **FROG (Haven Trooper)**, who fights like a
+  soldier, and **Chickens** (a small flock next to Snake).
+- Spawning is **refused while paused** (game menu, Pause key, photo mode)
+  and **during cutscenes**, with a message.
+
+### Appearance
+
+- The **Head** section is gone: the model keeps its own head, and Snake's
+  is always hidden, **including after an area change**.
+- No more crash when **returning to the main menu**, at the **end of an
+  act** or when **loading a save** after a model change.
+- Faster model search (done by the DLL inside the game).
+- Parts better attributed: Snake's hair no longer goes to Campbell,
+  Meryl's weapon is no longer a part of her model; an unnamed part takes
+  the name of the chosen model.
+- ⚠️ Changing the model **several times** during the same cutscene can
+  still crash the game.
+
+### Misc
+
+- **Advanced mode**: the status bar shows the current stage (area code
+  and progress).
+- The trainer's DLL changed: **restart the game** after the update.
+
 ## What's new in V2.9.3
 
 ### Appearance tab

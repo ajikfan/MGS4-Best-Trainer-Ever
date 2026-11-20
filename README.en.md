@@ -49,20 +49,22 @@ up the compatible version, the warnings and the version history.
 - [How it works](docs/en/how-it-works.md)
 - [Maintenance](docs/en/maintenance.md) (compatibility, build, code layout)
 
-## Latest version: V2.9.3
+## Latest version: V2.9.4
 
-- New **Appearance** tab: model list with search and filters, **parts to
-  check** (a removed part stays in the list, the model in game changes
-  right away), **Head** section.
-- Complete Beast forms: Octopus's tentacles, Raven's wings and missiles,
-  Mantis's arms and dolls.
-- Many more models named; **Free memory**; **Restore Snake**; model and
-  imposed appearance exclude each other.
-- ⚠️ **Experimental** features: risk of inconsistencies or game crashes,
-  save before trying.
-- Delivered by the **built-in update**; DLL unchanged.
+- **No FROG Ashes**: a killed FROG stays on the ground like a soldier.
+- **One Shot, One Kill** spares allies (Meryl against Screaming Mantis).
+- **Spawn**: FROG and Chickens (1.4.2); refused while paused and during
+  cutscenes.
+- **Appearance**: the model's own head, Snake's head always hidden (even
+  after an area change); no more crash when returning to the menu, at the
+  end of an act or when loading a save.
+- **Advanced mode**: current stage in the status bar.
+- ⚠️ Changing the model several times in the same cutscene can still
+  crash the game.
+- Delivered by the **built-in update**; the DLL changed: restart the game
+  after the update.
 
-With **V2.9.2**: complete characters (pieces and layers).
+With **V2.9.3**: Appearance tab, complete Beast forms.
 
 Details in [What's new in each version](docs/en/whats-new.md).
 

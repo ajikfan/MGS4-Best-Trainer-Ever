@@ -4,6 +4,44 @@
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
+## Nouveautés de la V2.9.4
+
+### Combat
+
+- Nouvelle case **FROG sans cendres** (Armes et combat) : un FROG tué
+  reste au sol, puis disparaît plus tard comme un soldat ordinaire, au
+  lieu de partir en cendres. Rien ne change pour un FROG endormi ou
+  assommé.
+- **Un coup, un mort** épargne les alliés (Meryl, Rat Patrol) : Meryl ne
+  meurt plus au début du combat contre Screaming Mantis.
+
+### Faire apparaître
+
+- Nouveaux personnages, en 1.4.2 : **FROG (Haven Trooper)**, qui se bat
+  comme un soldat, et **Poules** (un petit troupeau à côté de Snake).
+- L'apparition est **refusée en pause** (menu du jeu, touche Pause, mode
+  photo) et **en cinématique**, avec un message.
+
+### Apparence
+
+- La section **Tête** disparaît : le modèle garde sa propre tête, et celle
+  de Snake est toujours masquée, **y compris après un changement de
+  zone**.
+- Plus de plantage au **retour au menu principal**, en **fin d'acte** ou
+  au **chargement d'une sauvegarde** après un changement de modèle.
+- Recherche des modèles plus rapide (faite par la DLL dans le jeu).
+- Pièces mieux attribuées : les cheveux de Snake ne vont plus à Campbell,
+  l'arme de Meryl n'est plus une pièce de son modèle ; une pièce sans nom
+  porte celui du modèle choisi.
+- ⚠️ Changer **plusieurs fois** de modèle pendant une même cinématique peut
+  encore faire planter le jeu.
+
+### Divers
+
+- **Mode avancé** : la barre de statut affiche le niveau en cours (code de
+  zone et progression).
+- La DLL du trainer a changé : **relance le jeu** après la mise à jour.
+
 ## Nouveautés de la V2.9.3
 
 ### Onglet Apparence

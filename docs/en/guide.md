@@ -11,7 +11,8 @@ What each tab and each setting does, and how to use profiles F1 to F11.
   version (1.4.1 or 1.4.2).
 - **Advanced mode (raw values)**: shows the "Raw Value" and "Set (raw)"
   columns in the tables, and the internal items hidden by default (some
-  crash the game: only use it if you know what you are doing).
+  crash the game: only use it if you know what you are doing). The status
+  bar also shows the current stage (area code and progress).
 - **Refresh Now** / **(Re)connect**: reads everything again right away /
   re-attaches to the game (after restarting the game, for example).
 - **Update**: looks for a new trainer version on GitHub (the button turns
@@ -83,10 +84,12 @@ The live settings tab, in several groups:
     and bosses are knocked out (stamina drained, health untouched).
     Other machines (tanks, helicopters, vehicles, Metal Gear RAY,
     destructible objects) are destroyed in both modes, Dwarf Gekko
-    destroyed in Lethal and paralyzed in Non-lethal. Bosses: see [the
-    bosses page](boss.md);
+    destroyed in Lethal and paralyzed in Non-lethal. Allies (Meryl, Rat
+    Patrol) are spared. Bosses: see [the bosses page](boss.md);
   - **Rail Gun / Solar Gun Always Charged**: fully charged shot as soon
-    as you pull the trigger (and Metal Gear REX's laser at level 5).
+    as you pull the trigger (and Metal Gear REX's laser at level 5);
+  - **No FROG Ashes**: a killed FROG stays on the ground and disappears
+    later like a regular soldier, instead of turning to ashes.
 - **Snake**:
   - **Untouchable**: no impact affects Snake (no damage, no knockback, no
     knockout); when piloting Metal Gear REX, REX ignores hits too (no
@@ -178,9 +181,11 @@ What acts on the area and the story:
   - **Spawn (experimental)**: makes the character picked in the list
     appear next to Snake, even in an area with no soldiers (PMC soldier
     from the three regions, Middle East or South American rebel, Gekko,
-    Meryl, and Laughing Octopus on 1.4.2 only; greyed-out characters are
-    not available yet, or not for the detected game version). Spawning
-    no longer alerts the enemies. The Gekko appears in every area and
+    Meryl, and on 1.4.2 only Laughing Octopus, FROG and Chickens;
+    greyed-out characters are not available yet, or not for the detected
+    game version). Spawning no longer alerts the enemies. It is refused
+    while paused (game menu, Pause key, photo mode) and during
+    cutscenes. The Gekko appears in every area and
     shoots at Snake and at the rebels; PMCs and Gekko also appear in
     Screaming Mantis's arena. Limits: patrol not always followed; Gekko
     laser shown as a checkerboard outside Gekko areas, rebel rockets with
@@ -224,25 +229,26 @@ What acts on the area and the story:
   - **Add a part…** (or right-click a model in the list) puts any model on
     the chosen model; it arrives unchecked. **Remove from list** removes
     an added part.
-  - **Head**: Snake's head, the model's own head only (Snake's hidden), or
-    a separate head (Old Snake's faces, Naomi's head).
-  - For the model in game, checking or unchecking a part or changing the
-    head applies **right away**. For another model, set the boxes then
+  - The model keeps its own head; Snake's is always hidden. When a model
+    has several separate heads (Snake's costume), only one is checked.
+  - For the model in game, checking or unchecking a part applies **right
+    away**. For another model, set the boxes then
     click **Apply changes** (or double-click the model). **In game**
     reminds the worn model.
   - **Restore Snake**: OctoCamo suit, no FaceCamo, automatic outfit and
     face, with his real body and face (during a cutscene: only body and
     face).
   - A model and an imposed appearance (body and face above) exclude each
-    other: applying one removes the other. A model that hides Snake's
-    head also removes the worn FaceCamo. The imposed body is applied
+    other: applying one removes the other. Applying a model also removes
+    the worn FaceCamo. The imposed body is applied
     again on its own after an area change.
   - The number of textures to load shows under the parts. Textures of
     applied models add up until the next load: **Free memory** reloads the
     last checkpoint (pause menu closed) and the model comes back on its
     own.
   - The model holds through loads, cutscenes and outfit changes, and can
-    be changed during a cutscene. Small models (children, Little Gray) are brought to
+    be changed during a cutscene (changing it several times in the same
+    cutscene can crash the game). Small models (children, Little Gray) are brought to
     Snake's size, big ones (Psycho Mantis) scaled down.
   - Beast forms: Octopus's tentacles, Raven's wings and missiles, Mantis's
     arms and dolls are frozen in a pose from the fight.
