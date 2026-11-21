@@ -346,6 +346,9 @@ class SpawnMixin:
             "boss": True,
             "position_option": bytes.fromhex("7053ce01"),
             "distance": 2000.0,
+            # l'animal rejoint le troupeau de la zone s'il y en a un (2026-11-21) :
+            # la reussite se juge au nombre d'animaux, pas de troupeaux
+            "herd": True,
             "actor": bytes.fromhex(
                 "06a3114b09000000005d147053ce010900000000010000090000000001000059"
                 "6687bc3409001100005972fdb34309ee020000576453112d083b0100"),
@@ -1241,8 +1244,10 @@ class SpawnMixin:
         """Boss cree seul (ESSAI) : ressources de sa zone, puis sa commande de
         creation (chara nomme), position de depart ecrite dans l'option
         position_option : 09 X (int32), 01 Y (int16), 09 Z (int32)."""
+        self._spawn_step = "ressources de la zone du boss"
         if not self._spawn_register(funcs, kind["zone"]):
             return False
+        self._spawn_step = "commande de creation"
         self._spawn_names = getattr(self, "_spawn_names", self.SPAWN_FIRST_NAME) + 2
         args = self._spawn_named(kind["actor"], self._spawn_names + 1)
         at = args.index(kind["position_option"]) + len(kind["position_option"])
@@ -1258,9 +1263,14 @@ class SpawnMixin:
         if kind.get("no_relocate") and not (self._spawn_boss_no_relocate() and self._spawn_boss_fallback()):
             return False
         before = self._spawn_tasks(kind["vtable"])
+        animals_before = self._spawn_herd_animals(before) if kind.get("herd") else set()
         if self._spawn_command(args, funcs["chara_named"], positional=self.SPAWN_POSITIONAL_SIZE) is None:
             return False
-        created = self._spawn_tasks(kind["vtable"]) - before
+        self._spawn_step = "verification apres creation"
+        after = self._spawn_tasks(kind["vtable"])
+        if kind.get("herd"):  # nouvel animal dans un troupeau, existant ou nouveau
+            return bool(self._spawn_herd_animals(after) - animals_before)
+        created = after - before
         if len(created) != 1:
             return False
         boss = created.pop()
@@ -1269,6 +1279,24 @@ class SpawnMixin:
         if kind.get("loop_action"):
             threading.Thread(target=self._spawn_boss_loop, args=(boss, kind["loop_action"]), daemon=True).start()
         return True
+
+    # Troupeau (AnimalManager) : liste de ses animaux entre +0x10 et +0xC10
+    # (nombre en +0xC10), fiches Work@Animal<Espece> (2026-11-21, s02a10l).
+    SPAWN_HERD_LIST, SPAWN_HERD_LIST_END = 0x10, 0xC10
+
+    def _spawn_herd_animals(self, herds) -> set[int]:
+        """Fiches des animaux de ces troupeaux."""
+        out = set()
+        for herd in herds:
+            try:
+                raw = self.proc.read_bytes(herd + self.SPAWN_HERD_LIST, self.SPAWN_HERD_LIST_END - self.SPAWN_HERD_LIST)
+            except OSError:
+                continue
+            for k in range(0, len(raw), 8):
+                work = struct.unpack_from("<Q", raw, k)[0]
+                if 0x10000 < work < 0x7FFFFFFFFFFF:
+                    out.add(work)
+        return out
 
     # Relance d'action (ESSAI 2026-11-11) : sans arene, Octopus ne decide plus
     # rien apres une action (la suite attend un point de l'arene) et reste
