@@ -277,6 +277,16 @@ class SpawnMixin:
             "game": "1.4.2",
             "group": SPAWN_GROUP_PMC,
             "distance": 2000.0,
+            # Options du PMC -> le jeu demande l'accessoire 0xEFC196 (7 os,
+            # un maillage, rattache par .cnp ; arme / equipement du PMC), absent
+            # de s01a40l : acces nul en A98EC (dump du 2026-11-22, rdi =
+            # 0x0DEFC196 ; deja le 2026-11-21). Charge depuis s01a10l avec le
+            # .txn 0x41678F qui porte ses 4 textures (0x54CE8F, 0x54F836,
+            # 0x54C799, 0x4AA638).
+            "extra_resources": (("s01a10l", 0xEFC196), ("s01a10l", 0x41678F)),
+            # IA a l'arret apres l'apparition (immobile, route attribuee ignoree,
+            # 2026-11-22 progression 37) : relancee comme Meryl en la replacant
+            "kick": True,
             "unit": bytes.fromhex(
                 "0679690709000000005873e5303b065a1e975d0d62efca9e065e2cea09901e22"
                 "00597465f23b0904000000000000"),
