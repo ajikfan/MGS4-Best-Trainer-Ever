@@ -842,5 +842,7 @@
   "vitals.model_swap_old_snake_face_burnt": "Visage brûlé de Old Snake",
   "vitals.model_swap_old_snake_face": "Visage de Old Snake",
   "vitals.model_swap_meiling_hat": "Cheveux et chapeau de Mei Ling (manteau)",
-  "vitals.model_swap_akiba_tails": "Basques de la queue-de-pie d'Akiba (mariage)"
+  "vitals.model_swap_akiba_tails": "Basques de la queue-de-pie d'Akiba (mariage)",
+  "vitals.model_npc_apply": "Sur le PNJ le plus proche",
+  "vitals.model_npc_apply_tooltip": "Donne le modèle sélectionné au personnage le plus proche de Snake (moins de 3 m). Essai : il retrouve son apparence au prochain chargement."
 }

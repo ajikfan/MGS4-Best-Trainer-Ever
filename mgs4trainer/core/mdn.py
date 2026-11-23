@@ -50,14 +50,14 @@ def bone_ids(data: bytes) -> list[tuple[int, int]]:
 MIN_SHARED = 0.5  # part des os de source presents tels quels dans skeleton
 
 
-def skeleton_mapping(source: bytes, skeleton: bytes) -> dict[int, int] | None:
+def skeleton_mapping(source: bytes, skeleton: bytes, min_shared: float = MIN_SHARED) -> dict[int, int] | None:
     """Numero d'os de source -> numero dans skeleton, par identifiant ; un
     os absent suit son ancetre le plus proche present (doigts, visage,
     accessoires d'un autre personnage : s03a70l, 120 os dont 110 communs).
     None si la racine n'est pas commune ou trop peu d'os en commun."""
     target = {bone: index for index, (bone, _parent) in enumerate(bone_ids(skeleton))}
     source_bones = bone_ids(source)
-    if not source_bones or sum(bone in target for bone, _p in source_bones) < MIN_SHARED * len(source_bones):
+    if not source_bones or sum(bone in target for bone, _p in source_bones) < min_shared * len(source_bones):
         return None
     mapping = {}
     for index in range(len(source_bones)):
@@ -72,6 +72,22 @@ def skeleton_mapping(source: bytes, skeleton: bytes) -> dict[int, int] | None:
 
 def skeleton_compatible(source: bytes, skeleton: bytes) -> bool:
     return skeleton_mapping(source, skeleton) is not None
+
+
+NPC_COVER = 0.8  # part des os du PNJ presents dans le modele
+
+
+def npc_compatible(source: bytes, skeleton: bytes) -> bool:
+    """Modele posable sur le squelette d'un PNJ (2026-11-23) : il en couvre
+    presque tous les os (corps d'un soldat : 62 os sur 71 pour Meryl, Mei Ling
+    et Naomi), et chacun de ses os en plus suit un parent commun. La regle de
+    Snake (moitie des os du MODELE dans le squelette) refusait Naomi en blouse
+    (62/128) alors que tout son corps a ses os chez le soldat."""
+    target = bone_ids(skeleton)
+    have = {bone for bone, _p in bone_ids(source)}
+    if not target or sum(bone in have for bone, _p in target) < NPC_COVER * len(target):
+        return False
+    return skeleton_mapping(source, skeleton, 0.0) is not None
 
 
 BONE_LOCAL, BONE_WORLD, BONE_MAX, BONE_MIN = 0x10, 0x20, 0x30, 0x40  # positions (x, y, z, w)
@@ -181,7 +197,7 @@ def _bones_with_source_rest(source: bytes, skeleton: bytes) -> bytes:
     return bytes(table)
 
 
-def build_hybrid(source: bytes, skeleton: bytes) -> bytes:
+def build_hybrid(source: bytes, skeleton: bytes, min_shared: float = MIN_SHARED) -> bytes:
     """Geometrie de source sur la table d'os de skeleton (palettes renumerotees),
     agrandie si ses jambes sont nettement plus courtes (enfants, singe)."""
     factor = leg_scale(source, skeleton)
@@ -189,7 +205,7 @@ def build_hybrid(source: bytes, skeleton: bytes) -> bytes:
     # deux fois plus grand, il s'enfoncait dans le sol), meme bornes inversees
     if SCALE_MIN <= factor <= SCALE_MAX or 1 / SCALE_MAX <= factor <= 1 / SCALE_MIN:
         source = scaled(source, factor)
-    remap = skeleton_mapping(source, skeleton)
+    remap = skeleton_mapping(source, skeleton, min_shared)
     if remap is None:
         raise ValueError("squelettes incompatibles")
     src = MdnHeader(source)

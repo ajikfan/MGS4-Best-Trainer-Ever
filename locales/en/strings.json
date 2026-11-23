@@ -842,5 +842,7 @@
   "vitals.model_swap_old_snake_face_burnt": "Old Snake's burnt face",
   "vitals.model_swap_old_snake_face": "Old Snake's face",
   "vitals.model_swap_meiling_hat": "Mei Ling's hair and hat (coat)",
-  "vitals.model_swap_akiba_tails": "Akiba's tailcoat tails (wedding)"
+  "vitals.model_swap_akiba_tails": "Akiba's tailcoat tails (wedding)",
+  "vitals.model_npc_apply": "On the nearest NPC",
+  "vitals.model_npc_apply_tooltip": "Gives the selected model to the character closest to Snake (within 3 m). Experimental: it gets its own look back at the next load."
 }

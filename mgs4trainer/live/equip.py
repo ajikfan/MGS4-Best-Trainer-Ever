@@ -947,6 +947,157 @@ class EquipMixin:
             self._model_load_set([])  # detour coupe : le jeu reprend ses chargements
         return True
 
+    # Modele d'un PNJ (ESSAI 2026-11-23, demande : Meryl sur un rebelle qui
+    # prend les echelles). Meme recette que le Snake de cinematique : modele
+    # hybride (geometrie du source sur le squelette du PNJ, meme table d'os),
+    # enregistre et converti par le jeu, puis A9080(instance, donnees) sur
+    # l'instance du PNJ, jeu en pause. Rien ne le garde aux chargements.
+    NPC_MODEL_RADIUS = 3000.0   # mm autour de Snake
+    NPC_MODEL_MIN_BONES = 30    # personnages (decor : 8 os au plus)
+    NPC_MODEL_LOD_OFFSETS = (0x158, 0x160)  # instances des niveaux moyen et simplifie
+
+    def set_npc_model(self, source: int, layers=(), pieces=None) -> bool:
+        """Le PNJ le plus proche de Snake prend l'apparence du modele source."""
+        return self._start_equip(self._set_npc_model_live, source, tuple(layers),
+                                 None if pieces is None else tuple(pieces))
+
+    def _npc_model_instance(self, snake, zone: str) -> tuple[int, int, bytes] | None:
+        """(instance, identifiant du mdn, mdn) du personnage le plus proche de
+        Snake (os racine, matrice en +0x1E0). Autour de Snake il y a d'abord
+        ses pieces (visage a 7 cm, equipement a 25 cm) et du decor anime
+        (releve s02a20l, 2026-11-23) : seul compte un modele d'au moins
+        NPC_MODEL_MIN_BONES os ; le corps de Snake (a 0 cm) est exclu."""
+        from mgs4trainer.core import mdn
+        files = self._model_files()
+        here = dict(files.zone_resources(zone))
+        candidates = []
+        count = self.MODEL_INSTANCE_LIST_SLOTS
+        table = struct.unpack(f"<{count}Q", self.proc.read_bytes(self.base + self.MODEL_INSTANCE_LIST_RVA, count * 8))
+        for pointer in table:
+            if not 0x10000 <= pointer < 0x7FF000000000:
+                continue
+            try:
+                ident = struct.unpack("<I", self.proc.read_bytes(pointer + self.MODEL_INSTANCE_ID, 4))[0]
+                bone = struct.unpack("<16f", self.proc.read_bytes(pointer + 0x1E0, 64))
+            except OSError:
+                continue
+            x, y, z = bone[12], bone[13], bone[14]
+            if not all(v == v and abs(v) < 1e7 for v in (x, y, z)) or not self._model_instance_alive(pointer):
+                continue
+            d = ((x - snake[0]) ** 2 + (z - snake[2]) ** 2) ** 0.5
+            if d < 150 or d > self.NPC_MODEL_RADIUS or abs(y - snake[1]) > 2500:
+                continue  # Snake (son modele est a sa place) ou trop loin
+            candidates.append((d, pointer, ident & 0xFFFFFF))
+        for _d, pointer, ident in sorted(candidates):
+            key = 0x0D000000 | ident
+            path = here.get(key) or next((p for p in files.entries if p.endswith(f"/{ident:08x}.mdn")), None)
+            if path is None:
+                continue
+            try:
+                data = files.read(path)
+                if mdn.MdnHeader(data).bone_count >= self.NPC_MODEL_MIN_BONES:
+                    return pointer, ident, data
+            except (OSError, ValueError, struct.error):
+                continue
+        return None
+
+    def _set_npc_model_live(self, source: int, layers, pieces) -> bool:
+        from mgs4trainer.core import mdn
+        funcs = self._live_funcs(self.MODEL_LIVE_FUNCS)
+        spawn_funcs = self._live_funcs(self.SPAWN_FUNCS)
+        rebuild = self._live_funcs(self.MODEL_INSTANCE_FUNCS)
+        location = self.read_location()
+        snake = self.player_position()
+        if None in (funcs, spawn_funcs, rebuild, location, snake):
+            return self._model_fail("PNJ etape 1")
+        found = self._npc_model_instance(snake, location[0])
+        if found is None:
+            return self._model_fail("aucun PNJ a moins de 3 m")
+        instance, target_id, skeleton = found
+        files = self._model_files()
+        nodes = self._spawn_resource_nodes()
+        present = {key & 0x7FFFFFFF for key in nodes}
+        datas, missing, zone = [], {}, None
+        for model in (source, *layers):
+            found = self._model_swap_source(model, location[0])
+            if found is None and model != source:
+                found = self._model_layer_source(model, source)
+            if found is None:
+                return self._model_fail("PNJ etape 3")
+            model_zone, model_path, txns = found
+            zone = zone or model_zone
+            try:
+                datas.append(self._model_source_data(model, model_path, model_zone, pieces if model == source else None))
+            except (ValueError, struct.error, IndexError):
+                return self._model_fail("PNJ etape 4")
+            waiting = {key for key, _data in missing.get(model_zone, [])}
+            missing.setdefault(model_zone, []).extend(
+                (key, files.read(p)) for key, p in txns if key not in present and key not in waiting)
+        try:
+            data = datas[0]
+            cnp = self._model_cnp(source, zone)
+            for layer in datas[1:]:
+                data = mdn.merge(data, layer, cnp)
+            if not mdn.npc_compatible(data, skeleton):
+                return self._model_fail(f"squelettes trop differents ({source:06x} sur {target_id:06x})")
+            hybrid = mdn.build_hybrid(data, skeleton, 0.0)
+        except (ValueError, struct.error, IndexError):
+            return self._model_fail("PNJ etape 5")
+        textures = sum(struct.unpack_from(">I", d, 8)[0]
+                       for entries in missing.values() for key, d in entries if key >> 24 == 0x03)
+        if textures and textures > self._model_texture_free():
+            return self._model_fail("textures")
+        if not self._model_wait_loader_idle():
+            return self._model_fail("chargement en cours")
+        alias = self._model_alias(source ^ target_id ^ self.MODEL_SWAP_XOR)
+        self._equip_log(f"modele PNJ : {source:06x} sur {target_id:06x} (instance {instance:#x}), cle {alias:#x}, "
+                        f"txn {({z: [hex(k) for k, _d in e] for z, e in missing.items()})}")
+        for txn_zone, entries in missing.items():
+            if entries and not self._spawn_register_entries(spawn_funcs, txn_zone, entries):
+                return self._model_fail("PNJ etape 8")
+        if not self._spawn_register_entries(spawn_funcs, zone, [(alias, hybrid)]):
+            return self._model_fail("PNJ etape 9")
+        nodes = self._spawn_resource_nodes()
+        if alias not in nodes:
+            return self._model_fail("PNJ etape 10")
+        new = struct.unpack("<Q", self.proc.read_bytes(nodes[alias] + 0x20, 8))[0]
+        # instance toujours la meme (le PNJ a pu disparaitre pendant l'enregistrement)
+        if (struct.unpack("<I", self.proc.read_bytes(instance + self.MODEL_INSTANCE_ID, 4))[0] & 0xFFFFFF != target_id
+                or not self._model_instance_alive(instance) or not new):
+            return self._model_fail("PNJ disparu")
+        # niveaux de detail : instances a part, hors du tableau global, accrochees
+        # a l'instance principale (+0x158 moyen, +0x160 simplifie ; donnees en
+        # +0x70 = celles de reb_def_mid / reb_def_low ; identifiant +0x14 vide).
+        # Sans elles, le PNJ reprenait son apparence de loin (2026-11-23).
+        datas = {struct.unpack("<Q", self.proc.read_bytes(node + 0x20, 8))[0] for node in nodes.values()}
+        lods = []
+        for offset in self.NPC_MODEL_LOD_OFFSETS:
+            sub = struct.unpack("<Q", self.proc.read_bytes(instance + offset, 8))[0]
+            if not 0x10000 <= sub < 0x7FF000000000:
+                continue
+            shown = struct.unpack("<Q", self.proc.read_bytes(sub + self.MODEL_INSTANCE_DATA, 8))[0]
+            if shown in datas and shown != new:
+                lods.append(sub)
+        call = self.speed.game_call
+        state = call(funcs["state"])
+        if state is None:
+            return self._model_fail("PNJ etape 11")
+        pause = not (state & 6)
+        if pause:
+            call(funcs["pause_set"], self.MODEL_PAUSE_FLAG)
+        try:
+            result = call(rebuild["rebuild"], instance, new)
+            lod_done = sum(1 for sub in lods if call(rebuild["rebuild"], sub, new) == sub) if result == instance else 0
+            time.sleep(0.1)
+        finally:
+            if pause:
+                self._model_pause_clear(funcs)
+        if result != instance:
+            return self._model_fail("reconstruction refusee")
+        self._equip_log(f"modele PNJ : instance refaite, niveaux de detail {lod_done}/{len(lods)}")
+        self.equip_error = None
+        return True
+
     # Modele -> variante de visage de Snake qui lui donne sa tete (2026-11-16) :
     # camouflage lave de Raging Raven (0x0F874D, sans tete) + visage 0xB,
     # celui du FaceCamo Raging Beauty (objet 0x23).

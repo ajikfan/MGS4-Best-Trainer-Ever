@@ -284,6 +284,9 @@ class VitalsTab(QWidget):
         self.model_swap_apply_btn = QPushButton(tr("vitals.model_apply"))
         self.model_swap_apply_btn.setToolTip(tr("vitals.model_apply_pending_tooltip"))
         self.model_swap_apply_btn.clicked.connect(self._on_model_swap_apply)
+        self.model_npc_btn = QPushButton(tr("vitals.model_npc_apply"))
+        self.model_npc_btn.setToolTip(tr("vitals.model_npc_apply_tooltip"))
+        self.model_npc_btn.clicked.connect(self._on_model_npc_apply)
         self.model_reset_btn = QPushButton(tr("vitals.model_swap_reset"))
         self.model_reset_btn.setToolTip(tr("vitals.model_swap_reset_tooltip"))
         self.model_reset_btn.clicked.connect(self._on_model_swap_reset)
@@ -302,7 +305,7 @@ class VitalsTab(QWidget):
         self.model_free_btn.clicked.connect(self._on_model_free_memory)
         self.zone_buttons += [self.model_search, self.model_filter, self.model_swap_find_btn, self.model_list,
                               self.model_pieces_list, self.model_piece_add_btn, self.model_piece_drop_btn,
-                              self.model_swap_apply_btn,
+                              self.model_swap_apply_btn, self.model_npc_btn,
                               self.model_reset_btn,
                               self.model_free_btn]
 
@@ -438,6 +441,7 @@ class VitalsTab(QWidget):
         bottom_row.addWidget(self.model_memory_label)
         bottom_row.addWidget(self.model_free_btn)
         bottom_row.addWidget(self.model_reset_btn)
+        bottom_row.addWidget(self.model_npc_btn)
         bottom_row.addWidget(self.model_swap_apply_btn)
         swap_layout.addLayout(bottom_row)
         page_layout.addWidget(swap_group, 1)
@@ -1646,6 +1650,36 @@ class VitalsTab(QWidget):
         if not all(self._model_room_ok(m) for m in (source,) + layers):
             return
         self._apply_model(source, list(layers), list(pieces), hide)
+
+    def _on_model_npc_apply(self):
+        """Modele selectionne donne au PNJ le plus proche de Snake (ESSAI
+        2026-11-23 ; perdu au prochain chargement)."""
+        if not (self.live.connected and self.live.sane):
+            return
+        source, pieces, layers, _hide = self._model_pending()
+        if source is None:
+            return
+        if not all(self._model_room_ok(m) for m in (source,) + layers):
+            return
+        if self.live.set_npc_model(source, list(layers), list(pieces)):
+            self.model_npc_btn.setEnabled(False)
+            self._npc_model_ticks = 0
+            QTimer.singleShot(300, self._check_npc_model)
+
+    def _check_npc_model(self) -> None:
+        if self.live._equip_lock.locked() and self._npc_model_ticks < self.MODEL_WAIT_TICKS:
+            self._npc_model_ticks += 1
+            QTimer.singleShot(300, self._check_npc_model)
+            return
+        self.model_npc_btn.setEnabled(True)
+        error = self.live.equip_error
+        if error is None:
+            QTimer.singleShot(4000, self._show_model_memory)
+            return
+        import os
+        log = os.path.join(os.environ.get("TEMP", "."), "mgs4trainer_equip.log")
+        key = "vitals.model_swap_failed_textures" if error == "textures" else "vitals.model_swap_failed"
+        QMessageBox.warning(self, tr("vitals.model_npc_apply"), tr(key).format(reason=error, log=log))
 
     def _on_model_swap_reset(self):
         """Snake neutre : combinaison OctoCamo, sans FaceCamo, tenue et
