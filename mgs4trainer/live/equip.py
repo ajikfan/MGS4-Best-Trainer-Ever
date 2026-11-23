@@ -966,10 +966,17 @@ class EquipMixin:
         Snake (os racine, matrice en +0x1E0). Autour de Snake il y a d'abord
         ses pieces (visage a 7 cm, equipement a 25 cm) et du decor anime
         (releve s02a20l, 2026-11-23) : seul compte un modele d'au moins
-        NPC_MODEL_MIN_BONES os ; le corps de Snake (a 0 cm) est exclu."""
+        NPC_MODEL_MIN_BONES os ; les modeles de Snake (corps, paquet du visage)
+        sont exclus par identifiant : son visage 0x03A157 a assez d'os et son os
+        racine peut etre a plus de 15 cm (Big Boss refuse « sur 03a157 »)."""
         from mgs4trainer.core import mdn
         files = self._model_files()
         here = dict(files.zone_resources(zone))
+        snake_models = {0x03A157}
+        body = self._model_body_skeleton()
+        if body is not None:
+            snake_models.add(body[0] & 0xFFFFFF)
+        snake_models |= {face_id & 0xFFFFFF for face_id, _data in self._model_face_files()}
         candidates = []
         count = self.MODEL_INSTANCE_LIST_SLOTS
         table = struct.unpack(f"<{count}Q", self.proc.read_bytes(self.base + self.MODEL_INSTANCE_LIST_RVA, count * 8))
@@ -985,8 +992,8 @@ class EquipMixin:
             if not all(v == v and abs(v) < 1e7 for v in (x, y, z)) or not self._model_instance_alive(pointer):
                 continue
             d = ((x - snake[0]) ** 2 + (z - snake[2]) ** 2) ** 0.5
-            if d < 150 or d > self.NPC_MODEL_RADIUS or abs(y - snake[1]) > 2500:
-                continue  # Snake (son modele est a sa place) ou trop loin
+            if (ident & 0xFFFFFF) in snake_models or d < 150 or d > self.NPC_MODEL_RADIUS or abs(y - snake[1]) > 2500:
+                continue  # Snake (corps, visage, pieces) ou trop loin
             candidates.append((d, pointer, ident & 0xFFFFFF))
         for _d, pointer, ident in sorted(candidates):
             key = 0x0D000000 | ident
