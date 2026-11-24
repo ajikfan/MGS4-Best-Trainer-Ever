@@ -49,22 +49,18 @@ up the compatible version, the warnings and the version history.
 - [How it works](docs/en/how-it-works.md)
 - [Maintenance](docs/en/maintenance.md) (compatibility, build, code layout)
 
-## Latest version: V2.9.4
+## Latest version: V2.9.5
 
-- **No FROG Ashes**: a killed FROG stays on the ground like a soldier.
-- **One Shot, One Kill** spares allies (Meryl against Screaming Mantis).
-- **Spawn**: FROG and Chickens (1.4.2); refused while paused and during
-  cutscenes.
-- **Appearance**: the model's own head, Snake's head always hidden (even
-  after an area change); no more crash when returning to the menu, at the
-  end of an act or when loading a save.
-- **Advanced mode**: current stage in the status bar.
-- ⚠️ Changing the model several times in the same cutscene can still
-  crash the game.
-- Delivered by the **built-in update**; the DLL changed: restart the game
-  after the update.
+- **Appearance**: new **On the nearest NPC** button, to dress a character
+  with the chosen model (a rebel as Meryl, a soldier as a FROG…), until
+  the next load.
+- **Spawn**: added characters have all their animations; new **No route
+  (on guard)** box; no more crash with the FROG outside its area.
+- ⚠️ **Experimental** features: save before trying.
+- Delivered by the **built-in update**; DLL unchanged.
 
-With **V2.9.3**: Appearance tab, complete Beast forms.
+With **V2.9.4**: No FROG Ashes, allies spared by One Shot, One Kill, FROG
+and Chickens to spawn.
 
 Details in [What's new in each version](docs/en/whats-new.md).
 

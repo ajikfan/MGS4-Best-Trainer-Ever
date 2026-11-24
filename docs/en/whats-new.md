@@ -4,7 +4,7 @@
 
 Details of the latest versions. The full history is also in the trainer's **Help** button and on the [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases) page.
 
-## Next version (in progress, not released yet)
+## What's new in V2.9.5
 
 ### Spawn
 

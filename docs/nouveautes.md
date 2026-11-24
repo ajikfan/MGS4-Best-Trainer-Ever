@@ -4,7 +4,7 @@
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
-## Prochaine version (en préparation, pas encore publiée)
+## Nouveautés de la V2.9.5
 
 ### Faire apparaître
 

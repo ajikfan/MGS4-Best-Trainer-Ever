@@ -51,22 +51,19 @@ des versions.
 - [Comment ça marche](docs/fonctionnement.md)
 - [Maintenance](docs/maintenance.md) (compatibilité, build, organisation du code)
 
-## Dernière version : V2.9.4
+## Dernière version : V2.9.5
 
-- **FROG sans cendres** : un FROG tué reste au sol comme un soldat.
-- **Un coup, un mort** épargne les alliés (Meryl contre Screaming Mantis).
-- **Faire apparaître** : FROG et Poules (1.4.2) ; refusé en pause et en
-  cinématique.
-- **Apparence** : tête du modèle, tête de Snake toujours masquée (même
-  après un changement de zone) ; plus de plantage au retour au menu, en
-  fin d'acte ou au chargement d'une sauvegarde.
-- **Mode avancé** : niveau en cours dans la barre de statut.
-- ⚠️ Changer plusieurs fois de modèle dans une même cinématique peut
-  encore faire planter le jeu.
-- Livrée par la **mise à jour intégrée** ; la DLL a changé : relance le
-  jeu après la mise à jour.
+- **Apparence** : nouveau bouton **Sur le PNJ le plus proche**, pour
+  habiller un personnage avec le modèle choisi (rebelle en Meryl, soldat
+  en FROG…), jusqu'au prochain chargement.
+- **Faire apparaître** : les personnages ajoutés ont toutes leurs
+  animations ; nouvelle case **Sans route (en faction)** ; plus de
+  plantage avec la FROG hors de sa zone.
+- ⚠️ Fonctions **expérimentales** : sauvegarde avant d'essayer.
+- Livrée par la **mise à jour intégrée** ; DLL inchangée.
 
-Avec la **V2.9.3** : onglet Apparence, formes Bête complètes.
+Avec la **V2.9.4** : FROG sans cendres, alliés épargnés par Un coup, un
+mort, FROG et Poules à faire apparaître.
 
 Détail dans [Nouveautés par version](docs/nouveautes.md).
 
