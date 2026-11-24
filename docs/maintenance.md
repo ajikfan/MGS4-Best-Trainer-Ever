@@ -124,7 +124,8 @@ code est dans le paquet `mgs4trainer/` :
 - `core/` : chemins (`paths.py`), réglages et traductions (`i18n.py`),
   accès au processus (`winproc.py`), adresses et tables du jeu
   (`gamedata.py`), injection de la DLL et mémoire partagée avec elle
-  (`speedhack.py`) ;
+  (`speedhack.py`), fichiers du jeu : archives (`vpak.py`), modèles
+  (`mdn.py`, catalogue `model_catalog.py`) et animations (`mtar.py`) ;
 - `live/` : la classe `MGS4Live` (accès au jeu en cours), assemblée à
   partir de mixins par thème : accrochage (`base.py`), DLL et hooks
   (`hooks.py`), joueur et jauges (`player.py`), armes

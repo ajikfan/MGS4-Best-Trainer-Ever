@@ -192,6 +192,15 @@ What acts on the area and the story:
     no effect on it, a Gekko that falls through the floor of the
     Beauties' white room and of Laughing Octopus's arena. Save before
     trying.
+  - Added characters have **all their animations**: each game area empties
+    the ones it does not need (a rebel added in s02a20l could not put his
+    hands on his head), the trainer loads the complete version. The first
+    spawn in an area takes a few seconds; another one asked meanwhile is
+    refused with a message.
+  - **No route (on guard)**: when checked, the added character takes no
+    patrol and stands guard where it appears, ready to receive a route
+    (for example with MGS4 Route Editor). A free route of the area is used
+    as a guard post; if none is left, it gets a patrol as usual.
   - **Laughing Octopus** (Beast form) appears outside her arena: she
     shoots at Snake in a loop and vanishes once defeated.
   - **Meryl follows me (experimental)**: an added Meryl follows Snake. She
@@ -258,6 +267,15 @@ What acts on the area and the story:
   - ⚠️ **Experimental**: some combinations (model, outfit, FaceCamo, area
     changes) can give inconsistent results or **crash the game**. Save
     before trying.
+- **On the nearest NPC (experimental)**: gives the chosen model to the
+  character closest to Snake (within 3 m) instead of Snake: a rebel
+  dressed as Meryl, a soldier as a FROG, as Naomi, as Raiden… It keeps its
+  skeleton, animations, voice and behavior, and wears the model at any
+  distance (its simplified far-away models are replaced too). Humans pass,
+  FROGs and civilians included; animals and single parts are refused with
+  a message. Limits: it gets its own look back at the next load or area
+  change; it is always the **closest character** that is targeted, so get
+  right next to the one you want.
 
 ### Weapons
 

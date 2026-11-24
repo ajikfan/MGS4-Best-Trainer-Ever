@@ -122,7 +122,8 @@ the `mgs4trainer/` package:
 - `core/`: paths (`paths.py`), settings and translations (`i18n.py`),
   process access (`winproc.py`), game addresses and tables
   (`gamedata.py`), DLL injection and shared memory with it
-  (`speedhack.py`);
+  (`speedhack.py`), game files: archives (`vpak.py`), models (`mdn.py`,
+  `model_catalog.py` catalog) and animations (`mtar.py`);
 - `live/`: the `MGS4Live` class (access to the running game), built from
   mixins by theme: attaching (`base.py`), DLL and hooks (`hooks.py`),
   player and gauges (`player.py`), weapons and accessories

@@ -4,6 +4,26 @@
 
 Le détail des dernières versions. L'historique complet est aussi dans le bouton **Aide** du trainer et sur la page des [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases).
 
+## Prochaine version (en préparation, pas encore publiée)
+
+### Faire apparaître
+
+- Les personnages ajoutés ont **toutes leurs animations** : un rebelle
+  ajouté peut mettre les mains sur la tête même dans une zone où le jeu
+  les a retirées (s02a20l).
+- Nouvelle case **Sans route (en faction)** : le personnage ajouté reste
+  en garde là où il apparaît, prêt à recevoir une route.
+- Plus de plantage du jeu quand une **FROG** apparaît hors de sa zone, et
+  son IA démarre ; plus de faux échecs à l'apparition des **animaux**.
+- Une apparition demandée pendant qu'une autre est en cours est refusée
+  avec un message, au lieu d'être ignorée.
+
+### Apparence
+
+- Nouveau bouton **Sur le PNJ le plus proche** : donne le modèle choisi à
+  un personnage au lieu de Snake (rebelle habillé en Meryl, soldat en
+  FROG…), à toute distance, jusqu'au prochain chargement.
+
 ## Nouveautés de la V2.9.4
 
 ### Combat

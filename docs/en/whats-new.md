@@ -4,6 +4,26 @@
 
 Details of the latest versions. The full history is also in the trainer's **Help** button and on the [releases](https://github.com/ajikfan/MGS4-Best-Trainer-Ever/releases) page.
 
+## Next version (in progress, not released yet)
+
+### Spawn
+
+- Added characters have **all their animations**: an added rebel can put
+  his hands on his head even in an area where the game removed it
+  (s02a20l).
+- New **No route (on guard)** box: the added character stands guard where
+  it appears, ready to receive a route.
+- No more game crash when a **FROG** spawns outside its area, and its AI
+  starts; no more false failures when spawning **animals**.
+- A spawn asked while another one is in progress is refused with a
+  message instead of being ignored.
+
+### Appearance
+
+- New **On the nearest NPC** button: gives the chosen model to a
+  character instead of Snake (a rebel dressed as Meryl, a soldier as a
+  FROG…), at any distance, until the next load.
+
 ## What's new in V2.9.4
 
 ### Combat

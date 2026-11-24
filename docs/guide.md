@@ -199,6 +199,17 @@ Ce qui agit sur la zone et le scénario :
     effet sur lui, Gekko qui traverse le sol de la salle blanche des
     Beauty et de l'arène de Laughing Octopus. Sauvegarde avant
     d'essayer.
+  - Les personnages ajoutés ont **toutes leurs animations** : chaque zone
+    du jeu vide celles dont elle n'a pas besoin (un rebelle ajouté en
+    s02a20l ne pouvait pas mettre les mains sur la tête), le trainer
+    charge la version complète. La première apparition dans une zone
+    prend quelques secondes ; une autre demandée pendant ce temps est
+    refusée avec un message.
+  - **Sans route (en faction)** : cochée, le personnage ajouté ne prend
+    aucune patrouille et reste debout, en garde, là où il apparaît, prêt
+    à recevoir une route (par exemple avec MGS4 Route Editor). Une route
+    libre de la zone sert de poste de garde ; s'il n'en reste plus, il
+    reçoit une patrouille comme d'habitude.
   - **Laughing Octopus** (forme Bête) apparaît hors de son arène : elle
     tire sur Snake en boucle et disparaît une fois vaincue.
   - **Meryl me suit (expérimental)** : une Meryl ajoutée suit Snake. Elle
@@ -271,6 +282,16 @@ Ce qui agit sur la zone et le scénario :
   - ⚠️ **Expérimental** : certaines combinaisons (modèle, tenue,
     FaceCamo, changements de zone) peuvent donner des résultats
     incohérents ou **faire planter le jeu**. Sauvegarde avant d'essayer.
+- **Sur le PNJ le plus proche (expérimental)** : donne le modèle choisi au
+  personnage le plus proche de Snake (à moins de 3 m), au lieu de Snake :
+  un rebelle habillé en Meryl, un soldat en FROG, en Naomi, en Raiden…
+  Il garde son squelette, ses animations, sa voix et son comportement ;
+  il porte le modèle à toute distance (ses modèles simplifiés de loin
+  sont remplacés aussi). Les humains passent, y compris les FROG et les
+  civils ; les animaux et les pièces seules sont refusés avec un message.
+  Limites : il reprend son apparence au prochain chargement ou
+  changement de zone ; ce sont toujours les **personnages les plus
+  proches** qui sont visés, approche-toi bien de celui que tu veux.
 
 ### Armes
 
