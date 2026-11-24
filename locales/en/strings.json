@@ -844,5 +844,8 @@
   "vitals.model_swap_meiling_hat": "Mei Ling's hair and hat (coat)",
   "vitals.model_swap_akiba_tails": "Akiba's tailcoat tails (wedding)",
   "vitals.model_npc_apply": "On the nearest NPC",
-  "vitals.model_npc_apply_tooltip": "Gives the selected model to the character closest to Snake (within 3 m). Experimental: it gets its own look back at the next load."
+  "vitals.model_npc_apply_tooltip": "Gives the selected model to the character closest to Snake (within 3 m). Experimental: it gets its own look back at the next load.",
+  "vitals.spawn_post": "No route (on guard)",
+  "vitals.spawn_post_tooltip": "The spawned NPC takes no route: it stands guard where it appears, ready to receive a route from the editor. A free route of the zone is used as a guard post; if none is left, it gets a route of the zone as usual.",
+  "vitals.spawn_blocked_busy": "A spawn is already in progress (the first one in a zone prepares the animations, a few seconds). Wait for it to finish, then try again."
 }

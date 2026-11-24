@@ -219,10 +219,14 @@ class VitalsTab(QWidget):
         for kind in self.live.SPAWN_ROSTER:
             self.spawn_type_combo.addItem(tr(f"vitals.spawn_type_{kind}"), kind)
         self._update_spawn_items()
+        # Faction sur place : voir MGS4Live._spawn_post_route (2026-11-24)
+        self.spawn_post_check = QCheckBox(tr("vitals.spawn_post"))
+        self.spawn_post_check.setToolTip(tr("vitals.spawn_post_tooltip"))
+        self.spawn_post_check.toggled.connect(lambda on: setattr(self.live, "spawn_post", on))
         # Mode compagnon : voir MGS4Live.ally_follow_tick (appele par la fenetre).
         self.ally_follow_check = QCheckBox(tr("vitals.ally_follow"))
         self.ally_follow_check.setToolTip(tr("vitals.ally_follow_tooltip"))
-        self.zone_buttons += [self.spawn_type_combo, self.spawn_btn, self.ally_follow_check]
+        self.zone_buttons += [self.spawn_type_combo, self.spawn_btn, self.spawn_post_check, self.ally_follow_check]
         # groupe place dans l'onglet Evenements (_build_events_page)
         self.zone_group = zone_group
         # Apparence de Snake (2026-11-14) : variantes de corps / visage
@@ -462,6 +466,7 @@ class VitalsTab(QWidget):
         spawn_row = QHBoxLayout(spawn_group)
         spawn_row.addWidget(self.spawn_type_combo)
         spawn_row.addWidget(self.spawn_btn)
+        spawn_row.addWidget(self.spawn_post_check)
         spawn_row.addWidget(self.ally_follow_check)
         spawn_row.addStretch(1)
         page_layout.addWidget(spawn_group)
@@ -1735,6 +1740,8 @@ class VitalsTab(QWidget):
         # jamais en pause ni en cinematique (promis sur Nexus, 2026-11-12)
         if self.pause_check.isChecked() or self.photo_check.isChecked():
             reason = "pause"
+        elif self.live.spawn_busy():
+            reason = "busy"
         else:
             try:
                 reason = self.live.spawn_blocked()

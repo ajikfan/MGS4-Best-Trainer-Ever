@@ -844,5 +844,8 @@
   "vitals.model_swap_meiling_hat": "Cheveux et chapeau de Mei Ling (manteau)",
   "vitals.model_swap_akiba_tails": "Basques de la queue-de-pie d'Akiba (mariage)",
   "vitals.model_npc_apply": "Sur le PNJ le plus proche",
-  "vitals.model_npc_apply_tooltip": "Donne le modèle sélectionné au personnage le plus proche de Snake (moins de 3 m). Essai : il retrouve son apparence au prochain chargement."
+  "vitals.model_npc_apply_tooltip": "Donne le modèle sélectionné au personnage le plus proche de Snake (moins de 3 m). Essai : il retrouve son apparence au prochain chargement.",
+  "vitals.spawn_post": "Sans route (en faction)",
+  "vitals.spawn_post_tooltip": "Le PNJ qui apparaît ne prend aucune route : il reste en faction à l'endroit où il apparaît, prêt à recevoir une route de l'éditeur. Une route libre de la zone sert de poste de garde ; s'il n'y en a plus, il reçoit une route de la zone comme d'habitude.",
+  "vitals.spawn_blocked_busy": "Une apparition est déjà en cours (la première dans une zone prépare les animations, quelques secondes). Attends qu'elle se termine, puis réessaie."
 }

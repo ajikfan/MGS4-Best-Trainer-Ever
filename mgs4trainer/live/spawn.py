@@ -484,6 +484,11 @@ class SpawnMixin:
             return False
         return recipe.get("game") in (None, versions.name())
 
+    def spawn_busy(self) -> bool:
+        """Une apparition est en cours (la premiere d'une zone prepare les
+        archives d'animations : quelques secondes)."""
+        return bool(getattr(self, "_spawn_busy", False))
+
     def spawn_blocked(self) -> str | None:
         """Raison de refuser une apparition, None si possible (2026-11-20,
         promis sur Nexus le 2026-11-12 ; un essai en pause n'a pas plante,
@@ -756,7 +761,8 @@ class SpawnMixin:
         # d'origine (action 0x19) renvoie l'acteur en reserve.
         plain = struct.pack("<I3fHHHH", 0, 0.0, 0.0, 0.0, self.ALLY_POINT_PLAIN, 1, 0, 0) + bytes(12)
         return {"name": name, "address": address, "count": total, "original": original,
-                "plain": plain, "pid": self.pid, "entry": self._ally_route_entry(name)}
+                "plain": plain, "pid": self.pid, "entry": self._ally_route_entry(name),
+                "slot": grouped[name]}  # (groupe, numero) pour une fiche de route
 
     # Une route a nous (entree et points hors des groupes) ne tient pas : le
     # jeu ramene le suivi de route a celle de la fiche de l'acteur en moins de
@@ -1109,7 +1115,7 @@ class SpawnMixin:
         try:
             if locked:
                 result = self._spawn_enemy(kind)
-        except (OSError, struct.error, ValueError, KeyError, StopIteration) as exc:
+        except Exception as exc:  # noqa: BLE001 - toute erreur notee (echec muet le 2026-11-24)
             error = exc
         finally:
             if locked:
@@ -1117,6 +1123,13 @@ class SpawnMixin:
             self._spawn_busy = False
         if not result:
             self._spawn_log(kind, error)
+            if error is not None and not isinstance(error, (OSError, struct.error, ValueError, KeyError, StopIteration)):
+                import traceback
+                try:
+                    with open(os.path.join(os.environ.get("TEMP", "."), "mgs4trainer_spawn.log"), "a", encoding="utf-8") as log:
+                        log.write("".join(traceback.format_exception(error)))
+                except OSError:
+                    pass
 
     def _spawn_log(self, kind: dict, error) -> None:
         """Echec d'une apparition : etape et zone dans %TEMP%/mgs4trainer_spawn.log."""
@@ -1239,7 +1252,8 @@ class SpawnMixin:
         vtable = self._spawn_q(soldier)
         if self._spawn_q(vtable + self.SPAWN_START_VTABLE_OFFSET) != funcs["start"]:
             return False
-        self._spawn_copy_route(soldier, kind)
+        if not (self.spawn_post and self._spawn_post_route(soldier, (x + kind["distance"], y, z), position)):
+            self._spawn_copy_route(soldier, kind)
         flags = struct.unpack("<I", self.proc.read_bytes(soldier + self.SPAWN_START_FLAGS, 4))[0]
         self.proc.write_bytes(soldier + self.SPAWN_START_FLAGS, struct.pack("<I", flags | self.SPAWN_START_BIT))
         self._spawn_step = "demarrage"
@@ -1759,6 +1773,41 @@ class SpawnMixin:
         self.proc.write_bytes(step, bytes.fromhex("e9") + struct.pack("<i", step_cave - (step + 5)) + bytes.fromhex("909090"))
         return True
 
+    # Faction sur place a l'apparition (demande 2026-11-24, case de l'onglet
+    # Evenements) : au lieu de la route d'un autre acteur, une route libre de
+    # la zone est empruntee (une route hors des groupes ne tient pas, voir
+    # _ally_pick_route) et reecrite en poste de garde a l'endroit
+    # d'apparition : deux points superposes, action 3 (debout), attente
+    # infinie, drapeaux des postes du jeu, regard a l'oppose de Snake. Elle
+    # n'est pas rendue (le changement de zone recharge les routes).
+    spawn_post = False
+
+    def _spawn_post_route(self, soldier: int, spot, snake) -> bool:
+        """Fiche de route du soldat = poste de garde a `spot` ; False s'il n'y
+        a pas de route libre (le soldat garde alors la route copiee)."""
+        if getattr(self, "_spawn_post_pid", None) != self.pid:
+            self._spawn_post_pid, self._spawn_post_names = self.pid, set()
+        exclude = set(self._spawn_post_names)
+        follow = getattr(self, "_ally_follow_route", None)
+        if follow:
+            exclude.add(follow["name"])
+        route = self._ally_pick_route(exclude)
+        if route is None or not route.get("entry"):
+            return False
+        dx, dz = spot[0] - snake[0], spot[2] - snake[2]
+        length = math.hypot(dx, dz) or 1.0
+        look = (spot[0] + dx / length * 10000.0, spot[1], spot[2] + dz / length * 10000.0)
+        point = self._ally_point(spot, look, self.ALLY_STOP_ACTION, 1, self.ALLY_STOP_WAIT, 0, self.ALLY_STOP_FLAGS)
+        self.proc.write_bytes(route["address"], point * 2)
+        self.proc.write_bytes(route["entry"] + 8, struct.pack("<H", 2))
+        group, index = route["slot"]
+        slot = struct.pack("<IIIiI", 0, self.ALLY_ROUTE_KIND, group, index, 0)
+        self.proc.write_bytes(soldier + self.SPAWN_ROUTE_RECORD, slot)
+        self.proc.write_bytes(soldier + self.SPAWN_ROUTE_RECORD + 0x14, slot)
+        self.proc.write_bytes(soldier + self.SPAWN_ROUTE_GROUPS, struct.pack("<II", self.ALLY_ROUTE_KIND, group))
+        self._spawn_post_names.add(route["name"])
+        return True
+
     def _spawn_copy_route(self, soldier: int, kind: dict) -> None:
         """Reprend la route d'un acteur de la zone, s'il y en a un : sans
         acteur a copier, le soldat garde ses fiches vides. own_route : de
@@ -1977,6 +2026,8 @@ class SpawnMixin:
     def _spawn_register_list(self, funcs: dict[str, int], zone: str, resources) -> bool:
         nodes = self._spawn_resource_nodes()
         present = set(nodes)
+        resources = [(key, self._spawn_complete_motion(key, data) if key >> 24 in self.SPAWN_SWAP_TYPES else data)
+                     for key, data in resources]
         missing = [resource for resource in resources if resource[0] not in present]
         swaps = []
         for key, data in resources:
@@ -1998,6 +2049,27 @@ class SpawnMixin:
                     self.proc.write_bytes(target + self.SPAWN_NODE_DATA, self.proc.read_bytes(source + self.SPAWN_NODE_DATA, 8))
                     self.proc.write_bytes(target + self.SPAWN_NODE_SIZE, self.proc.read_bytes(source + self.SPAWN_NODE_SIZE, 4))
         return True
+
+    def _spawn_complete_motion(self, key: int, data: bytes) -> bytes:
+        """Archive d'animations la plus complete du jeu pour cette cle (fusion
+        des versions de toutes les zones, voir core/mtar) : chaque zone vide
+        les animations dont elle n'a pas besoin, et un PNJ ajoute les trouvait
+        vides (mains sur la tete des rebelles absente en s02a20l, pleine en
+        s02a10l : demande 2026-11-24). Plus grande que celle de la zone, elle
+        la remplace par le noeud du dictionnaire (voir SPAWN_SWAP_TYPES)."""
+        from mgs4trainer.core import mtar
+        cache = getattr(self, "_spawn_motion_cache", None)
+        if cache is None:
+            cache = self._spawn_motion_cache = {}
+        if key not in cache:
+            files = self._spawn_files
+            name = f"/{key & 0xFFFFFF:08x}.mtar"
+            try:
+                versions = [files.read(path) for path in files.entries if path.endswith(name)] if files else []
+                cache[key] = mtar.most_complete(versions) if versions else data
+            except (OSError, ValueError, struct.error, IndexError):
+                cache[key] = data
+        return cache[key]
 
     def _spawn_register_entries(self, funcs: dict[str, int], zone: str, missing,
                                 flags: int | None = None) -> bool:

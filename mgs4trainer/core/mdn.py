@@ -74,7 +74,11 @@ def skeleton_compatible(source: bytes, skeleton: bytes) -> bool:
     return skeleton_mapping(source, skeleton) is not None
 
 
-NPC_COVER = 0.8  # part des os du PNJ presents dans le modele
+# Part des os du PNJ presents dans le modele (releve du catalogue sur le
+# squelette du rebelle, 2026-11-24) : humanoides de 39 % (0x0511E0) a 100 %
+# (FROG 70 %, civils 42-45 %), animaux et pieces detachees sous 30 % (poule
+# 24 %, corbeau 27 %, cheveux 11 %). 80 % refusait les FROG.
+NPC_COVER = 0.35
 
 
 def npc_compatible(source: bytes, skeleton: bytes) -> bool:
